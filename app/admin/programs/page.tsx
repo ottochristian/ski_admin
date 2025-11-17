@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import { ProgramStatus } from '@/lib/programStatus'
@@ -13,31 +13,24 @@ import {
   CardContent,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Settings, Plus, Pencil, Trash2, ArrowLeft } from 'lucide-react'
+import { Settings, Plus, Pencil, Trash2 } from 'lucide-react'
 import { LogoutButton } from '@/components/logout-button'
 import { Profile } from '@/lib/types'
 
 type Program = {
   id: string
   name: string
-}
-
-type SubProgram = {
-  id: string
-  name: string
   description?: string | null
-  status: ProgramStatus
+  status: ProgramStatus | null
 }
 
-export default function SubProgramsPage() {
+export default function ProgramsPage() {
   const router = useRouter()
-  const { programId } = useParams() as { programId: string }
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
-  const [program, setProgram] = useState<Program | null>(null)
-  const [subPrograms, setSubPrograms] = useState<SubProgram[]>([])
+  const [programs, setPrograms] = useState<Program[]>([])
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -52,7 +45,6 @@ export default function SubProgramsPage() {
       } = await supabase.auth.getUser()
 
       if (userError || !user) {
-        setLoading(false)
         router.push('/login')
         return
       }
@@ -71,67 +63,55 @@ export default function SubProgramsPage() {
       }
 
       if (!profileData || profileData.role !== 'admin') {
-        setLoading(false)
         router.push('/dashboard')
         return
       }
 
       setProfile(profileData as Profile)
 
-      // 3) Fetch parent program (for header)
-      const { data: programData, error: programError } = await supabase
+      // 3) Load programs (no programId involved here)
+      const { data, error: programsError } = await supabase
         .from('programs')
-        .select('id, name')
-        .eq('id', programId)
-        .single()
-
-      if (programError || !programData) {
-        setError(programError?.message ?? 'Program not found')
-        setLoading(false)
-        return
-      }
-
-      setProgram(programData as Program)
-
-      // 4) Load ACTIVE sub-programs for this program
-      const { data, error: subProgramsError } = await supabase
-        .from('sub_programs')
         .select('id, name, description, status')
-        .eq('program_id', programId)
-        .eq('status', ProgramStatus.ACTIVE)
         .order('name', { ascending: true })
 
-      if (subProgramsError) {
-        setError(subProgramsError.message)
+      if (programsError) {
+        setError(programsError.message)
       } else {
-        setSubPrograms((data || []) as SubProgram[])
+        const allPrograms = (data || []) as Program[]
+        // Only show ACTIVE programs (or rows with null status from before we added the enum)
+        const activePrograms = allPrograms.filter(
+          p => p.status === ProgramStatus.ACTIVE || p.status === null
+        )
+        setPrograms(activePrograms)
       }
 
       setLoading(false)
     }
 
     load()
-  }, [router, programId])
+  }, [router])
 
-  async function handleDelete(subProgramId: string) {
+  async function handleDelete(programId: string) {
     const confirmDelete = window.confirm(
-      'Are you sure you want to delete this sub-program? This will also delete all its groups. You cannot undo this from the UI.'
+      'Are you sure you want to delete this program? This will also soft-delete all its sub-programs and groups.'
     )
 
     if (!confirmDelete) return
 
-    setDeletingId(subProgramId)
+    setDeletingId(programId)
     setError(null)
 
-    const { error } = await supabase.rpc('soft_delete_sub_program', {
-      sub_program_id: subProgramId,
+    const { error } = await supabase.rpc('soft_delete_program', {
+      program_id: programId,
     })
 
     if (error) {
-      console.error('Error soft deleting sub-program:', error)
+      console.error('Error soft deleting program:', error)
       setError(error.message)
     } else {
-      setSubPrograms(prev => prev.filter(sp => sp.id !== subProgramId))
+      // Remove from local state so the UI updates immediately
+      setPrograms(prev => prev.filter(p => p.id !== programId))
     }
 
     setDeletingId(null)
@@ -140,7 +120,7 @@ export default function SubProgramsPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-slate-600 text-sm">Loading sub-programs…</p>
+        <p className="text-slate-600 text-sm">Loading programs…</p>
       </div>
     )
   }
@@ -163,7 +143,7 @@ export default function SubProgramsPage() {
     )
   }
 
-  if (!profile || !program) {
+  if (!profile) {
     return null
   }
 
@@ -174,22 +154,9 @@ export default function SubProgramsPage() {
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <div className="flex items-center gap-2 mb-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => router.push('/admin/programs')}
-                  aria-label="Back to programs"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                </Button>
-                <h1 className="text-2xl font-bold text-slate-900">
-                  {program.name} – Sub-programs
-                </h1>
-              </div>
+              <h1 className="text-2xl font-bold text-slate-900">Programs</h1>
               <p className="text-sm text-slate-600">
-                Manage sub-programs for this program. Deleting a sub-program
-                will also delete its groups (soft delete).
+                Manage all ski programs, including soft-deleting them.
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -215,9 +182,26 @@ export default function SubProgramsPage() {
                 Programs
               </Button>
             </Link>
-            <Button variant="ghost" size="sm" disabled>
-              Sub-programs
-            </Button>
+            <Link href="/admin/registrations">
+              <Button variant="ghost" size="sm">
+                Registrations
+              </Button>
+            </Link>
+            <Link href="/admin/athletes">
+              <Button variant="ghost" size="sm">
+                Athletes
+              </Button>
+            </Link>
+            <Link href="/admin/coaches">
+              <Button variant="ghost" size="sm">
+                Coaches
+              </Button>
+            </Link>
+            <Link href="/admin/races">
+              <Button variant="ghost" size="sm">
+                Races
+              </Button>
+            </Link>
           </nav>
         </div>
       </header>
@@ -225,64 +209,63 @@ export default function SubProgramsPage() {
       <main className="container mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-slate-900">
-            Active Sub-programs
+            Active Programs
           </h2>
-
-          {/* Uses your nested "new" route */}
-          <Link href={`/admin/programs/${programId}/sub-programs/new`}>
+          <Link href="/admin/programs/new">
             <Button>
               <Plus className="h-4 w-4 mr-2" />
-              Add Sub-program
+              Add Program
             </Button>
           </Link>
         </div>
 
         <Card>
           <CardContent className="p-0">
-            {subPrograms.length === 0 ? (
+            {programs.length === 0 ? (
               <div className="p-6 text-sm text-slate-600">
-                No active sub-programs yet. Click &quot;Add Sub-program&quot; to
-                create one.
+                No active programs yet. Click &quot;Add Program&quot; to create
+                one.
               </div>
             ) : (
               <div className="divide-y">
-                {subPrograms.map(sp => (
+                {programs.map(program => (
                   <div
-                    key={sp.id}
+                    key={program.id}
                     className="p-4 flex items-center justify-between hover:bg-slate-50"
                   >
                     <div>
-                      <h3 className="font-medium text-slate-900">{sp.name}</h3>
-                      {sp.description && (
+                      <h3 className="font-medium text-slate-900">
+                        {program.name}
+                      </h3>
+                      {program.description && (
                         <p className="text-sm text-slate-600">
-                          {sp.description}
+                          {program.description}
                         </p>
                       )}
                     </div>
                     <div className="flex gap-2">
+                      {/* Go to sub-programs for this program */}
                       <Link
-                        href={`/admin/programs/sub-programs/${sp.id}/edit`}
+                        href={`/admin/programs/${program.id}/sub-programs`}
                       >
+                        <Button variant="outline" size="sm">
+                          Sub-programs
+                        </Button>
+                      </Link>
+                      <Link href={`/admin/programs/${program.id}/edit`}>
                         <Button variant="outline" size="sm">
                           <Pencil className="h-4 w-4 mr-1" />
                           Edit
                         </Button>
                       </Link>
-                      <Link
-                        href={`/admin/programs/sub-programs/${sp.id}/groups`}
-                      >
-                        <Button variant="outline" size="sm">
-                          Groups
-                        </Button>
-                      </Link>
                       <Button
                         variant="destructive"
                         size="sm"
-                        onClick={() => handleDelete(sp.id)}
-                        disabled={deletingId === sp.id}
+                        onClick={() => handleDelete(program.id)}
+                        disabled={deletingId === program.id}
                       >
                         <Trash2 className="h-4 w-4 mr-1" />
-                        {deletingId === sp.id ? 'Deleting…' : 'Delete'}
+                        {deletingId === program.id ? 'Deleting…' : 'Delete'}
                       </Button>
                     </div>
                   </div>
