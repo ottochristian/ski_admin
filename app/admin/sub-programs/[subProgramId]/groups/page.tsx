@@ -1,8 +1,10 @@
 'use client'
 
-import { useEffect, useState, FormEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
+import { ProgramStatus } from '@/lib/programStatus'
 import {
   Card,
   CardHeader,
@@ -11,15 +13,16 @@ import {
   CardContent,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Trash2 } from 'lucide-react'
-import Link from 'next/link'
+import { Settings, Plus, Pencil, Trash2, ArrowLeft } from 'lucide-react'
+import { LogoutButton } from '@/components/logout-button'
+import { Profile } from '@/lib/types'
 
-type Program = {
+type SimpleProgram = {
   id: string
   name: string
 }
 
-type SubProgram = {
+type SimpleSubProgram = {
   id: string
   name: string
   program_id: string
@@ -28,36 +31,28 @@ type SubProgram = {
 type Group = {
   id: string
   name: string
+  status: ProgramStatus
 }
 
-export default function SubProgramGroupsPage() {
+export default function GroupsPage() {
   const router = useRouter()
   const params = useParams()
-  const subProgramId = params.subProgramId as string | undefined
+  const subProgramId = params.subProgramId as string
 
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-
-  const [program, setProgram] = useState<Program | null>(null)
-  const [subProgram, setSubProgram] = useState<SubProgram | null>(null)
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [program, setProgram] = useState<SimpleProgram | null>(null)
+  const [subProgram, setSubProgram] = useState<SimpleSubProgram | null>(null)
   const [groups, setGroups] = useState<Group[]>([])
-
-  const [newGroupName, setNewGroupName] = useState('')
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
-    async function init() {
-      if (!subProgramId) {
-        setError('Missing sub-program id')
-        setLoading(false)
-        return
-      }
-
+    async function load() {
       setLoading(true)
       setError(null)
 
-      // 1) auth
+      // 1) Ensure user is logged in
       const {
         data: { user },
         error: userError,
@@ -68,8 +63,8 @@ export default function SubProgramGroupsPage() {
         return
       }
 
-      // 2) profile / admin
-      const { data: profile, error: profileError } = await supabase
+      // 2) Fetch profile and ensure admin
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
@@ -81,124 +76,99 @@ export default function SubProgramGroupsPage() {
         return
       }
 
-      if (!profile || profile.role !== 'admin') {
+      if (!profileData || profileData.role !== 'admin') {
         router.push('/dashboard')
         return
       }
 
-      // 3) load sub-program
-      const { data: spData, error: spError } = await supabase
+      setProfile(profileData as Profile)
+
+      // 3) Load the sub-program (with program_id)
+      const { data: subProgramData, error: subProgramError } = await supabase
         .from('sub_programs')
         .select('id, name, program_id')
         .eq('id', subProgramId)
         .single()
 
-      if (spError || !spData) {
-        setError(spError?.message || 'Sub-program not found')
+      if (subProgramError || !subProgramData) {
+        setError(subProgramError?.message ?? 'Sub-program not found')
         setLoading(false)
         return
       }
 
-      const sp = spData as SubProgram
-      setSubProgram(sp)
+      const subProg = subProgramData as SimpleSubProgram
+      setSubProgram(subProg)
 
-      // 4) load parent program
+      // 4) Load the parent program using program_id
       const { data: programData, error: programError } = await supabase
         .from('programs')
         .select('id, name')
-        .eq('id', sp.program_id)
+        .eq('id', subProg.program_id)
         .single()
 
       if (programError || !programData) {
-        setError(programError?.message || 'Program not found')
+        setError(programError?.message ?? 'Parent program not found')
         setLoading(false)
         return
       }
 
-      setProgram(programData as Program)
+      setProgram(programData as SimpleProgram)
 
-      // 5) load groups
-      const { data: groupsData, error: groupsError } = await supabase
+      // 5) Load ACTIVE groups for this sub-program
+      const { data, error: groupsError } = await supabase
         .from('groups')
-        .select('id, name')
+        .select('id, name, status')
         .eq('sub_program_id', subProgramId)
+        .eq('status', ProgramStatus.ACTIVE)
         .order('name', { ascending: true })
 
       if (groupsError) {
         setError(groupsError.message)
       } else {
-        setGroups((groupsData || []) as Group[])
+        setGroups((data || []) as Group[])
       }
 
       setLoading(false)
     }
 
-    init()
+    if (subProgramId) {
+      load()
+    }
   }, [router, subProgramId])
 
-  async function handleAddGroup(e: FormEvent) {
-    e.preventDefault()
-    if (!newGroupName.trim() || !subProgramId) return
+  async function handleDelete(groupId: string) {
+    const confirmDelete = window.confirm(
+      'Are you sure you want to delete this group? You cannot undo this from the UI.'
+    )
 
-    setSaving(true)
-    setError(null)
-
-    const { data, error: insertError } = await supabase
-      .from('groups')
-      .insert([
-        {
-          name: newGroupName.trim(),
-          sub_program_id: subProgramId,
-        },
-      ])
-      .select('id, name')
-      .single()
-
-    setSaving(false)
-
-    if (insertError) {
-      setError(insertError.message)
-      return
-    }
-
-    if (data) {
-      setGroups(prev => [...prev, data as Group])
-      setNewGroupName('')
-    }
-  }
-
-  async function handleDeleteGroup(groupId: string) {
-    const confirmed = window.confirm('Delete this group? This cannot be undone.')
-    if (!confirmed) return
+    if (!confirmDelete) return
 
     setDeletingId(groupId)
     setError(null)
 
-    const { error: deleteError } = await supabase
-      .from('groups')
-      .delete()
-      .eq('id', groupId)
+    const { error } = await supabase.rpc('soft_delete_group', {
+      group_id: groupId,
+    })
 
-    setDeletingId(null)
-
-    if (deleteError) {
-      setError(deleteError.message)
-      return
+    if (error) {
+      console.error('Error soft deleting group:', error)
+      setError(error.message)
+    } else {
+      setGroups(prev => prev.filter(g => g.id !== groupId))
     }
 
-    setGroups(prev => prev.filter(g => g.id !== groupId))
+    setDeletingId(null)
   }
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-sm text-slate-600">Loading groups…</p>
+        <p className="text-slate-600 text-sm">Loading groups…</p>
       </div>
     )
   }
 
-  if (error && (!subProgram || !program)) {
-    // Fatal error state
+  if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <Card className="max-w-md">
@@ -207,111 +177,129 @@ export default function SubProgramGroupsPage() {
             <CardDescription>{error}</CardDescription>
           </CardHeader>
           <CardContent>
-            <Link href="/admin/programs">
-              <Button>Back to Programs</Button>
-            </Link>
+            <Button variant="outline" onClick={() => router.refresh()}>
+              Try again
+            </Button>
           </CardContent>
         </Card>
       </div>
     )
   }
 
-  if (!subProgram || !program) {
+  if (!profile || !subProgram || !program) {
     return null
   }
 
   return (
     <div className="min-h-screen bg-slate-50">
+      {/* Header */}
       <header className="border-b bg-white">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">
-              Manage Groups
-            </h1>
-            <p className="text-sm text-slate-600">
-              Program:{' '}
-              <span className="font-medium">{program.name}</span> · Sub-program:{' '}
-              <span className="font-medium">{subProgram.name}</span>
-            </p>
+        <div className="container mx-auto px-6 py-4">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() =>
+                    router.push(`/admin/programs/${program.id}/sub-programs`)
+                  }
+                  aria-label="Back to sub-programs"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <h1 className="text-2xl font-bold text-slate-900">
+                  {program.name} – {subProgram.name} – Groups
+                </h1>
+              </div>
+              <p className="text-sm text-slate-600">
+                Manage athlete groups for this sub-program.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Link href="/admin/settings">
+                <Button variant="outline">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Settings
+                </Button>
+              </Link>
+              <LogoutButton />
+            </div>
           </div>
-          <Link href="/admin/programs">
-            <Button variant="outline">Back to Programs</Button>
-          </Link>
+
+          {/* Quick Nav */}
+          <nav className="flex gap-2">
+            <Link href="/admin">
+              <Button variant="ghost" size="sm">
+                Dashboard
+              </Button>
+            </Link>
+            <Link href="/admin/programs">
+              <Button variant="ghost" size="sm">
+                Programs
+              </Button>
+            </Link>
+            <Button variant="ghost" size="sm" disabled>
+              Groups
+            </Button>
+          </nav>
         </div>
       </header>
 
-      <main className="container mx-auto px-6 py-8 space-y-6">
-        {error && (
-          <p className="text-sm text-red-600 mb-2">Error: {error}</p>
-        )}
+      <main className="container mx-auto px-6 py-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-slate-900">
+            Active Groups
+          </h2>
+          <Link href={`/admin/sub-programs/${subProgramId}/groups/new`}>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Group
+            </Button>
+          </Link>
+        </div>
 
-        {/* Existing groups */}
         <Card>
-          <CardHeader>
-            <CardTitle>Existing Groups</CardTitle>
-            <CardDescription>
-              These groups are used to organize athletes within this sub-program.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {groups.length > 0 ? (
-              <div className="flex flex-col gap-2">
+          <CardContent className="p-0">
+            {groups.length === 0 ? (
+              <div className="p-6 text-sm text-slate-600">
+                No active groups yet. Click &quot;Add Group&quot; to create one.
+              </div>
+            ) : (
+              <div className="divide-y">
                 {groups.map(group => (
                   <div
                     key={group.id}
-                    className="flex items-center justify-between border rounded-md px-3 py-2 bg-white"
+                    className="p-4 flex items-center justify-between hover:bg-slate-50"
                   >
-                    <span className="text-sm">{group.name}</span>
-                    <Button
-                      variant="destructive"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={() => handleDeleteGroup(group.id)}
-                      disabled={deletingId === group.id}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
+                    <div>
+                      <h3 className="font-medium text-slate-900">
+                        {group.name}
+                      </h3>
+                    </div>
+                    <div className="flex gap-2">
+                      <Link
+                        href={`/admin/sub-programs/${subProgramId}/groups/${group.id}/edit`}
+                      >
+                        <Button variant="outline" size="sm">
+                          <Pencil className="h-4 w-4 mr-1" />
+                          Edit
+                        </Button>
+                      </Link>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleDelete(group.id)}
+                        disabled={deletingId === group.id}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        {deletingId === group.id ? 'Deleting…' : 'Delete'}
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
-            ) : (
-              <p className="text-sm text-slate-600">
-                No groups yet. Add your first group below.
-              </p>
             )}
-          </CardContent>
-        </Card>
-
-        {/* Add new group */}
-        <Card className="max-w-lg">
-          <CardHeader>
-            <CardTitle>Add New Group</CardTitle>
-            <CardDescription>
-              For example: &quot;U10 Girls&quot;, &quot;U12 Boys&quot;, &quot;High School&quot;.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleAddGroup} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-800 mb-1">
-                  Group Name
-                </label>
-                <input
-                  type="text"
-                  value={newGroupName}
-                  onChange={e => setNewGroupName(e.target.value)}
-                  required
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g. U10 Girls, U12 Comp, HS Varsity..."
-                />
-              </div>
-
-              <div className="flex justify-end gap-3">
-                <Button type="submit" disabled={saving}>
-                  {saving ? 'Adding…' : 'Add Group'}
-                </Button>
-              </div>
-            </form>
           </CardContent>
         </Card>
       </main>

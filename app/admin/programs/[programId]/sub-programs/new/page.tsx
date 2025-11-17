@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState, FormEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import {
   Card,
@@ -11,43 +12,49 @@ import {
   CardContent,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import Link from 'next/link'
+import { Settings } from 'lucide-react'
+import { LogoutButton } from '@/components/logout-button'
+import { Profile } from '@/lib/types'
 
 type Program = {
   id: string
   name: string
-  description?: string | null
 }
 
 export default function NewSubProgramPage() {
   const router = useRouter()
-  const params = useParams()
-  const programId = params.programId as string | undefined
+  const params = useParams() as { programId?: string | string[] }
+
+  const rawProgramId = params.programId
+  const programId =
+    Array.isArray(rawProgramId) ? rawProgramId[0] : rawProgramId
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const [profile, setProfile] = useState<Profile | null>(null)
   const [program, setProgram] = useState<Program | null>(null)
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [registrationFee, setRegistrationFee] = useState<string>('0')
-  const [maxCapacity, setMaxCapacity] = useState<string>('')
-  const [isActive, setIsActive] = useState(true)
 
   useEffect(() => {
-    async function init() {
-      if (!programId) {
-        setError('Missing program id')
-        setLoading(false)
+    async function load() {
+      // 🚧 Guard against bad URLs like /admin/programs/undefined/sub-programs/new
+      if (!programId || programId === 'undefined') {
+        console.error(
+          '[NewSubProgram] Invalid programId in route, redirecting:',
+          programId
+        )
+        router.push('/admin/programs')
         return
       }
 
       setLoading(true)
       setError(null)
 
-      // 1) auth
+      // 1) Ensure user is logged in
       const {
         data: { user },
         error: userError,
@@ -58,8 +65,8 @@ export default function NewSubProgramPage() {
         return
       }
 
-      // 2) profile / admin
-      const { data: profile, error: profileError } = await supabase
+      // 2) Fetch profile and ensure admin
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
@@ -71,67 +78,68 @@ export default function NewSubProgramPage() {
         return
       }
 
-      if (!profile || profile.role !== 'admin') {
+      if (!profileData || profileData.role !== 'admin') {
         router.push('/dashboard')
         return
       }
 
-      // 3) load parent program
+      setProfile(profileData as Profile)
+
+      // 3) Fetch parent program (for header)
       const { data: programData, error: programError } = await supabase
         .from('programs')
-        .select('id, name, description')
+        .select('id, name')
         .eq('id', programId)
         .single()
 
-      if (programError) {
-        setError(programError.message)
-      } else {
-        setProgram(programData as Program)
+      if (programError || !programData) {
+        setError(programError?.message ?? 'Program not found')
+        setLoading(false)
+        return
       }
 
+      setProgram(programData as Program)
       setLoading(false)
     }
 
-    init()
+    load()
   }, [router, programId])
 
-  async function handleSubmit(e: FormEvent) {
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!programId) return
+
+    if (!programId || programId === 'undefined') {
+      console.error(
+        '[NewSubProgram] handleSave with invalid programId',
+        programId
+      )
+      return
+    }
 
     setSaving(true)
     setError(null)
 
-    const fee =
-      registrationFee.trim() === '' ? null : Number(registrationFee.trim())
-    const capacity =
-      maxCapacity.trim() === '' ? null : Number(maxCapacity.trim())
-
-    const { error: insertError } = await supabase.from('sub_programs').insert([
-      {
-        name,
-        description,
-        registration_fee: fee,
-        max_capacity: capacity,
-        is_active: isActive,
-        program_id: programId,
-      },
-    ])
-
-    setSaving(false)
+    const { error: insertError } = await supabase.from('sub_programs').insert({
+      program_id: programId,
+      name,
+      description,
+      status: 'active', // or ProgramStatus.ACTIVE if you wire that in here too
+    })
 
     if (insertError) {
+      console.error('[NewSubProgram] insert error:', insertError)
       setError(insertError.message)
-      return
+    } else {
+      router.push(`/admin/programs/${programId}/sub-programs`)
     }
 
-    router.push('/admin/programs')
+    setSaving(false)
   }
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-sm text-slate-600">Loading program…</p>
+        <p className="text-slate-600 text-sm">Loading sub-program form…</p>
       </div>
     )
   }
@@ -145,131 +153,125 @@ export default function NewSubProgramPage() {
             <CardDescription>{error}</CardDescription>
           </CardHeader>
           <CardContent>
-            <Link href="/admin/programs">
-              <Button>Back to Programs</Button>
-            </Link>
+            <Button
+              variant="outline"
+              onClick={() =>
+                router.push(
+                  programId && programId !== 'undefined'
+                    ? `/admin/programs/${programId}/sub-programs`
+                    : '/admin/programs'
+                )
+              }
+            >
+              Back
+            </Button>
           </CardContent>
         </Card>
       </div>
     )
   }
 
-  if (!program) {
+  if (!profile || !program) {
     return null
   }
 
   return (
     <div className="min-h-screen bg-slate-50">
+      {/* Header */}
       <header className="border-b bg-white">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">
-              New Sub-Program
-            </h1>
-            <p className="text-sm text-slate-600">
-              Parent program:{' '}
-              <span className="font-medium">{program.name}</span>
-            </p>
+        <div className="container mx-auto px-6 py-4">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">
+                Add Sub-program
+              </h1>
+              <p className="text-sm text-slate-600">
+                Parent program: {program.name}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Link href="/admin/settings">
+                <Button variant="outline">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Settings
+                </Button>
+              </Link>
+              <LogoutButton />
+            </div>
           </div>
-          <Link href="/admin/programs">
-            <Button variant="outline">Back to Programs</Button>
-          </Link>
+
+          {/* Quick Nav */}
+          <nav className="flex gap-2">
+            <Link href="/admin">
+              <Button variant="ghost" size="sm">
+                Dashboard
+              </Button>
+            </Link>
+            <Link href="/admin/programs">
+              <Button variant="ghost" size="sm">
+                Programs
+              </Button>
+            </Link>
+            <Link href={`/admin/programs/${program.id}/sub-programs`}>
+              <Button variant="ghost" size="sm">
+                Sub-programs
+              </Button>
+            </Link>
+          </nav>
         </div>
       </header>
 
+      {/* Form */}
       <main className="container mx-auto px-6 py-8">
-        <Card className="max-w-xl">
+        <Card className="max-w-3xl">
           <CardHeader>
-            <CardTitle>Sub-Program Details</CardTitle>
+            <CardTitle>New Sub-program</CardTitle>
             <CardDescription>
-              Sub-programs are things like Devo, Prep, Comp within a program.
+              Create a new sub-program under {program.name}.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-slate-800 mb-1">
-                  Sub-Program Name
+            <form className="space-y-6" onSubmit={handleSave}>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">
+                  Sub-program Name
                 </label>
                 <input
                   type="text"
-                  required
+                  className="block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Devo, Prep, Comp, etc."
+                  required
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-800 mb-1">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-700">
                   Description
                 </label>
                 <textarea
+                  className="block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                  rows={4}
                   value={description}
                   onChange={e => setDescription(e.target.value)}
-                  rows={4}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Short description of this sub-program..."
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">
-                    Registration Fee
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={registrationFee}
-                    onChange={e => setRegistrationFee(e.target.value)}
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g. 500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-800 mb-1">
-                    Max Capacity
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={maxCapacity}
-                    onChange={e => setMaxCapacity(e.target.value)}
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g. 30"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  id="isActive"
-                  type="checkbox"
-                  checked={isActive}
-                  onChange={e => setIsActive(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                />
-                <label htmlFor="isActive" className="text-sm text-slate-800">
-                  Sub-program is active
-                </label>
-              </div>
-
-              {error && (
-                <p className="text-sm text-red-600">
-                  {error}
-                </p>
-              )}
-
-              <div className="flex gap-3 justify-end">
-                <Link href="/admin/programs">
-                  <Button type="button" variant="outline">
-                    Cancel
-                  </Button>
-                </Link>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    router.push(
+                      `/admin/programs/${program.id}/sub-programs`
+                    )
+                  }
+                  disabled={saving}
+                >
+                  Cancel
+                </Button>
                 <Button type="submit" disabled={saving}>
-                  {saving ? 'Creating…' : 'Create Sub-Program'}
+                  {saving ? 'Saving…' : 'Create Sub-program'}
                 </Button>
               </div>
             </form>

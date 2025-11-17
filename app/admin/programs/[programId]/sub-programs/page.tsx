@@ -31,7 +31,10 @@ type SubProgram = {
 
 export default function SubProgramsPage() {
   const router = useRouter()
-  const { programId } = useParams() as { programId: string }
+  const params = useParams() as { programId?: string }
+  const rawProgramId = params.programId
+  const programId =
+    Array.isArray(rawProgramId) ? rawProgramId[0] : rawProgramId
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -42,6 +45,14 @@ export default function SubProgramsPage() {
 
   useEffect(() => {
     async function load() {
+      // 🚧 Guard against bad URLs like /admin/programs/undefined/sub-programs
+      if (!programId || programId === 'undefined') {
+        console.error('Invalid programId in route:', programId)
+        setLoading(false)
+        router.push('/admin/programs')
+        return
+      }
+
       setLoading(true)
       setError(null)
 
