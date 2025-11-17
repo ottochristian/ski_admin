@@ -2,63 +2,44 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
+import { ProgramStatus } from '@/lib/programStatus'
 import {
   Card,
-  CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
+  CardDescription,
+  CardContent,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Users, DollarSign, Calendar, Settings } from 'lucide-react'
-import Link from 'next/link'
+import { Settings, Plus, Pencil, Trash2 } from 'lucide-react'
 import { LogoutButton } from '@/components/logout-button'
+import { Profile } from '@/lib/types'
 
-type Profile = {
+type Program = {
   id: string
-  email: string
-  first_name?: string | null
-  role: string
+  name: string
+  description?: string | null
+  status: ProgramStatus
 }
 
-type RecentRegistration = {
-  id: string
-  status: string
-  created_at: string
-  athletes?: {
-    first_name?: string
-    last_name?: string
-    families?: {
-      family_name?: string
-    } | null
-  } | null
-  sub_programs?: {
-    name?: string
-    programs?: {
-      name?: string
-    } | null
-  } | null
-}
-
-export default function AdminDashboardPage() {
+export default function ProgramsPage() {
   const router = useRouter()
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
   const [profile, setProfile] = useState<Profile | null>(null)
-  const [totalAthletes, setTotalAthletes] = useState<number>(0)
-  const [totalRegistrations, setTotalRegistrations] = useState<number>(0)
-  const [totalPrograms, setTotalPrograms] = useState<number>(0)
-  const [recentRegistrations, setRecentRegistrations] = useState<
-    RecentRegistration[]
-  >([])
+  const [programs, setPrograms] = useState<Program[]>([])
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
-    async function load() {
-      setLoading(true)
-      setError(null)
+  async function load() {
+    setLoading(true)
+    setError(null)
+
+    try {
+      console.log('[Programs] starting load')
 
       // 1) Ensure user is logged in
       const {
@@ -66,7 +47,11 @@ export default function AdminDashboardPage() {
         error: userError,
       } = await supabase.auth.getUser()
 
+      console.log('[Programs] auth.getUser result:', { user, userError })
+
       if (userError || !user) {
+        console.error('[Programs] userError or no user:', userError)
+        setLoading(false)
         router.push('/login')
         return
       }
@@ -78,75 +63,88 @@ export default function AdminDashboardPage() {
         .eq('id', user.id)
         .single()
 
+      console.log('[Programs] profiles query result:', {
+        userId: user.id,
+        profileData,
+        profileError,
+      })
+
       if (profileError) {
-        setError(profileError.message)
+        console.error('[Programs] profileError:', profileError)
+        setError(`Profile error: ${profileError.message}`)
         setLoading(false)
         return
       }
 
       if (!profileData || profileData.role !== 'admin') {
+        console.warn('[Programs] non-admin profile, redirecting')
+        setLoading(false)
         router.push('/dashboard')
         return
       }
 
       setProfile(profileData as Profile)
 
-      // 3) Fetch counts
-      const [{ count: athletesCount }, { count: registrationsCount }, { count: programsCount }] =
-        await Promise.all([
-          supabase
-            .from('athletes')
-            .select('*', { count: 'exact', head: true }),
-          supabase
-            .from('registrations')
-            .select('*', { count: 'exact', head: true }),
-          supabase
-            .from('programs')
-            .select('*', { count: 'exact', head: true }),
-        ])
+      // 3) Load programs
+      const { data, error: programsError } = await supabase
+        .from('programs')
+        .select('id, name, description, status')
+        .order('name', { ascending: true })
 
-      setTotalAthletes(athletesCount || 0)
-      setTotalRegistrations(registrationsCount || 0)
-      setTotalPrograms(programsCount || 0)
+      console.log('[Programs] programs query result:', {
+        data,
+        programsError,
+      })
 
-      // 4) Recent registrations
-      const { data: recent, error: recentError } = await supabase
-        .from('registrations')
-        .select(
-          `
-          id,
-          status,
-          created_at,
-          athletes (
-            first_name,
-            last_name,
-            families ( family_name )
-          ),
-          sub_programs (
-            name,
-            programs ( name )
-          )
-        `
-        )
-        .order('created_at', { ascending: false })
-        .limit(5)
-
-      if (recentError) {
-        setError(recentError.message)
+      if (programsError) {
+        console.error('[Programs] programsError:', programsError)
+        setError(`Programs error: ${programsError.message}`)
       } else {
-        setRecentRegistrations((recent || []) as RecentRegistration[])
+        const allPrograms = (data || []) as Program[]
+        const active = allPrograms.filter(
+          p => p.status === ProgramStatus.ACTIVE || !p.status
+        )
+        setPrograms(active)
       }
-
-      setLoading(false)
+    } catch (e) {
+      console.error('[Programs] unexpected exception:', e)
+      setError('Unexpected error loading programs')
     }
 
-    load()
-  }, [router])
+    setLoading(false)
+  }
+
+  load()
+}, [router])
+
+  async function handleDelete(programId: string) {
+    const confirmDelete = window.confirm(
+      'Are you sure you want to delete this program? This will also delete all its sub-programs and groups. You cannot undo this from the UI.'
+    )
+
+    if (!confirmDelete) return
+
+    setDeletingId(programId)
+    setError(null)
+
+    const { error } = await supabase.rpc('soft_delete_program', {
+      program_id: programId,
+    })
+
+    if (error) {
+      console.error('Error soft deleting program:', error)
+      setError(error.message)
+    } else {
+      setPrograms(prev => prev.filter(p => p.id !== programId))
+    }
+
+    setDeletingId(null)
+  }
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-slate-600 text-sm">Loading admin dashboard…</p>
+        <p className="text-slate-600 text-sm">Loading programs…</p>
       </div>
     )
   }
@@ -160,9 +158,9 @@ export default function AdminDashboardPage() {
             <CardDescription>{error}</CardDescription>
           </CardHeader>
           <CardContent>
-            <Link href="/dashboard">
-              <Button>Back to Dashboard</Button>
-            </Link>
+            <Button variant="outline" onClick={() => router.refresh()}>
+              Try again
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -170,7 +168,6 @@ export default function AdminDashboardPage() {
   }
 
   if (!profile) {
-    // Shouldn't really happen with the checks above, but just in case
     return null
   }
 
@@ -181,11 +178,9 @@ export default function AdminDashboardPage() {
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">
-                Admin Dashboard
-              </h1>
+              <h1 className="text-2xl font-bold text-slate-900">Programs</h1>
               <p className="text-sm text-slate-600">
-                Welcome, {profile.first_name || profile.email}
+                Manage all ski programs, including soft-deleting them.
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -235,142 +230,76 @@ export default function AdminDashboardPage() {
         </div>
       </header>
 
-      <div className="container mx-auto px-6 py-8">
-        {/* Stats */}
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardDescription>Total Athletes</CardDescription>
-              <CardTitle className="text-3xl">{totalAthletes}</CardTitle>
-            </CardHeader>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardDescription>Total Registrations</CardDescription>
-              <CardTitle className="text-3xl">
-                {totalRegistrations}
-              </CardTitle>
-            </CardHeader>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardDescription>Active Programs</CardDescription>
-              <CardTitle className="text-3xl">{totalPrograms}</CardTitle>
-            </CardHeader>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardDescription>Total Revenue</CardDescription>
-              <CardTitle className="text-3xl">$0</CardTitle>
-            </CardHeader>
-          </Card>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="mb-8">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4">
-            Quick Actions
+      <main className="container mx-auto px-6 py-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-slate-900">
+            Active Programs
           </h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Link href="/admin/programs/new">
-              <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                <CardHeader>
-                  <Users className="h-8 w-8 text-blue-600 mb-2" />
-                  <CardTitle className="text-base">Create Program</CardTitle>
-                  <CardDescription>Add a new ski program</CardDescription>
-                </CardHeader>
-              </Card>
-            </Link>
-
-            <Link href="/admin/registrations">
-              <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                <CardHeader>
-                  <DollarSign className="h-8 w-8 text-blue-600 mb-2" />
-                  <CardTitle className="text-base">
-                    View Registrations
-                  </CardTitle>
-                  <CardDescription>Manage all registrations</CardDescription>
-                </CardHeader>
-              </Card>
-            </Link>
-
-            <Link href="/admin/races/new">
-              <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                <CardHeader>
-                  <Calendar className="h-8 w-8 text-blue-600 mb-2" />
-                  <CardTitle className="text-base">Add Race</CardTitle>
-                  <CardDescription>Create a new race event</CardDescription>
-                </CardHeader>
-              </Card>
-            </Link>
-
-            <Link href="/admin/coaches">
-              <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                <CardHeader>
-                  <Users className="h-8 w-8 text-blue-600 mb-2" />
-                  <CardTitle className="text-base">Manage Coaches</CardTitle>
-                  <CardDescription>View and assign coaches</CardDescription>
-                </CardHeader>
-              </Card>
-            </Link>
-          </div>
+          <Link href="/admin/programs/new">
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Program
+            </Button>
+          </Link>
         </div>
 
-        {/* Recent Registrations */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-slate-900">
-              Recent Registrations
-            </h2>
-            <Link href="/admin/registrations">
-              <Button variant="outline">View All</Button>
-            </Link>
-          </div>
-          <Card>
-            <CardContent className="p-0">
-              <div className="divide-y">
-                {recentRegistrations.length > 0 ? (
-                  recentRegistrations.map(reg => (
-                    <div
-                      key={reg.id}
-                      className="p-4 flex items-center justify-between hover:bg-slate-50"
-                    >
-                      <div>
-                        <p className="font-medium text-slate-900">
-                          {reg.athletes?.first_name}{' '}
-                          {reg.athletes?.last_name}
-                        </p>
-                        <p className="text-sm text-slate-600">
-                          {reg.athletes?.families?.family_name}
-                        </p>
-                        <p className="text-sm text-slate-600">
-                          {reg.sub_programs?.programs?.name} -{' '}
-                          {reg.sub_programs?.name}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-medium text-slate-900">
-                          {reg.status}
-                        </p>
-                        <p className="text-sm text-slate-600">
-                          {new Date(reg.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="p-8 text-center text-slate-600">
-                    No registrations yet
-                  </div>
-                )}
+        <Card>
+          <CardContent className="p-0">
+            {programs.length === 0 ? (
+              <div className="p-6 text-sm text-slate-600">
+                No active programs yet. Click &quot;Add Program&quot; to create
+                one.
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+            ) : (
+              <div className="divide-y">
+                {programs.map(program => (
+                  <div
+                    key={program.id}
+                    className="p-4 flex items-center justify-between hover:bg-slate-50"
+                  >
+                    <div>
+                      <h3 className="font-medium text-slate-900">
+                        {program.name}
+                      </h3>
+                      {program.description && (
+                        <p className="text-sm text-slate-600">
+                          {program.description}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      {/* ✅ This is the important part: use program.id */}
+                      <Link
+                        href={`/admin/programs/${program.id}/sub-programs`}
+                      >
+                        <Button variant="outline" size="sm">
+                          Sub-programs
+                        </Button>
+                      </Link>
+                      <Link href={`/admin/programs/${program.id}/edit`}>
+                        <Button variant="outline" size="sm">
+                          <Pencil className="h-4 w-4 mr-1" />
+                          Edit
+                        </Button>
+                      </Link>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleDelete(program.id)}
+                        disabled={deletingId === program.id}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        {deletingId === program.id ? 'Deleting…' : 'Delete'}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </main>
     </div>
   )
 }
+  
