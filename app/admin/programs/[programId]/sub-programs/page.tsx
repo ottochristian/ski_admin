@@ -198,7 +198,7 @@ export default function SubProgramsPage() {
                   {program.name} – Sub-programs
                 </h1>
               </div>
-              <p className="text-sm text-foreground">
+              <p className="text-sm text-muted-foreground">
                 Manage sub-programs for this program. Deleting a sub-program
                 will also delete its groups (soft delete).
               </p>
