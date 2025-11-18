@@ -151,7 +151,7 @@ export default function SubProgramsPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-slate-600 text-sm">Loading sub-programs…</p>
+        <p className="text-muted-foreground text-sm">Loading sub-programs…</p>
       </div>
     )
   }
@@ -198,7 +198,7 @@ export default function SubProgramsPage() {
                   {program.name} – Sub-programs
                 </h1>
               </div>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-foreground">
                 Manage sub-programs for this program. Deleting a sub-program
                 will also delete its groups (soft delete).
               </p>
@@ -251,7 +251,7 @@ export default function SubProgramsPage() {
         <Card>
           <CardContent className="p-0">
             {subPrograms.length === 0 ? (
-              <div className="p-6 text-sm text-slate-600">
+              <div className="p-6 text-sm text-muted-foreground">
                 No active sub-programs yet. Click &quot;Add Sub-program&quot; to
                 create one.
               </div>
@@ -265,7 +265,7 @@ export default function SubProgramsPage() {
                     <div>
                       <h3 className="font-medium text-slate-900">{sp.name}</h3>
                       {sp.description && (
-                        <p className="text-sm text-slate-600">
+                        <p className="text-sm text-muted-foreground">
                           {sp.description}
                         </p>
                       )}

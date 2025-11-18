@@ -92,7 +92,7 @@ export function BulkRaceRegistrationForm({
             <Button type="button" variant="outline" size="sm" onClick={clearAll}>
               Clear All
             </Button>
-            <div className="ml-auto text-sm text-slate-600">
+            <div className="ml-auto text-sm text-muted-foreground">
               {selectedAthletes.length} selected
             </div>
           </div>
@@ -116,11 +116,11 @@ export function BulkRaceRegistrationForm({
                           <p className="font-medium text-slate-900">
                             {athlete.first_name} {athlete.last_name}
                           </p>
-                          <p className="text-sm text-slate-600">
+                          <p className="text-sm text-muted-foreground">
                             {athlete.families?.family_name}
                           </p>
                           {athlete.ussa_number && (
-                            <p className="text-xs text-slate-500">
+                            <p className="text-xs text-muted-foreground">
                               USSA: {athlete.ussa_number}
                             </p>
                           )}
@@ -157,7 +157,7 @@ export function BulkRaceRegistrationForm({
           </Button>
         </>
       ) : (
-        <div className="text-center py-8 text-slate-600">
+        <div className="text-center py-8 text-muted-foreground">
           All eligible athletes are already registered for this race.
         </div>
       )}

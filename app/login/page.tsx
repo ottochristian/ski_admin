@@ -60,7 +60,7 @@ export default function LoginPage() {
   if (checkingSession) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950">
-        <p className="text-slate-400 text-sm">Checking your session…</p>
+        <p className="text-muted-foreground text-sm">Checking your session…</p>
       </div>
     )
   }
@@ -74,7 +74,7 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm text-slate-300">
+            <label className="block text-sm text-muted-foreground">
               Email
               <input
                 type="email"
@@ -87,7 +87,7 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm text-slate-300">
+            <label className="block text-sm text-muted-foreground">
               Password
               <input
                 type="password"
