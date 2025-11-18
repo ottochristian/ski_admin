@@ -83,7 +83,7 @@ export default function NewProgramPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-slate-600 text-sm">Checking permissions…</p>
+        <p className="text-muted-foreground text-sm">Checking permissions…</p>
       </div>
     )
   }
@@ -112,7 +112,7 @@ export default function NewProgramPage() {
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">New Program</h1>
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-muted-foreground">
               Create a new program for your club (e.g., Alpine, Freeride, Nordic).
             </p>
           </div>

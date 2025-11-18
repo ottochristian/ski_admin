@@ -17,26 +17,33 @@ import { Settings } from 'lucide-react'
 import { LogoutButton } from '@/components/logout-button'
 import { Profile } from '@/lib/types'
 
-type Program = {
+type SubProgram = {
   id: string
   name: string
   description?: string | null
   status: ProgramStatus | null
+  program_id: string
 }
 
-export default function EditProgramPage() {
-  const router = useRouter()
-  const params = useParams() as { programId?: string | string[] }
+type Program = {
+  id: string
+  name: string
+}
 
-  const rawProgramId = params.programId
-  const programId =
-    Array.isArray(rawProgramId) ? rawProgramId[0] : rawProgramId
+export default function EditSubProgramPage() {
+  const router = useRouter()
+  const params = useParams() as { subProgramId?: string | string[] }
+
+  const rawSubProgramId = params.subProgramId
+  const subProgramId =
+    Array.isArray(rawSubProgramId) ? rawSubProgramId[0] : rawSubProgramId
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [subProgram, setSubProgram] = useState<SubProgram | null>(null)
   const [program, setProgram] = useState<Program | null>(null)
 
   const [name, setName] = useState('')
@@ -45,11 +52,11 @@ export default function EditProgramPage() {
 
   useEffect(() => {
     async function load() {
-      // 🚧 Guard against bad URLs like /admin/programs/undefined/edit
-      if (!programId || programId === 'undefined') {
+      // 🚧 Guard against bad URLs like /admin/programs/sub-programs/undefined/edit
+      if (!subProgramId || subProgramId === 'undefined') {
         console.error(
-          '[EditProgram] Invalid programId in route, redirecting:',
-          programId
+          '[EditSubProgram] Invalid subProgramId in route, redirecting:',
+          subProgramId
         )
         router.push('/admin/programs')
         return
@@ -89,38 +96,53 @@ export default function EditProgramPage() {
 
       setProfile(profileData as Profile)
 
-      // 3) Fetch program
-      const { data: programData, error: programError } = await supabase
-        .from('programs')
-        .select('id, name, description, status')
-        .eq('id', programId)
+      // 3) Fetch sub-program
+      const { data: subProgramData, error: subProgramError } = await supabase
+        .from('sub_programs')
+        .select('id, name, description, status, program_id')
+        .eq('id', subProgramId)
         .single()
 
-      if (programError || !programData) {
-        setError(programError?.message ?? 'Program not found')
+      if (subProgramError || !subProgramData) {
+        setError(subProgramError?.message ?? 'Sub-program not found')
         setLoading(false)
         return
       }
 
-      const typedProgram = programData as Program
-      setProgram(typedProgram)
-      setName(typedProgram.name ?? '')
-      setDescription(typedProgram.description ?? '')
+      const typedSubProgram = subProgramData as SubProgram
+      setSubProgram(typedSubProgram)
+      setName(typedSubProgram.name ?? '')
+      setDescription(typedSubProgram.description ?? '')
       setIsActive(
-        typedProgram.status === ProgramStatus.ACTIVE || !typedProgram.status
+        typedSubProgram.status === ProgramStatus.ACTIVE ||
+          !typedSubProgram.status
       )
 
+      // 4) Fetch parent program (for breadcrumb/navigation)
+      const { data: programData, error: programError } = await supabase
+        .from('programs')
+        .select('id, name')
+        .eq('id', typedSubProgram.program_id)
+        .single()
+
+      if (programError || !programData) {
+        setError(programError?.message ?? 'Parent program not found')
+        setLoading(false)
+        return
+      }
+
+      setProgram(programData as Program)
       setLoading(false)
     }
 
     load()
-  }, [router, programId])
+  }, [router, subProgramId])
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
 
-    if (!programId || programId === 'undefined') {
-      console.error('[EditProgram] handleSave with invalid programId', programId)
+    if (!subProgramId || subProgramId === 'undefined') {
+      console.error('[EditSubProgram] handleSave with invalid subProgramId', subProgramId)
       return
     }
 
@@ -130,19 +152,24 @@ export default function EditProgramPage() {
     const newStatus = isActive ? ProgramStatus.ACTIVE : ProgramStatus.INACTIVE
 
     const { error: updateError } = await supabase
-      .from('programs')
+      .from('sub_programs')
       .update({
         name,
         description,
         status: newStatus,
       })
-      .eq('id', programId)
+      .eq('id', subProgramId)
 
     if (updateError) {
-      console.error('[EditProgram] update error:', updateError)
+      console.error('[EditSubProgram] update error:', updateError)
       setError(updateError.message)
     } else {
-      router.push('/admin/programs')
+      // Navigate back to the sub-programs list for this program
+      if (subProgram?.program_id) {
+        router.push(`/admin/programs/${subProgram.program_id}/sub-programs`)
+      } else {
+        router.push('/admin/programs')
+      }
     }
 
     setSaving(false)
@@ -151,7 +178,7 @@ export default function EditProgramPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-muted-foreground text-sm">Loading program…</p>
+        <p className="text-muted-foreground text-sm">Loading sub-program…</p>
       </div>
     )
   }
@@ -165,7 +192,10 @@ export default function EditProgramPage() {
             <CardDescription>{error}</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button variant="outline" onClick={() => router.push('/admin/programs')}>
+            <Button
+              variant="outline"
+              onClick={() => router.push('/admin/programs')}
+            >
               Back to Programs
             </Button>
           </CardContent>
@@ -174,7 +204,7 @@ export default function EditProgramPage() {
     )
   }
 
-  if (!profile || !program) {
+  if (!profile || !subProgram || !program) {
     return null
   }
 
@@ -185,9 +215,11 @@ export default function EditProgramPage() {
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Edit Program</h1>
+              <h1 className="text-2xl font-bold text-slate-900">
+                Edit Sub-program
+              </h1>
               <p className="text-sm text-muted-foreground">
-                Update the details for this program.
+                Update the details for this sub-program.
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -213,6 +245,13 @@ export default function EditProgramPage() {
                 Programs
               </Button>
             </Link>
+            {program && (
+              <Link href={`/admin/programs/${program.id}/sub-programs`}>
+                <Button variant="ghost" size="sm">
+                  {program.name}
+                </Button>
+              </Link>
+            )}
           </nav>
         </div>
       </header>
@@ -221,16 +260,17 @@ export default function EditProgramPage() {
       <main className="container mx-auto px-6 py-8">
         <Card className="max-w-3xl">
           <CardHeader>
-            <CardTitle>Program Details</CardTitle>
+            <CardTitle>Sub-program Details</CardTitle>
             <CardDescription>
-              This is the top-level program (e.g., Alpine, Freeride, Nordic).
+              A sub-program groups related content under a program
+              (e.g., Beginner, Intermediate, Advanced under Alpine).
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form className="space-y-6" onSubmit={handleSave}>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-700">
-                  Program Name
+                  Sub-program Name
                 </label>
                 <input
                   type="text"
@@ -265,7 +305,7 @@ export default function EditProgramPage() {
                   htmlFor="is-active"
                   className="text-sm font-medium text-slate-700"
                 >
-                  Program is active
+                  Sub-program is active
                 </label>
               </div>
 
@@ -273,7 +313,15 @@ export default function EditProgramPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => router.push('/admin/programs')}
+                  onClick={() => {
+                    if (subProgram?.program_id) {
+                      router.push(
+                        `/admin/programs/${subProgram.program_id}/sub-programs`
+                      )
+                    } else {
+                      router.push('/admin/programs')
+                    }
+                  }}
                   disabled={saving}
                 >
                   Cancel

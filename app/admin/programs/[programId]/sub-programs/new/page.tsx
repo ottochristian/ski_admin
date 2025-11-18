@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
+import { ProgramStatus } from '@/lib/programStatus'
 import {
   Card,
   CardHeader,
@@ -119,18 +120,25 @@ export default function NewSubProgramPage() {
     setSaving(true)
     setError(null)
 
-    const { error: insertError } = await supabase.from('sub_programs').insert({
-      program_id: programId,
-      name,
-      description,
-      status: 'active', // or ProgramStatus.ACTIVE if you wire that in here too
-    })
+    try {
+      const { data: inserted, error: insertError } = await supabase
+        .from('sub_programs')
+        .insert({
+          program_id: programId,
+          name,
+          description,
+          status: ProgramStatus.ACTIVE,
+        })
 
-    if (insertError) {
-      console.error('[NewSubProgram] insert error:', insertError)
-      setError(insertError.message)
-    } else {
-      router.push(`/admin/programs/${programId}/sub-programs`)
+      if (insertError) {
+        console.error('[NewSubProgram] insert error:', insertError, { inserted })
+        setError(insertError.message ?? JSON.stringify(insertError))
+      } else {
+        router.push(`/admin/programs/${programId}/sub-programs`)
+      }
+    } catch (err) {
+      console.error('[NewSubProgram] unexpected error:', err)
+      setError(String(err))
     }
 
     setSaving(false)
@@ -139,7 +147,7 @@ export default function NewSubProgramPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-slate-600 text-sm">Loading sub-program form…</p>
+        <p className="text-muted-foreground text-sm">Loading sub-program form…</p>
       </div>
     )
   }
@@ -185,7 +193,7 @@ export default function NewSubProgramPage() {
               <h1 className="text-2xl font-bold text-slate-900">
                 Add Sub-program
               </h1>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-slate-900">
                 Parent program: {program.name}
               </p>
             </div>
@@ -226,14 +234,14 @@ export default function NewSubProgramPage() {
         <Card className="max-w-3xl">
           <CardHeader>
             <CardTitle>New Sub-program</CardTitle>
-            <CardDescription>
+            <CardDescription className="text-slate-700">
               Create a new sub-program under {program.name}.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form className="space-y-6" onSubmit={handleSave}>
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">
+                <label className="block text-sm font-medium text-slate-900">
                   Sub-program Name
                 </label>
                 <input
@@ -246,7 +254,7 @@ export default function NewSubProgramPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700">
+                <label className="block text-sm font-medium text-slate-900">
                   Description
                 </label>
                 <textarea

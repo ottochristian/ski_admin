@@ -171,7 +171,7 @@ export default function EditSubProgramPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-sm text-slate-600">Loading sub-program…</p>
+        <p className="text-sm text-muted-foreground">Loading sub-program…</p>
       </div>
     )
   }
@@ -206,7 +206,7 @@ export default function EditSubProgramPage() {
             <h1 className="text-2xl font-bold text-slate-900">
               Edit Sub-Program
             </h1>
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-muted-foreground">
               Program:{' '}
               <span className="font-medium">{program.name}</span> · Sub-program:{' '}
               <span className="font-medium">{subProgram.name}</span>

@@ -151,7 +151,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-slate-600">Loading your dashboard…</p>
+        <p className="text-muted-foreground">Loading your dashboard…</p>
       </div>
     )
   }
@@ -187,17 +187,17 @@ export default function DashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-muted-foreground">
               It looks like the database tables haven&apos;t been created yet. Please
               make sure to run the SQL scripts in the scripts folder:
             </p>
-            <ol className="text-sm text-slate-600 list-decimal list-inside space-y-1">
+            <ol className="text-sm text-muted-foreground list-decimal list-inside space-y-1">
               <li>001_create_base_tables.sql</li>
               <li>002_enable_rls.sql</li>
               <li>003_create_triggers.sql</li>
               <li>004_seed_sample_data.sql</li>
             </ol>
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-muted-foreground">
               After running these scripts, refresh this page or log out and log back in.
             </p>
             <div className="flex gap-2">
@@ -220,7 +220,7 @@ export default function DashboardPage() {
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Family Dashboard</h1>
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-muted-foreground">
               Welcome back, {profile.first_name || profile.email}
             </p>
           </div>
@@ -377,11 +377,11 @@ export default function DashboardPage() {
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {athlete.ussa_number && (
-                      <p className="text-sm text-slate-600">
+                      <p className="text-sm text-muted-foreground">
                         USSA: {athlete.ussa_number}
                       </p>
                     )}
-                    <p className="text-sm text-slate-600">
+                    <p className="text-sm text-muted-foreground">
                       {athlete.registrations?.length || 0} active registrations
                     </p>
                     <Link href={`/dashboard/athletes/${athlete.id}`}>

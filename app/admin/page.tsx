@@ -144,7 +144,7 @@ export default function ProgramsPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-slate-600 text-sm">Loading programs…</p>
+        <p className="text-muted-foreground text-sm">Loading programs…</p>
       </div>
     )
   }
@@ -179,7 +179,7 @@ export default function ProgramsPage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-2xl font-bold text-slate-900">Programs</h1>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-muted-foreground">
                 Manage all ski programs, including soft-deleting them.
               </p>
             </div>
@@ -246,7 +246,7 @@ export default function ProgramsPage() {
         <Card>
           <CardContent className="p-0">
             {programs.length === 0 ? (
-              <div className="p-6 text-sm text-slate-600">
+              <div className="p-6 text-sm text-muted-foreground">
                 No active programs yet. Click &quot;Add Program&quot; to create
                 one.
               </div>
@@ -262,7 +262,7 @@ export default function ProgramsPage() {
                         {program.name}
                       </h3>
                       {program.description && (
-                        <p className="text-sm text-slate-600">
+                        <p className="text-sm text-muted-foreground">
                           {program.description}
                         </p>
                       )}

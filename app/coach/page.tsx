@@ -125,7 +125,7 @@ export default function CoachDashboardPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-slate-600 text-sm">Loading coach dashboard…</p>
+        <p className="text-muted-foreground text-sm">Loading coach dashboard…</p>
       </div>
     )
   }
@@ -163,7 +163,7 @@ export default function CoachDashboardPage() {
               <h1 className="text-2xl font-bold text-slate-900">
                 Coach Dashboard
               </h1>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-muted-foreground">
                 Welcome, {profile.first_name || profile.email}
               </p>
             </div>

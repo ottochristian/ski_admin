@@ -127,7 +127,7 @@ export function AddRaceForm() {
           onChange={(e) => setFormData({ ...formData, zone4RaceId: e.target.value })}
           placeholder="Enter Zone4 race ID for automatic sync"
         />
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-muted-foreground">
           Link this race to Zone4 for automatic registration submission and result syncing
         </p>
       </div>
