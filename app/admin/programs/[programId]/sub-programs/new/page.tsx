@@ -13,9 +13,9 @@ import {
   CardContent,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Settings } from 'lucide-react'
-import { LogoutButton } from '@/components/logout-button'
 import { Profile } from '@/lib/types'
+import { useAdminClub } from '@/lib/use-admin-club'
+import { clubQuery, withClubData } from '@/lib/supabase-helpers'
 
 type Program = {
   id: string
@@ -25,6 +25,7 @@ type Program = {
 export default function NewSubProgramPage() {
   const router = useRouter()
   const params = useParams() as { programId?: string | string[] }
+  const { clubId, profile, loading: authLoading, error: authError } = useAdminClub()
 
   const rawProgramId = params.programId
   const programId =
@@ -34,7 +35,6 @@ export default function NewSubProgramPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [profile, setProfile] = useState<Profile | null>(null)
   const [program, setProgram] = useState<Program | null>(null)
 
   const [name, setName] = useState('')
@@ -52,46 +52,28 @@ export default function NewSubProgramPage() {
         return
       }
 
-      setLoading(true)
-      setError(null)
-
-      // 1) Ensure user is logged in
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser()
-
-      if (userError || !user) {
-        router.push('/login')
+      if (authLoading || !clubId) {
         return
       }
 
-      // 2) Fetch profile and ensure admin
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-
-      if (profileError) {
-        setError(profileError.message)
+      if (authError) {
+        setError(authError)
         setLoading(false)
         return
       }
 
-      if (!profileData || profileData.role !== 'admin') {
-        router.push('/dashboard')
-        return
-      }
+      setLoading(true)
+      setError(null)
 
-      setProfile(profileData as Profile)
-
-      // 3) Fetch parent program (for header)
-      const { data: programData, error: programError } = await supabase
-        .from('programs')
-        .select('id, name')
-        .eq('id', programId)
-        .single()
+      // Fetch parent program (for header) - verify it belongs to this club
+      const { data: programData, error: programError } = await clubQuery(
+        supabase
+          .from('programs')
+          .select('id, name')
+          .eq('id', programId)
+          .single(),
+        clubId
+      )
 
       if (programError || !programData) {
         setError(programError?.message ?? 'Program not found')
@@ -104,15 +86,15 @@ export default function NewSubProgramPage() {
     }
 
     load()
-  }, [router, programId])
+  }, [router, programId, clubId, authLoading, authError])
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
 
-    if (!programId || programId === 'undefined') {
+    if (!programId || programId === 'undefined' || !clubId) {
       console.error(
-        '[NewSubProgram] handleSave with invalid programId',
-        programId
+        '[NewSubProgram] handleSave with invalid programId or clubId',
+        { programId, clubId }
       )
       return
     }
@@ -123,12 +105,17 @@ export default function NewSubProgramPage() {
     try {
       const { data: inserted, error: insertError } = await supabase
         .from('sub_programs')
-        .insert({
-          program_id: programId,
-          name,
-          description,
-          status: ProgramStatus.ACTIVE,
-        })
+        .insert(
+          withClubData(
+            {
+              program_id: programId,
+              name,
+              description,
+              status: ProgramStatus.ACTIVE,
+            },
+            clubId
+          )
+        )
 
       if (insertError) {
         console.error('[NewSubProgram] insert error:', insertError, { inserted })
@@ -144,21 +131,21 @@ export default function NewSubProgramPage() {
     setSaving(false)
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-muted-foreground text-sm">Loading sub-program form…</p>
+      <div className="flex items-center justify-center py-12">
+        <p className="text-muted-foreground">Loading sub-program form…</p>
       </div>
     )
   }
 
-  if (error) {
+  if (error || authError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="flex items-center justify-center py-12">
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle>Something went wrong</CardTitle>
-            <CardDescription>{error}</CardDescription>
+            <CardDescription>{error || authError}</CardDescription>
           </CardHeader>
           <CardContent>
             <Button
@@ -184,60 +171,21 @@ export default function NewSubProgramPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="border-b bg-white">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900">
-                Add Sub-program
-              </h1>
-              <p className="text-sm text-slate-900">
-                Parent program: {program.name}
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <Link href="/admin/settings">
-                <Button variant="outline">
-                  <Settings className="h-4 w-4 mr-2" />
-                  Settings
-                </Button>
-              </Link>
-              <LogoutButton />
-            </div>
-          </div>
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Add Sub-program</h1>
+        <p className="text-muted-foreground">
+          Parent program: {program.name}
+        </p>
+      </div>
 
-          {/* Quick Nav */}
-          <nav className="flex gap-2">
-            <Link href="/admin">
-              <Button variant="ghost" size="sm">
-                Dashboard
-              </Button>
-            </Link>
-            <Link href="/admin/programs">
-              <Button variant="ghost" size="sm">
-                Programs
-              </Button>
-            </Link>
-            <Link href={`/admin/programs/${program.id}/sub-programs`}>
-              <Button variant="ghost" size="sm">
-                Sub-programs
-              </Button>
-            </Link>
-          </nav>
-        </div>
-      </header>
-
-      {/* Form */}
-      <main className="container mx-auto px-6 py-8">
-        <Card className="max-w-3xl">
-          <CardHeader>
-            <CardTitle>New Sub-program</CardTitle>
-            <CardDescription className="text-slate-700">
-              Create a new sub-program under {program.name}.
-            </CardDescription>
-          </CardHeader>
+      <Card className="max-w-3xl">
+        <CardHeader>
+          <CardTitle>New Sub-program</CardTitle>
+          <CardDescription>
+            Create a new sub-program under {program.name}.
+          </CardDescription>
+        </CardHeader>
           <CardContent>
             <form className="space-y-6" onSubmit={handleSave}>
               <div className="space-y-2">
@@ -285,7 +233,6 @@ export default function NewSubProgramPage() {
             </form>
           </CardContent>
         </Card>
-      </main>
     </div>
   )
 }

@@ -6,9 +6,13 @@ import { supabase } from '@/lib/supabaseClient'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import { useAdminClub } from '@/lib/use-admin-club'
+import { ProgramStatus } from '@/lib/programStatus'
+import { withClubData, getCurrentSeason } from '@/lib/supabase-helpers'
 
 export default function NewProgramPage() {
   const router = useRouter()
+  const { clubId, loading: authLoading, error: authError } = useAdminClub()
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -18,55 +22,53 @@ export default function NewProgramPage() {
   const [description, setDescription] = useState('')
   const [isActive, setIsActive] = useState(true)
 
-  // auth + admin guard
+  // Wait for auth to complete
   useEffect(() => {
-    async function checkAdmin() {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser()
-
-      if (userError || !user) {
-        router.push('/login')
-        return
-      }
-
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-
-      if (profileError) {
-        setError(profileError.message)
-        setLoading(false)
-        return
-      }
-
-      if (!profile || profile.role !== 'admin') {
-        router.push('/dashboard')
-        return
-      }
-
-      setLoading(false)
+    if (authLoading) {
+      return
     }
 
-    checkAdmin()
-  }, [router])
+    if (authError) {
+      setError(authError)
+      setLoading(false)
+      return
+    }
+
+    setLoading(false)
+  }, [authLoading, authError])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
+    
+    if (!clubId) {
+      setError('No club associated with your account')
+      return
+    }
+
     setSaving(true)
     setError(null)
+
+    // Get current season for this club
+    const currentSeason = await getCurrentSeason(clubId)
+
+    if (!currentSeason) {
+      setError('No current season found. Please create a season first.')
+      setSaving(false)
+      return
+    }
 
     const { error: insertError } = await supabase
       .from('programs')
       .insert([
-        {
-          name,
-          description,
-          is_active: isActive,
-        },
+        withClubData(
+          {
+            name,
+            description,
+            status: isActive ? ProgramStatus.ACTIVE : ProgramStatus.INACTIVE,
+          },
+          clubId,
+          currentSeason.id
+        ),
       ])
 
     setSaving(false)
@@ -80,17 +82,17 @@ export default function NewProgramPage() {
     router.push('/admin/programs')
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-muted-foreground text-sm">Checking permissions…</p>
+      <div className="flex items-center justify-center py-12">
+        <p className="text-muted-foreground">Checking permissions…</p>
       </div>
     )
   }
 
-  if (error) {
+  if (error || authError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="flex items-center justify-center py-12">
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle>Something went wrong</CardTitle>
@@ -107,23 +109,20 @@ export default function NewProgramPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b bg-white">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">New Program</h1>
-            <p className="text-sm text-muted-foreground">
-              Create a new program for your club (e.g., Alpine, Freeride, Nordic).
-            </p>
-          </div>
-          <Link href="/admin/programs">
-            <Button variant="outline">Back to Programs</Button>
-          </Link>
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">New Program</h1>
+          <p className="text-muted-foreground">
+            Create a new program for your club (e.g., Alpine, Freeride, Nordic).
+          </p>
         </div>
-      </header>
+        <Link href="/admin/programs">
+          <Button variant="outline">Back to Programs</Button>
+        </Link>
+      </div>
 
-      <main className="container mx-auto px-6 py-8">
-        <Card className="max-w-xl">
+      <Card className="max-w-xl">
           <CardHeader>
             <CardTitle>Program Details</CardTitle>
             <CardDescription>
@@ -192,7 +191,6 @@ export default function NewProgramPage() {
             </form>
           </CardContent>
         </Card>
-      </main>
     </div>
   )
 }

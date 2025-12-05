@@ -170,15 +170,15 @@ export default function EditSubProgramPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-sm text-muted-foreground">Loading sub-program…</p>
+      <div className="flex items-center justify-center py-12">
+        <p className="text-muted-foreground">Loading sub-program…</p>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="flex items-center justify-center py-12">
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle>Something went wrong</CardTitle>
@@ -199,27 +199,24 @@ export default function EditSubProgramPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b bg-white">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">
-              Edit Sub-Program
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Program:{' '}
-              <span className="font-medium">{program.name}</span> · Sub-program:{' '}
-              <span className="font-medium">{subProgram.name}</span>
-            </p>
-          </div>
-          <Link href="/admin/programs">
-            <Button variant="outline">Back to Programs</Button>
-          </Link>
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Edit Sub-Program
+          </h1>
+          <p className="text-muted-foreground">
+            Program:{' '}
+            <span className="font-medium">{program.name}</span> · Sub-program:{' '}
+            <span className="font-medium">{subProgram.name}</span>
+          </p>
         </div>
-      </header>
+        <Link href="/admin/programs">
+          <Button variant="outline">Back to Programs</Button>
+        </Link>
+      </div>
 
-      <main className="container mx-auto px-6 py-8">
-        <Card className="max-w-xl">
+      <Card className="max-w-xl">
           <CardHeader>
             <CardTitle>Sub-Program Details</CardTitle>
             <CardDescription>
@@ -312,7 +309,6 @@ export default function EditSubProgramPage() {
             </form>
           </CardContent>
         </Card>
-      </main>
     </div>
   )
 }
