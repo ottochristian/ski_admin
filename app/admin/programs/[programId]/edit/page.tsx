@@ -13,9 +13,9 @@ import {
   CardContent,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Settings } from 'lucide-react'
-import { LogoutButton } from '@/components/logout-button'
 import { Profile } from '@/lib/types'
+import { useAdminClub } from '@/lib/use-admin-club'
+import { clubQuery } from '@/lib/supabase-helpers'
 
 type Program = {
   id: string
@@ -27,6 +27,7 @@ type Program = {
 export default function EditProgramPage() {
   const router = useRouter()
   const params = useParams() as { programId?: string | string[] }
+  const { clubId, profile, loading: authLoading, error: authError } = useAdminClub()
 
   const rawProgramId = params.programId
   const programId =
@@ -36,7 +37,6 @@ export default function EditProgramPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [profile, setProfile] = useState<Profile | null>(null)
   const [program, setProgram] = useState<Program | null>(null)
 
   const [name, setName] = useState('')
@@ -55,46 +55,28 @@ export default function EditProgramPage() {
         return
       }
 
-      setLoading(true)
-      setError(null)
-
-      // 1) Ensure user is logged in
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser()
-
-      if (userError || !user) {
-        router.push('/login')
+      if (authLoading || !clubId) {
         return
       }
 
-      // 2) Fetch profile and ensure admin
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-
-      if (profileError) {
-        setError(profileError.message)
+      if (authError) {
+        setError(authError)
         setLoading(false)
         return
       }
 
-      if (!profileData || profileData.role !== 'admin') {
-        router.push('/dashboard')
-        return
-      }
+      setLoading(true)
+      setError(null)
 
-      setProfile(profileData as Profile)
-
-      // 3) Fetch program
-      const { data: programData, error: programError } = await supabase
-        .from('programs')
-        .select('id, name, description, status')
-        .eq('id', programId)
-        .single()
+      // Fetch program - verify it belongs to this club
+      const { data: programData, error: programError } = await clubQuery(
+        supabase
+          .from('programs')
+          .select('id, name, description, status')
+          .eq('id', programId)
+          .single(),
+        clubId
+      )
 
       if (programError || !programData) {
         setError(programError?.message ?? 'Program not found')
@@ -114,13 +96,13 @@ export default function EditProgramPage() {
     }
 
     load()
-  }, [router, programId])
+  }, [router, programId, clubId, authLoading, authError])
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
 
-    if (!programId || programId === 'undefined') {
-      console.error('[EditProgram] handleSave with invalid programId', programId)
+    if (!programId || programId === 'undefined' || !clubId) {
+      console.error('[EditProgram] handleSave with invalid programId or clubId', { programId, clubId })
       return
     }
 
@@ -129,14 +111,18 @@ export default function EditProgramPage() {
 
     const newStatus = isActive ? ProgramStatus.ACTIVE : ProgramStatus.INACTIVE
 
-    const { error: updateError } = await supabase
-      .from('programs')
-      .update({
-        name,
-        description,
-        status: newStatus,
-      })
-      .eq('id', programId)
+    // Update with club filter to ensure we can only update our club's programs
+    const { error: updateError } = await clubQuery(
+      supabase
+        .from('programs')
+        .update({
+          name,
+          description,
+          status: newStatus,
+        })
+        .eq('id', programId),
+      clubId
+    )
 
     if (updateError) {
       console.error('[EditProgram] update error:', updateError)
@@ -148,21 +134,21 @@ export default function EditProgramPage() {
     setSaving(false)
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-muted-foreground text-sm">Loading program…</p>
+      <div className="flex items-center justify-center py-12">
+        <p className="text-muted-foreground">Loading program…</p>
       </div>
     )
   }
 
-  if (error) {
+  if (error || authError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="flex items-center justify-center py-12">
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle>Something went wrong</CardTitle>
-            <CardDescription>{error}</CardDescription>
+            <CardDescription>{error || authError}</CardDescription>
           </CardHeader>
           <CardContent>
             <Button variant="outline" onClick={() => router.push('/admin/programs')}>
@@ -179,53 +165,21 @@ export default function EditProgramPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="border-b bg-white">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900">Edit Program</h1>
-              <p className="text-sm text-muted-foreground">
-                Update the details for this program.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <Link href="/admin/settings">
-                <Button variant="outline">
-                  <Settings className="h-4 w-4 mr-2" />
-                  Settings
-                </Button>
-              </Link>
-              <LogoutButton />
-            </div>
-          </div>
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Edit Program</h1>
+        <p className="text-muted-foreground">
+          Update the details for this program.
+        </p>
+      </div>
 
-          {/* Quick Nav */}
-          <nav className="flex gap-2">
-            <Link href="/admin">
-              <Button variant="ghost" size="sm">
-                Dashboard
-              </Button>
-            </Link>
-            <Link href="/admin/programs">
-              <Button variant="ghost" size="sm">
-                Programs
-              </Button>
-            </Link>
-          </nav>
-        </div>
-      </header>
-
-      {/* Form */}
-      <main className="container mx-auto px-6 py-8">
-        <Card className="max-w-3xl">
-          <CardHeader>
-            <CardTitle>Program Details</CardTitle>
-            <CardDescription>
-              This is the top-level program (e.g., Alpine, Freeride, Nordic).
-            </CardDescription>
-          </CardHeader>
+      <Card className="max-w-3xl">
+        <CardHeader>
+          <CardTitle>Program Details</CardTitle>
+          <CardDescription>
+            This is the top-level program (e.g., Alpine, Freeride, Nordic).
+          </CardDescription>
+        </CardHeader>
           <CardContent>
             <form className="space-y-6" onSubmit={handleSave}>
               <div className="space-y-2">
@@ -285,7 +239,6 @@ export default function EditProgramPage() {
             </form>
           </CardContent>
         </Card>
-      </main>
     </div>
   )
 }

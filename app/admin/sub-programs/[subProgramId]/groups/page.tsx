@@ -1,4 +1,4 @@
-'use client'
+"use client"
 
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
@@ -13,8 +13,7 @@ import {
   CardContent,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Settings, Plus, Pencil, Trash2, ArrowLeft } from 'lucide-react'
-import { LogoutButton } from '@/components/logout-button'
+import { Plus, Pencil, Trash2, ArrowLeft } from 'lucide-react'
 import { Profile } from '@/lib/types'
 
 type SimpleProgram = {
@@ -162,15 +161,15 @@ export default function GroupsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-muted-foreground text-sm">Loading groups…</p>
+      <div className="flex items-center justify-center py-12">
+        <p className="text-muted-foreground">Loading groups…</p>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="flex items-center justify-center py-12">
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle>Something went wrong</CardTitle>
@@ -191,118 +190,71 @@ export default function GroupsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="border-b bg-white">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() =>
-                    router.push(`/admin/programs/${program.id}/sub-programs`)
-                  }
-                  aria-label="Back to sub-programs"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                </Button>
-                <h1 className="text-2xl font-bold text-slate-900">
-                  {program.name} – {subProgram.name} – Groups
-                </h1>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Manage athlete groups for this sub-program.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <Link href="/admin/settings">
-                <Button variant="outline">
-                  <Settings className="h-4 w-4 mr-2" />
-                  Settings
-                </Button>
-              </Link>
-              <LogoutButton />
-            </div>
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => router.push(`/admin/programs/${program.id}/sub-programs`)}
+              aria-label="Back to sub-programs"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <h1 className="text-3xl font-bold tracking-tight">
+              {program.name} – {subProgram.name} – Groups
+            </h1>
           </div>
-
-          {/* Quick Nav */}
-          <nav className="flex gap-2">
-            <Link href="/admin">
-              <Button variant="ghost" size="sm">
-                Dashboard
-              </Button>
-            </Link>
-            <Link href="/admin/programs">
-              <Button variant="ghost" size="sm">
-                Programs
-              </Button>
-            </Link>
-            <Button variant="ghost" size="sm" disabled>
-              Groups
-            </Button>
-          </nav>
+          <p className="text-muted-foreground">
+            Manage athlete groups for this sub-program.
+          </p>
         </div>
-      </header>
+        <Link href={`/admin/sub-programs/${subProgramId}/groups/new`}>
+          <Button>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Group
+          </Button>
+        </Link>
+      </div>
 
-      <main className="container mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-slate-900">
-            Active Groups
-          </h2>
-          <Link href={`/admin/sub-programs/${subProgramId}/groups/new`}>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Group
-            </Button>
-          </Link>
-        </div>
-
-        <Card>
-          <CardContent className="p-0">
-            {groups.length === 0 ? (
-              <div className="p-6 text-sm text-muted-foreground">
-                No active groups yet. Click &quot;Add Group&quot; to create one.
-              </div>
-            ) : (
-              <div className="divide-y">
-                {groups.map(group => (
-                  <div
-                    key={group.id}
-                    className="p-4 flex items-center justify-between hover:bg-slate-50"
-                  >
-                    <div>
-                      <h3 className="font-medium text-slate-900">
-                        {group.name}
-                      </h3>
-                    </div>
-                    <div className="flex gap-2">
-                      <Link
-                        href={`/admin/sub-programs/${subProgramId}/groups/${group.id}/edit`}
-                      >
-                        <Button variant="outline" size="sm">
-                          <Pencil className="h-4 w-4 mr-1" />
-                          Edit
-                        </Button>
-                      </Link>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleDelete(group.id)}
-                        disabled={deletingId === group.id}
-                      >
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        {deletingId === group.id ? 'Deleting…' : 'Delete'}
-                      </Button>
-                    </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Active Groups</CardTitle>
+          <CardDescription>
+            All active groups for this sub-program
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {groups.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              No active groups yet. Click &quot;Add Group&quot; to create one.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {groups.map(group => (
+                <div key={group.id} className="flex items-center justify-between border-b pb-4 last:border-0">
+                  <div>
+                    <h3 className="font-medium text-slate-900">{group.name}</h3>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </main>
+                  <div className="flex gap-2">
+                    <Link href={`/admin/sub-programs/${subProgramId}/groups/${group.id}/edit`}>
+                      <Button variant="outline" size="sm">
+                        <Pencil className="h-4 w-4 mr-1" />
+                        Edit
+                      </Button>
+                    </Link>
+                    <Button variant="destructive" size="sm" onClick={() => handleDelete(group.id)} disabled={deletingId === group.id}>
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      {deletingId === group.id ? 'Deleting…' : 'Delete'}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }
