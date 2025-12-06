@@ -78,8 +78,9 @@ export default function NewProgramPage() {
       return
     }
 
-    // Go back to programs list
+    // Go back to programs list and refresh
     router.push('/admin/programs')
+    router.refresh()
   }
 
   if (authLoading || loading) {

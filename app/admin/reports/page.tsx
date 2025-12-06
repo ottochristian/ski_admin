@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { useAdminClub } from '@/lib/use-admin-club'
+import { useAdminSeason } from '@/lib/use-admin-season'
 import { clubQuery } from '@/lib/supabase-helpers'
 import {
   Card,
@@ -29,6 +30,7 @@ interface Program {
 export default function ReportsPage() {
   const router = useRouter()
   const { clubId, loading: authLoading, error: authError } = useAdminClub()
+  const { selectedSeason, loading: seasonLoading } = useAdminSeason()
   const [programs, setPrograms] = useState<Program[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -37,7 +39,7 @@ export default function ReportsPage() {
 
   useEffect(() => {
     async function loadReports() {
-      if (authLoading || !clubId) {
+      if (authLoading || seasonLoading || !clubId || !selectedSeason) {
         return
       }
 
@@ -48,7 +50,7 @@ export default function ReportsPage() {
       }
 
       try {
-        // Fetch programs with registrations, filtered by club
+        // Fetch programs with registrations, filtered by club and season
         const { data, error: programsError } = await clubQuery(
           supabase
             .from('programs')
@@ -56,15 +58,17 @@ export default function ReportsPage() {
               `
             id,
             name,
-            registrations(
+            registrations!inner(
               id,
               status,
               payment_status,
-              amount_paid
+              amount_paid,
+              season_id
             )
           `
             )
             .eq('status', 'ACTIVE')
+            .eq('season_id', selectedSeason.id)
             .order('name', { ascending: true }),
           clubId
         )
@@ -76,13 +80,20 @@ export default function ReportsPage() {
         }
 
         const programsData = (data || []) as Program[]
-        setPrograms(programsData)
+        // Filter registrations to only include those from the selected season
+        const filteredPrograms = programsData.map(program => ({
+          ...program,
+          registrations: (program.registrations || []).filter(
+            (reg: any) => reg.season_id === selectedSeason.id
+          ),
+        }))
+        setPrograms(filteredPrograms)
 
         // Calculate totals
         let revenue = 0
         let registrations = 0
 
-        programsData.forEach((program) => {
+        filteredPrograms.forEach((program) => {
           if (program.registrations) {
             registrations += program.registrations.length
             revenue += program.registrations.reduce((sum, reg) => {
@@ -102,9 +113,9 @@ export default function ReportsPage() {
     }
 
     loadReports()
-  }, [router, clubId, authLoading, authError])
+  }, [router, clubId, authLoading, authError, selectedSeason, seasonLoading])
 
-  if (authLoading || loading) {
+  if (authLoading || seasonLoading || loading) {
     return (
       <div className="flex items-center justify-center py-12">
         <p className="text-muted-foreground">Loading reports…</p>

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { Profile } from '@/lib/types'
-import { LayoutDashboard, BookOpen, FileText, Users, LogOut } from 'lucide-react'
+import { LayoutDashboard, BookOpen, FileText, Users, LogOut, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface AdminSidebarProps {
@@ -49,6 +49,11 @@ export function AdminSidebar({ profile }: AdminSidebarProps) {
       label: 'Coaches',
       href: '/admin/coaches',
       icon: Users,
+    },
+    {
+      label: 'Settings',
+      href: '/admin/settings/seasons',
+      icon: Settings,
     },
   ]
 

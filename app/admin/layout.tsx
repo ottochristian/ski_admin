@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { AdminSidebar } from '@/components/admin-sidebar'
+import { SeasonSelector } from '@/components/season-selector'
 import { Profile } from '@/lib/types'
 import { useClub } from '@/lib/club-context'
 import { getUserClub } from '@/lib/club-utils'
@@ -94,6 +95,11 @@ export default function AdminLayout({
     <div className="flex min-h-screen">
       <AdminSidebar profile={profile} />
       <main className="flex-1 overflow-auto bg-slate-50">
+        <div className="border-b border-slate-200 bg-white px-8 py-4">
+          <div className="flex items-center justify-end">
+            <SeasonSelector />
+          </div>
+        </div>
         <div className="p-8">{children}</div>
       </main>
     </div>

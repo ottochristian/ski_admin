@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Plus, Pencil, Trash2, ArrowLeft } from 'lucide-react'
 import { Profile } from '@/lib/types'
 import { useAdminClub } from '@/lib/use-admin-club'
+import { useAdminSeason } from '@/lib/use-admin-season'
 import { clubQuery } from '@/lib/supabase-helpers'
 
 type Program = {
@@ -38,6 +39,7 @@ export default function SubProgramsPage() {
     Array.isArray(rawProgramId) ? rawProgramId[0] : rawProgramId
 
   const { clubId, profile, loading: authLoading, error: authError } = useAdminClub()
+  const { selectedSeason, loading: seasonLoading } = useAdminSeason()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [program, setProgram] = useState<Program | null>(null)
@@ -54,7 +56,7 @@ export default function SubProgramsPage() {
         return
       }
 
-      if (authLoading || !clubId) {
+      if (authLoading || seasonLoading || !clubId || !selectedSeason) {
         return
       }
 
@@ -67,30 +69,32 @@ export default function SubProgramsPage() {
       setLoading(true)
       setError(null)
 
-      // Fetch parent program (for header) - verify it belongs to this club
+      // Fetch parent program (for header) - verify it belongs to this club and season
       const { data: programData, error: programError } = await clubQuery(
         supabase
           .from('programs')
-          .select('id, name')
+          .select('id, name, season_id')
           .eq('id', programId)
+          .eq('season_id', selectedSeason.id)
           .single(),
         clubId
       )
 
       if (programError || !programData) {
-        setError(programError?.message ?? 'Program not found')
+        setError(programError?.message ?? 'Program not found for the selected season')
         setLoading(false)
         return
       }
 
       setProgram(programData as Program)
 
-      // Load ACTIVE sub-programs for this program - filtered by club
+      // Load ACTIVE sub-programs for this program - filtered by club and season
       const { data, error: subProgramsError } = await clubQuery(
         supabase
           .from('sub_programs')
-          .select('id, name, description, status')
+          .select('id, name, description, status, season_id')
           .eq('program_id', programId)
+          .eq('season_id', selectedSeason.id)
           .eq('status', ProgramStatus.ACTIVE)
           .order('name', { ascending: true }),
         clubId
@@ -106,7 +110,7 @@ export default function SubProgramsPage() {
     }
 
     load()
-  }, [router, programId, clubId, authLoading, authError])
+  }, [router, programId, clubId, authLoading, authError, selectedSeason, seasonLoading])
 
   async function handleDelete(subProgramId: string) {
     const confirmDelete = window.confirm(
