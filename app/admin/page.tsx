@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { Profile } from '@/lib/types'
 import { useAdminClub } from '@/lib/use-admin-club'
+import { useAdminSeason } from '@/lib/use-admin-season'
 import { clubQuery } from '@/lib/supabase-helpers'
 
 interface DashboardStats {
@@ -39,6 +40,7 @@ interface DashboardStats {
 export default function AdminDashboard() {
   const router = useRouter()
   const { clubId, profile, loading: authLoading, error: authError } = useAdminClub()
+  const { selectedSeason, loading: seasonLoading } = useAdminSeason()
   const [stats, setStats] = useState<DashboardStats>({
     totalAthletes: 0,
     activePrograms: 0,
@@ -51,7 +53,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     async function loadDashboardStats() {
-      if (authLoading || !clubId) {
+      if (authLoading || seasonLoading || !clubId || !selectedSeason) {
         return
       }
 
@@ -62,7 +64,7 @@ export default function AdminDashboard() {
       }
 
       try {
-        // Load all stats in parallel with club filtering
+        // Load all stats in parallel with club and season filtering
         const [
           { count: athletesCount },
           { count: programsCount },
@@ -78,11 +80,15 @@ export default function AdminDashboard() {
             supabase
               .from('programs')
               .select('*', { count: 'exact', head: true })
-              .eq('status', 'ACTIVE'),
+              .eq('status', 'ACTIVE')
+              .eq('season_id', selectedSeason.id),
             clubId
           ),
           clubQuery(
-            supabase.from('registrations').select('*', { count: 'exact', head: true }),
+            supabase
+              .from('registrations')
+              .select('*', { count: 'exact', head: true })
+              .eq('season_id', selectedSeason.id),
             clubId
           ),
           clubQuery(
@@ -96,12 +102,16 @@ export default function AdminDashboard() {
               sub_programs(name, programs(name))
             `
               )
+              .eq('season_id', selectedSeason.id)
               .order('created_at', { ascending: false })
               .limit(5),
             clubId
           ),
           clubQuery(
-            supabase.from('registrations').select('amount_paid'),
+            supabase
+              .from('registrations')
+              .select('amount_paid')
+              .eq('season_id', selectedSeason.id),
             clubId
           ),
         ])
@@ -131,9 +141,9 @@ export default function AdminDashboard() {
     }
 
     loadDashboardStats()
-  }, [router, clubId, authLoading, authError])
+  }, [router, clubId, authLoading, authError, selectedSeason, seasonLoading])
 
-  if (authLoading || loading) {
+  if (authLoading || seasonLoading || loading) {
     return (
       <div className="flex items-center justify-center py-12">
         <p className="text-muted-foreground">Loading dashboard…</p>

@@ -19,6 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useAdminClub } from '@/lib/use-admin-club'
+import { useAdminSeason } from '@/lib/use-admin-season'
 import { clubQuery } from '@/lib/supabase-helpers'
 
 interface Registration {
@@ -49,13 +50,14 @@ interface Registration {
 export default function RegistrationsPage() {
   const router = useRouter()
   const { clubId, loading: authLoading, error: authError } = useAdminClub()
+  const { selectedSeason, loading: seasonLoading } = useAdminSeason()
   const [registrations, setRegistrations] = useState<Registration[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     async function loadRegistrations() {
-      if (authLoading || !clubId) {
+      if (authLoading || seasonLoading || !clubId || !selectedSeason) {
         return
       }
 
@@ -66,7 +68,7 @@ export default function RegistrationsPage() {
       }
 
       try {
-        // Fetch registrations with related data, filtered by club
+        // Fetch registrations with related data, filtered by club and season
         const { data, error: registrationsError } = await clubQuery(
           supabase
             .from('registrations')
@@ -79,10 +81,12 @@ export default function RegistrationsPage() {
             payment_status,
             amount_paid,
             created_at,
+            season_id,
             athletes(id, first_name, last_name, date_of_birth),
             sub_programs(name, programs(name))
           `
             )
+            .eq('season_id', selectedSeason.id)
             .order('created_at', { ascending: false }),
           clubId
         )
@@ -110,7 +114,7 @@ export default function RegistrationsPage() {
     }
 
     loadRegistrations()
-  }, [router, clubId, authLoading, authError])
+  }, [router, clubId, authLoading, authError, selectedSeason, seasonLoading])
 
   if (authLoading || loading) {
     return (
