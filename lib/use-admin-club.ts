@@ -52,7 +52,7 @@ export function useAdminClub() {
         }
 
         if (!profileData || profileData.role !== 'admin') {
-          router.replace('/dashboard')
+          router.replace('/login')
           return
         }
 

@@ -27,26 +27,75 @@ export default function LoginPage() {
   }, [searchParams])
 
   // 🔍 On mount, see if we already have a logged-in user
+  // If logged in, redirect to appropriate dashboard
   useEffect(() => {
-    async function checkUser() {
+    async function checkUserAndRedirect() {
       const {
         data: { user },
-        error,
+        error: userError,
       } = await supabase.auth.getUser()
 
-      if (error) {
-        console.log('[login] getUser error', error)
+      if (userError || !user) {
+        // No user logged in - show login form
+        setCheckingSession(false)
+        return
       }
 
-      if (user) {
-        console.log('[login] user already logged in, redirecting to /dashboard')
-        router.push('/dashboard')
-      } else {
+      // User is logged in - get profile and redirect appropriately
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('role, club_id')
+        .eq('id', user.id)
+        .single()
+
+      if (profileError || !profileData) {
+        // Profile not found - allow login (might be new account)
         setCheckingSession(false)
+        return
       }
+
+      // Redirect based on role
+      if (profileData.role === 'admin') {
+        router.push('/admin')
+        return
+      }
+
+      if (profileData.role === 'coach') {
+        router.push('/coach')
+        return
+      }
+
+      if (profileData.role === 'parent') {
+        // Parents must have a club_id
+        if (!profileData.club_id) {
+          // Show error message instead of redirecting
+          setError('Your account is missing club assignment. Please contact support.')
+          setCheckingSession(false)
+          return
+        }
+
+        // Get club slug for redirect
+        const { data: club } = await supabase
+          .from('clubs')
+          .select('slug')
+          .eq('id', profileData.club_id)
+          .single()
+
+        if (club?.slug) {
+          router.push(`/clubs/${club.slug}/parent/dashboard`)
+          return
+        } else {
+          setError('Club not found. Please contact support.')
+          setCheckingSession(false)
+          return
+        }
+      }
+
+      // Unknown role - allow login
+      setCheckingSession(false)
     }
 
-    checkUser()
+    checkUserAndRedirect()
   }, [router])
 
   async function handleSubmit(e: FormEvent) {
@@ -160,8 +209,50 @@ export default function LoginPage() {
 
     setLoading(false)
 
-    // ✅ login success → go to dashboard
-    router.push('/dashboard')
+    // ✅ login success → redirect based on role and club
+    // Get profile to determine redirect
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('role, club_id')
+      .eq('id', authData.user.id)
+      .single()
+
+    if (profileData) {
+      if (profileData.role === 'parent') {
+        // Parents MUST have a club_id - enforce this
+        if (!profileData.club_id) {
+          setError('Your account is missing club assignment. Please contact support.')
+          setLoading(false)
+          return
+        }
+
+        // Get club slug for redirect
+        const { data: club } = await supabase
+          .from('clubs')
+          .select('slug')
+          .eq('id', profileData.club_id)
+          .single()
+
+        if (club?.slug) {
+          router.push(`/clubs/${club.slug}/parent/dashboard`)
+          return
+        } else {
+          setError('Club not found. Please contact support.')
+          setLoading(false)
+          return
+        }
+      } else if (profileData.role === 'admin') {
+        router.push('/admin')
+        return
+      } else if (profileData.role === 'coach') {
+        router.push('/coach')
+        return
+      }
+    }
+
+    // Fallback - if we can't determine role, show error
+    setError('Unable to determine your account type. Please contact support.')
+    setLoading(false)
   }
 
   // While we’re checking if a session exists, show a tiny loading state

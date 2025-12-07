@@ -77,7 +77,7 @@ export function useParentClub() {
 
         // Allow parent role (or admin/coach for testing)
         if (profileData.role !== 'parent' && profileData.role !== 'admin' && profileData.role !== 'coach') {
-          router.replace('/dashboard')
+          router.replace('/login')
           return
         }
 

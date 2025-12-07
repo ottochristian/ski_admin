@@ -82,7 +82,7 @@ export default function EditSubProgramPage() {
       }
 
       if (!profile || profile.role !== 'admin') {
-        router.push('/dashboard')
+        router.push('/admin')
         return
       }
 

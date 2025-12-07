@@ -3,7 +3,6 @@
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useParentClub } from '@/lib/use-parent-club'
-import { useAdminSeason } from '@/lib/use-admin-season'
 import {
   Card,
   CardContent,
@@ -18,14 +17,13 @@ export default function ParentDashboardPage() {
   const params = useParams()
   const clubSlug = params.clubSlug as string
   const { household, athletes } = useParentClub()
-  const { selectedSeason } = useAdminSeason()
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground">
-          Welcome to your parent portal for {selectedSeason?.name || 'the current season'}
+          Welcome to your parent portal
         </p>
       </div>
 
@@ -83,7 +81,7 @@ export default function ParentDashboardPage() {
                 Browse Programs
               </Button>
             </Link>
-            <Link href={`/clubs/${clubSlug}/parent/athletes`}>
+            <Link href={`/clubs/${clubSlug}/parent/athletes/new`}>
               <Button variant="outline" size="sm" className="w-full justify-start">
                 <Plus className="h-4 w-4 mr-2" />
                 Add Athlete

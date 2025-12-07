@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { useParentClub } from '@/lib/use-parent-club'
-import { useAdminSeason } from '@/lib/use-admin-season'
+// Removed useAdminSeason - it requires admin role and causes redirect loops
 import { useCart } from '@/lib/cart-context'
 import { clubQuery } from '@/lib/supabase-helpers'
 import {
@@ -44,19 +44,35 @@ export default function ParentProgramsPage() {
   const clubSlug = params.clubSlug as string
   const { clubId, household, athletes, loading: authLoading, error: authError } =
     useParentClub()
-  const { selectedSeason, loading: seasonLoading } = useAdminSeason()
   const { addItem } = useCart()
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [programs, setPrograms] = useState<ProgramWithSubPrograms[]>([])
   const [selectedAthleteId, setSelectedAthleteId] = useState<string>('')
+  const [selectedSeason, setSelectedSeason] = useState<{ id: string; name: string } | null>(null)
 
   useEffect(() => {
     async function load() {
-      if (authLoading || seasonLoading || !clubId || !selectedSeason) {
+      if (authLoading || !clubId) {
         return
       }
+
+      // Get current season for the club
+      const { data: seasonData, error: seasonError } = await supabase
+        .from('seasons')
+        .select('id, name')
+        .eq('club_id', clubId)
+        .eq('is_current', true)
+        .single()
+
+      if (seasonError || !seasonData) {
+        setError('No current season found. Please contact support.')
+        setLoading(false)
+        return
+      }
+
+      setSelectedSeason(seasonData)
 
       if (authError) {
         setError(authError)
@@ -69,6 +85,13 @@ export default function ParentProgramsPage() {
 
       try {
         // Load active programs with sub-programs for the current season
+        // Use seasonData.id directly since we just fetched it
+        console.log('Loading programs for:', {
+          seasonId: seasonData.id,
+          seasonName: seasonData.name,
+          clubId,
+        })
+
         const { data, error: programsError } = await clubQuery(
           supabase
             .from('programs')
@@ -77,6 +100,8 @@ export default function ParentProgramsPage() {
               name, 
               description, 
               status,
+              season_id,
+              club_id,
               sub_programs (
                 id,
                 name,
@@ -87,17 +112,26 @@ export default function ParentProgramsPage() {
                 program_id
               )
             `)
-            .eq('season_id', selectedSeason.id)
-            .eq('status', ProgramStatus.ACTIVE)
+            .eq('season_id', seasonData.id)
             .order('name', { ascending: true }),
           clubId
         )
+
+        console.log('Programs query result:', {
+          count: data?.length || 0,
+          programs: data,
+          error: programsError,
+        })
 
         if (programsError) {
           setError(programsError.message)
         } else {
           const allPrograms = (data || []) as any[]
+          
+          // Filter to only ACTIVE programs (or null status for legacy data)
+          // Then filter to only programs with active sub-programs
           const activePrograms = allPrograms
+            .filter((p: any) => p.status === ProgramStatus.ACTIVE || p.status === null)
             .map(program => ({
               ...program,
               sub_programs: (program.sub_programs || []).filter(
@@ -105,6 +139,13 @@ export default function ParentProgramsPage() {
               ),
             }))
             .filter((p: ProgramWithSubPrograms) => p.sub_programs.length > 0) as ProgramWithSubPrograms[]
+          
+          console.log('Filtered active programs:', {
+            totalPrograms: allPrograms.length,
+            activePrograms: activePrograms.length,
+            programs: activePrograms,
+          })
+          
           setPrograms(activePrograms)
         }
       } catch (err) {
@@ -116,7 +157,7 @@ export default function ParentProgramsPage() {
     }
 
     load()
-  }, [clubId, authLoading, authError, selectedSeason, seasonLoading])
+  }, [clubId, authLoading, authError])
 
   function handleAddToCart(subProgram: SubProgram, program: Program) {
     if (!selectedAthleteId) {
@@ -145,7 +186,7 @@ export default function ParentProgramsPage() {
     alert(`Added ${program.name} - ${subProgram.name} for ${athlete.first_name} to cart`)
   }
 
-  if (authLoading || seasonLoading || loading) {
+  if (authLoading || loading || !selectedSeason) {
     return (
       <div className="flex items-center justify-center py-12">
         <p className="text-muted-foreground">Loading programs…</p>

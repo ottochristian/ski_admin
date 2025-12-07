@@ -49,7 +49,7 @@ export default function AdminLayout({
         }
 
         if (!profileData || profileData.role !== 'admin') {
-          router.replace('/dashboard')
+          router.replace('/login')
           return
         }
 
