@@ -44,7 +44,9 @@ export function SeasonSelector() {
     // Update URL with season query param
     const params = new URLSearchParams(searchParams.toString())
     params.set('season', seasonId)
-    router.push(`${pathname}?${params.toString()}`)
+    // Use replace to avoid adding to history, and refresh to trigger data reload
+    router.replace(`${pathname}?${params.toString()}`)
+    router.refresh()
   }
 
   if (loading || !seasons.length) {

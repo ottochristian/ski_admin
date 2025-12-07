@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { supabase } from './supabaseClient'
 import { useAdminClub } from './use-admin-club'
 
@@ -21,6 +22,7 @@ export type Season = {
  */
 export function useAdminSeason() {
   const { clubId, loading: clubLoading, error: clubError } = useAdminClub()
+  const searchParams = useSearchParams()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [currentSeason, setCurrentSeason] = useState<Season | null>(null)
@@ -64,13 +66,11 @@ export function useAdminSeason() {
         setCurrentSeason(current)
 
         // Get selected season from URL params or localStorage
-        let selectedSeasonId: string | null = null
-        if (typeof window !== 'undefined') {
-          const urlParams = new URLSearchParams(window.location.search)
-          selectedSeasonId = urlParams.get('season') || localStorage.getItem('selectedSeasonId')
-        }
+        const seasonParam = searchParams.get('season')
+        const storedSeasonId = typeof window !== 'undefined' ? localStorage.getItem('selectedSeasonId') : null
+        const selectedSeasonId = seasonParam || storedSeasonId
 
-        // Set selected season: use stored ID, or current season, or first season
+        // Set selected season: use URL param, stored ID, current season, or first season
         if (selectedSeasonId) {
           const selected = seasonsList.find(s => s.id === selectedSeasonId) || null
           setSelectedSeason(selected || current || seasonsList[0] || null)
@@ -86,7 +86,7 @@ export function useAdminSeason() {
     }
 
     loadSeasons()
-  }, [clubId, clubLoading, clubError])
+  }, [clubId, clubLoading, clubError, searchParams])
 
   return {
     currentSeason,
