@@ -65,8 +65,9 @@ export default function HomePage() {
               return
             }
           }
-          // Fallback if no club found
-          router.push('/dashboard')
+          // Fallback if no club found - show error instead of old dashboard
+          console.error('Parent user has no club_id associated')
+          setCheckingAuth(false)
           return
         }
 

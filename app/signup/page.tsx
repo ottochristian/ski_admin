@@ -254,8 +254,12 @@ export default function SignupPage() {
           return
         }
 
-        // Redirect to dashboard (which will handle family setup)
-        router.push('/dashboard')
+        // Redirect to parent dashboard
+        if (club?.slug) {
+          router.push(`/clubs/${club.slug}/parent/dashboard`)
+        } else {
+          router.push('/login?message=Account created! Please log in.')
+        }
         return
       }
 

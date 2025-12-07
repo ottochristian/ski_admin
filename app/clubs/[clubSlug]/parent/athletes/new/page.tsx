@@ -44,9 +44,66 @@ export default function NewAthletePage() {
     setError(null)
 
     try {
+      // Verify user is linked to household via household_guardians
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) {
+        setError('Not authenticated')
+        setLoading(false)
+        return
+      }
+
+      // Check if user is linked to household
+      let { data: guardianCheck, error: guardianError } = await supabase
+        .from('household_guardians')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('household_id', household.id)
+        .maybeSingle()
+
+      // If no guardian link exists, try to create it
+      if (!guardianCheck && !guardianError) {
+        console.log('No household_guardians entry found, creating one...')
+        const { error: createGuardianError } = await supabase
+          .from('household_guardians')
+          .insert([
+            {
+              household_id: household.id,
+              user_id: user.id,
+              is_primary: true,
+            },
+          ])
+
+        if (createGuardianError) {
+          console.error('Failed to create household_guardians entry:', createGuardianError)
+          // Continue anyway - might work with families fallback
+        } else {
+          guardianCheck = { id: 'created' } // Mark as created
+        }
+      }
+
+      // Check legacy families table as fallback
+      let isHousehold = !!guardianCheck
+      if (!guardianCheck) {
+        const { data: familyCheck } = await supabase
+          .from('families')
+          .select('id')
+          .eq('profile_id', user.id)
+          .eq('id', household.id)
+          .maybeSingle()
+
+        if (!familyCheck) {
+          setError('You are not linked to this household. Please contact support or run migration 21_fix_missing_households.sql')
+          setLoading(false)
+          return
+        }
+        isHousehold = false
+      }
+
       // Check if using households or families
       const householdId = household.id
-      const isHousehold = true // We'll try households first
 
       // Create athlete
       const athleteData: any = {
@@ -64,30 +121,64 @@ export default function NewAthletePage() {
         athleteData.family_id = householdId
       }
 
-      const { error: athleteError } = await clubQuery(
-        supabase.from('athletes').insert([athleteData]),
-        clubId
-      )
+      // Insert athlete (don't use clubQuery for INSERT - it's for SELECT filtering)
+      console.log('Attempting to insert athlete:', {
+        athleteData,
+        householdId,
+        clubId,
+        isHousehold,
+      })
+
+      const { data: athleteResult, error: athleteError } = await supabase
+        .from('athletes')
+        .insert([athleteData])
+        .select()
 
       if (athleteError) {
+        console.error('Athlete creation error (full):', {
+          message: athleteError.message,
+          details: athleteError.details,
+          hint: athleteError.hint,
+          code: athleteError.code,
+          full: JSON.stringify(athleteError, null, 2),
+        })
+        
         // Try with family_id if household_id failed
         if (isHousehold) {
-          const { error: familyError } = await clubQuery(
-            supabase.from('athletes').insert([
+          console.log('Trying fallback with family_id...')
+          const { data: familyResult, error: familyError } = await supabase
+            .from('athletes')
+            .insert([
               {
                 ...athleteData,
                 family_id: householdId,
                 household_id: undefined,
               },
-            ]),
-            clubId
-          )
+            ])
+            .select()
 
           if (familyError) {
-            throw familyError
+            console.error('Family fallback error (full):', {
+              message: familyError.message,
+              details: familyError.details,
+              hint: familyError.hint,
+              code: familyError.code,
+              full: JSON.stringify(familyError, null, 2),
+            })
+            throw new Error(
+              familyError.message || 
+              familyError.details || 
+              familyError.hint ||
+              `RLS Policy Error: ${familyError.code || 'Unknown'}. Please ensure you have run migration 22_add_athletes_rls.sql`
+            )
           }
         } else {
-          throw athleteError
+          throw new Error(
+            athleteError.message || 
+            athleteError.details || 
+            athleteError.hint ||
+            `RLS Policy Error: ${athleteError.code || 'Unknown'}. Please ensure you have run migration 22_add_athletes_rls.sql`
+          )
         }
       }
 
@@ -96,7 +187,16 @@ export default function NewAthletePage() {
       router.refresh()
     } catch (err) {
       console.error('Error creating athlete:', err)
-      setError(err instanceof Error ? err.message : 'Failed to create athlete')
+      // Better error message extraction
+      let errorMessage = 'Failed to create athlete'
+      if (err instanceof Error) {
+        errorMessage = err.message
+      } else if (err && typeof err === 'object') {
+        // Handle Supabase error objects
+        const errorObj = err as any
+        errorMessage = errorObj.message || errorObj.details || errorObj.hint || JSON.stringify(err)
+      }
+      setError(errorMessage)
       setLoading(false)
     }
   }

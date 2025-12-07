@@ -76,7 +76,7 @@ export default function GroupsPage() {
       }
 
       if (!profileData || profileData.role !== 'admin') {
-        router.push('/dashboard')
+        router.push('/admin')
         return
       }
 

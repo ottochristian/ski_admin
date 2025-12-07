@@ -75,7 +75,7 @@ export default function CoachDashboardPage() {
       }
 
       if (!profileData || profileData.role !== 'coach') {
-        router.push('/dashboard')
+        router.push('/login')
         return
       }
 
@@ -139,7 +139,7 @@ export default function CoachDashboardPage() {
             <CardDescription>{error}</CardDescription>
           </CardHeader>
           <CardContent>
-            <Link href="/dashboard">
+            <Link href="/coach">
               <Button>Back to Dashboard</Button>
             </Link>
           </CardContent>

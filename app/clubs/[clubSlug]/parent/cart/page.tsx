@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useCart } from '@/lib/cart-context'
 import { useParentClub } from '@/lib/use-parent-club'
-import { useAdminSeason } from '@/lib/use-admin-season'
+// Removed useAdminSeason - it requires admin role
 import { supabase } from '@/lib/supabaseClient'
 import { clubQuery } from '@/lib/supabase-helpers'
 import {
@@ -23,9 +23,29 @@ export default function CartPage() {
   const clubSlug = params.clubSlug as string
   const { items, removeItem, clearCart, total } = useCart()
   const { clubId, household, athletes } = useParentClub()
-  const { selectedSeason } = useAdminSeason()
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [selectedSeason, setSelectedSeason] = useState<{ id: string; name: string } | null>(null)
+
+  // Load current season
+  useEffect(() => {
+    async function loadSeason() {
+      if (!clubId) return
+
+      const { data: seasonData } = await supabase
+        .from('seasons')
+        .select('id, name')
+        .eq('club_id', clubId)
+        .eq('is_current', true)
+        .single()
+
+      if (seasonData) {
+        setSelectedSeason(seasonData)
+      }
+    }
+
+    loadSeason()
+  }, [clubId])
 
   async function handleCheckout() {
     if (!clubId || !household || !selectedSeason || items.length === 0) {

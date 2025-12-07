@@ -77,6 +77,7 @@ function ParentLayoutContent({
   children: React.ReactNode
   clubSlug: string
 }) {
+  const router = useRouter()
   const { profile, household, loading, error } = useParentClub()
 
   if (loading) {
@@ -87,14 +88,57 @@ function ParentLayoutContent({
     )
   }
 
-  if (error || !profile || !household) {
+  if (error || !profile) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="max-w-md rounded-lg border border-red-200 bg-red-50 p-6">
           <h2 className="text-lg font-semibold text-red-900">Access Denied</h2>
           <p className="mt-2 text-sm text-red-700">
-            {error || 'No household found. Please contact support.'}
+            {error || 'Profile not found. Please contact support.'}
           </p>
+          <Button
+            onClick={() => router.push('/login')}
+            className="mt-4"
+            variant="outline"
+          >
+            Go to Login
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // If no household, show helpful message instead of blocking access
+  // This can happen if signup didn't complete fully
+  if (!household) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="max-w-md rounded-lg border border-yellow-200 bg-yellow-50 p-6">
+          <h2 className="text-lg font-semibold text-yellow-900">Household Setup Required</h2>
+          <p className="mt-2 text-sm text-yellow-700">
+            Your account was created but your household information needs to be set up.
+            This usually happens if signup didn't complete fully.
+          </p>
+          <p className="mt-4 text-sm text-yellow-700">
+            Please contact support or try signing up again.
+          </p>
+          <div className="mt-4 flex gap-2">
+            <Button
+              onClick={async () => {
+                await supabase.auth.signOut()
+                router.push('/signup')
+              }}
+              variant="outline"
+            >
+              Sign Out & Sign Up Again
+            </Button>
+            <Button
+              onClick={() => router.push('/login')}
+              variant="outline"
+            >
+              Go to Login
+            </Button>
+          </div>
         </div>
       </div>
     )
