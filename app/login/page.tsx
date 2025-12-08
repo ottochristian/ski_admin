@@ -55,6 +55,11 @@ export default function LoginPage() {
       }
 
       // Redirect based on role
+      if (profileData.role === 'system_admin') {
+        router.push('/system-admin')
+        return
+      }
+
       if (profileData.role === 'admin') {
         router.push('/admin')
         return
@@ -218,7 +223,10 @@ export default function LoginPage() {
       .single()
 
     if (profileData) {
-      if (profileData.role === 'parent') {
+      if (profileData.role === 'system_admin') {
+        router.push('/system-admin')
+        return
+      } else if (profileData.role === 'parent') {
         // Parents MUST have a club_id - enforce this
         if (!profileData.club_id) {
           setError('Your account is missing club assignment. Please contact support.')

@@ -1,0 +1,12 @@
+-- Migration 26: Add 'system_admin' role to user_role enum
+-- This allows system administrators to manage all clubs
+--
+-- IMPORTANT: Run STEP1 and STEP2 in SEPARATE transactions/queries!
+-- PostgreSQL requires committing enum changes before using them.
+--
+-- Run STEP1 first, commit it, then run STEP2.
+--
+-- See: migrations/26_add_system_admin_role_STEP1.sql
+-- See: migrations/26_add_system_admin_role_STEP2.sql
+
+-- This file is kept for reference but use the STEP1/STEP2 files instead.

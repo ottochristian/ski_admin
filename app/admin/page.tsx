@@ -53,7 +53,32 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     async function loadDashboardStats() {
-      if (authLoading || seasonLoading || !clubId || !selectedSeason) {
+      // Add debug logging
+      console.log('Dashboard loading check:', {
+        authLoading,
+        seasonLoading,
+        clubId,
+        selectedSeason: selectedSeason?.id,
+        authError,
+      })
+
+      if (authLoading || seasonLoading) {
+        console.log('Waiting for auth or season to load...')
+        return
+      }
+
+      if (!clubId) {
+        console.log('No clubId - setting error')
+        setError('No club associated with your account. Please contact an administrator.')
+        setLoading(false)
+        return
+      }
+
+      if (!selectedSeason) {
+        console.log('No selectedSeason - this might be the issue')
+        // Don't block forever - show error if no season exists
+        setError('No season found for this club. Please create a season first.')
+        setLoading(false)
         return
       }
 
@@ -141,16 +166,24 @@ export default function AdminDashboard() {
     }
 
     loadDashboardStats()
-  }, [router, clubId, authLoading, authError, selectedSeason, seasonLoading])
+  }, [router, clubId, authLoading, authError, selectedSeason?.id, seasonLoading])
 
+  // Show loading state
   if (authLoading || seasonLoading || loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">Loading dashboard…</p>
+        <div className="text-center">
+          <p className="text-muted-foreground">Loading dashboard…</p>
+          {!clubId && <p className="text-xs text-muted-foreground mt-2">Waiting for club...</p>}
+          {clubId && !selectedSeason && (
+            <p className="text-xs text-muted-foreground mt-2">Waiting for season...</p>
+          )}
+        </div>
       </div>
     )
   }
 
+  // Show error state
   if (error || authError) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -162,6 +195,27 @@ export default function AdminDashboard() {
           <CardContent>
             <Button variant="outline" onClick={() => router.refresh()}>
               Try again
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Show message if no season exists
+  if (!selectedSeason) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle>No Season Found</CardTitle>
+            <CardDescription>
+              No season has been created for your club yet. Please create a season first.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" asChild>
+              <Link href="/admin/settings/seasons">Go to Seasons</Link>
             </Button>
           </CardContent>
         </Card>

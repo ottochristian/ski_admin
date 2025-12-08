@@ -41,6 +41,11 @@ export default function HomePage() {
         }
 
         // Redirect based on role
+        if (profile.role === 'system_admin') {
+          router.push('/system-admin')
+          return
+        }
+
         if (profile.role === 'admin') {
           router.push('/admin')
           return

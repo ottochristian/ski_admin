@@ -37,6 +37,11 @@ export default function DashboardPage() {
       }
 
       // Redirect based on role
+      if (profileData.role === 'system_admin') {
+        router.push('/system-admin')
+        return
+      }
+
       if (profileData.role === 'admin') {
         router.push('/admin')
         return
