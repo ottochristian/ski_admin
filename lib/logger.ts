@@ -82,3 +82,4 @@ export const log = {
   error: (message: string, error?: Error | unknown, context?: LogContext) =>
     logger.error(message, error, context),
 }
+

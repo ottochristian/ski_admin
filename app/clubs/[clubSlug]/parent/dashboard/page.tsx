@@ -3,6 +3,7 @@
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useParentClub } from '@/lib/use-parent-club'
+import { useClub } from '@/lib/club-context'
 import {
   Card,
   CardContent,
@@ -17,14 +18,33 @@ export default function ParentDashboardPage() {
   const params = useParams()
   const clubSlug = params.clubSlug as string
   const { household, athletes } = useParentClub()
+  const { club } = useClub()
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">
-          Welcome to your parent portal
-        </p>
+      <div className="flex items-center gap-4">
+        {club?.logo_url && (
+          <div className="h-16 w-16 flex-shrink-0">
+            <img
+              src={club.logo_url}
+              alt={club.name || 'Club logo'}
+              className="h-full w-full object-contain rounded-lg"
+              onError={(e) => {
+                // Hide image if it fails to load
+                const target = e.target as HTMLImageElement
+                target.style.display = 'none'
+              }}
+            />
+          </div>
+        )}
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            {club?.name ? `${club.name} Dashboard` : 'Dashboard'}
+          </h1>
+          <p className="text-muted-foreground">
+            Welcome to your parent portal
+          </p>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

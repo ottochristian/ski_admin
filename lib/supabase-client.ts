@@ -27,3 +27,4 @@ export function createBrowserSupabaseClient() {
  * @deprecated Use createBrowserSupabaseClient() instead
  */
 export const supabase = createBrowserSupabaseClient()
+

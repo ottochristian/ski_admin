@@ -39,6 +39,9 @@ export default function NewSubProgramPage() {
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [registrationFee, setRegistrationFee] = useState<string>('0')
+  const [maxCapacity, setMaxCapacity] = useState<string>('')
+  const [isActive, setIsActive] = useState(true)
 
   useEffect(() => {
     async function load() {
@@ -103,6 +106,11 @@ export default function NewSubProgramPage() {
     setError(null)
 
     try {
+      const fee =
+        registrationFee.trim() === '' ? null : Number(registrationFee.trim())
+      const capacity =
+        maxCapacity.trim() === '' ? null : Number(maxCapacity.trim())
+
       const { data: inserted, error: insertError } = await supabase
         .from('sub_programs')
         .insert(
@@ -111,6 +119,9 @@ export default function NewSubProgramPage() {
               program_id: programId,
               name,
               description,
+              registration_fee: fee,
+              max_capacity: capacity,
+              is_active: isActive,
               status: ProgramStatus.ACTIVE,
             },
             clubId
@@ -211,6 +222,49 @@ export default function NewSubProgramPage() {
                   value={description}
                   onChange={e => setDescription(e.target.value)}
                 />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-slate-900">
+                    Registration Fee
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                    value={registrationFee}
+                    onChange={e => setRegistrationFee(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-slate-900">
+                    Max Capacity
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    className="block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                    value={maxCapacity}
+                    onChange={e => setMaxCapacity(e.target.value)}
+                    placeholder="Optional"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  id="isActive"
+                  type="checkbox"
+                  checked={isActive}
+                  onChange={e => setIsActive(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                <label htmlFor="isActive" className="text-sm text-slate-900">
+                  Sub-program is active
+                </label>
               </div>
 
               <div className="flex justify-end gap-3 pt-4">

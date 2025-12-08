@@ -54,3 +54,4 @@ SELECT
   'Webhook events table created' as status,
   COUNT(*) as existing_events
 FROM webhook_events;
+

@@ -135,8 +135,9 @@ export default function AdminDashboard() {
           clubQuery(
             supabase
               .from('registrations')
-              .select('amount_paid')
-              .eq('season_id', selectedSeason.id),
+              .select('amount_paid, status')
+              .eq('season_id', selectedSeason.id)
+              .eq('status', 'confirmed'), // Only count confirmed (paid) registrations
             clubId
           ),
         ])

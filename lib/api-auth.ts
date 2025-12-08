@@ -27,21 +27,49 @@ export async function requireAuth(
   request: NextRequest
 ): Promise<AuthenticatedRequest | NextResponse> {
   try {
-    const supabase = await createServerSupabaseClient()
+    // Check for Bearer token in Authorization header first
+    const authHeader = request.headers.get('authorization')
+    const token = authHeader?.replace('Bearer ', '')
+
+    let supabase = await createServerSupabaseClient(request)
+    
+    // If we have a Bearer token, use it to get the user
+    if (token) {
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser(token)
+
+      if (user && !error) {
+        return { user, supabase }
+      }
+      // If token auth fails, fall through to cookie-based auth
+    }
+
+    // Try cookie-based authentication (default)
     const {
       data: { user },
       error,
     } = await supabase.auth.getUser()
 
     if (error || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json(
+        { 
+          error: 'Unauthorized',
+          message: error?.message || 'No user found',
+        }, 
+        { status: 401 }
+      )
     }
 
     return { user, supabase }
   } catch (error) {
     console.error('Auth error:', error)
     return NextResponse.json(
-      { error: 'Authentication failed' },
+      { 
+        error: 'Authentication failed',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 }
     )
   }
@@ -169,3 +197,4 @@ export async function requireClubAccess(
 
   return authResult
 }
+

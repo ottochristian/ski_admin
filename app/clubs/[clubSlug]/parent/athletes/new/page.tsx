@@ -121,66 +121,51 @@ export default function NewAthletePage() {
         athleteData.family_id = householdId
       }
 
-      // Insert athlete (don't use clubQuery for INSERT - it's for SELECT filtering)
-      console.log('Attempting to insert athlete:', {
-        athleteData,
-        householdId,
-        clubId,
-        isHousehold,
+      // Get session token for API request
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession()
+
+      if (sessionError || !session?.access_token) {
+        throw new Error('Authentication failed. Please log in again.')
+      }
+
+      // Create athlete via API route (bypasses RLS but verifies ownership)
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      }
+
+      const response = await fetch('/api/athletes/create', {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({
+          athlete: athleteData,
+          clubId,
+          householdId,
+        }),
       })
 
-      const { data: athleteResult, error: athleteError } = await supabase
-        .from('athletes')
-        .insert([athleteData])
-        .select()
-
-      if (athleteError) {
-        console.error('Athlete creation error (full):', {
-          message: athleteError.message,
-          details: athleteError.details,
-          hint: athleteError.hint,
-          code: athleteError.code,
-          full: JSON.stringify(athleteError, null, 2),
+      if (!response.ok) {
+        let errorData: any = {}
+        const responseText = await response.text()
+        try {
+          errorData = JSON.parse(responseText)
+        } catch {
+          errorData = { error: responseText || `HTTP ${response.status}: ${response.statusText}` }
+        }
+        
+        console.error('Athlete creation failed:', {
+          status: response.status,
+          error: errorData,
         })
         
-        // Try with family_id if household_id failed
-        if (isHousehold) {
-          console.log('Trying fallback with family_id...')
-          const { data: familyResult, error: familyError } = await supabase
-            .from('athletes')
-            .insert([
-              {
-                ...athleteData,
-                family_id: householdId,
-                household_id: undefined,
-              },
-            ])
-            .select()
-
-          if (familyError) {
-            console.error('Family fallback error (full):', {
-              message: familyError.message,
-              details: familyError.details,
-              hint: familyError.hint,
-              code: familyError.code,
-              full: JSON.stringify(familyError, null, 2),
-            })
-            throw new Error(
-              familyError.message || 
-              familyError.details || 
-              familyError.hint ||
-              `RLS Policy Error: ${familyError.code || 'Unknown'}. Please ensure you have run migration 22_add_athletes_rls.sql`
-            )
-          }
-        } else {
-          throw new Error(
-            athleteError.message || 
-            athleteError.details || 
-            athleteError.hint ||
-            `RLS Policy Error: ${athleteError.code || 'Unknown'}. Please ensure you have run migration 22_add_athletes_rls.sql`
-          )
-        }
+        throw new Error(errorData.error || `Failed to create athlete (${response.status})`)
       }
+
+      const { athlete: athleteResult } = await response.json()
 
       // Success - redirect back to athletes page
       router.push(`/clubs/${clubSlug}/parent/athletes`)

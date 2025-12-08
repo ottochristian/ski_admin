@@ -57,12 +57,14 @@ export default function CartPage() {
     setError(null)
 
     try {
-      // 1. Check for existing registrations to prevent duplicates
+      // 1. Check for existing CONFIRMED/ACTIVE registrations to prevent duplicates
+      // Allow pending registrations to proceed to checkout (they need payment)
+      const existingRegistrations: Array<{ item: any; registration: any }> = []
       for (const item of items) {
         const { data: existing } = await clubQuery(
           supabase
             .from('registrations')
-            .select('id')
+            .select('id, status')
             .eq('athlete_id', item.athlete_id)
             .eq('sub_program_id', item.sub_program_id)
             .eq('season_id', selectedSeason.id)
@@ -71,41 +73,102 @@ export default function CartPage() {
         )
 
         if (existing) {
-          throw new Error(
-            `${item.athlete_name} is already registered for ${item.program_name} - ${item.sub_program_name}. Please remove it from your cart.`
-          )
+          // Block confirmed/active registrations
+          if (existing.status === 'confirmed' || existing.status === 'active') {
+            throw new Error(
+              `${item.athlete_name} is already registered for ${item.program_name} - ${item.sub_program_name}. Please remove it from your cart.`
+            )
+          }
+          // Allow pending registrations - we'll use the existing one
+          existingRegistrations.push({ item, registration: existing })
         }
       }
 
-      // 2. Create registrations for each cart item
-      const registrations = []
-      for (const item of items) {
-        const { data: registration, error: regError } = await clubQuery(
-          supabase
-            .from('registrations')
-            .insert([
-              {
-                athlete_id: item.athlete_id,
-                sub_program_id: item.sub_program_id,
-                season_id: selectedSeason.id,
-                season: selectedSeason.name, // Legacy column - will be removed in cleanup migration
-                status: 'pending', // Will be confirmed after payment
-                club_id: clubId,
-              },
-            ])
-            .select()
-            .single(),
-          clubId
-        )
+      // 2. Filter out items that already have pending registrations
+      const itemsToCreate = items.filter(
+        (item) =>
+          !existingRegistrations.some((er) => er.item.athlete_id === item.athlete_id && er.item.sub_program_id === item.sub_program_id)
+      )
 
-        if (regError || !registration) {
-          throw new Error(`Failed to create registration: ${regError?.message}`)
-        }
+      // 3. Create registrations via API route (bypasses RLS but verifies ownership)
+      // Only create registrations for items that don't already have pending ones
+      let allRegistrations = [...existingRegistrations.map((er) => er.registration)]
 
-        registrations.push(registration)
+      if (itemsToCreate.length > 0) {
+        const registrationsToCreate = itemsToCreate.map((item) => ({
+        athlete_id: item.athlete_id,
+        sub_program_id: item.sub_program_id,
+        season_id: selectedSeason.id,
+        season: selectedSeason.name, // Legacy column - will be removed in cleanup migration
+        status: 'pending', // Will be confirmed after payment
+        club_id: clubId,
+      }))
+
+      // Get the session token to send with the request
+      // Using the same supabase client instance that's used throughout the app
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession()
+
+      if (sessionError) {
+        console.error('Error getting session:', sessionError)
+        throw new Error('Authentication failed. Please log in again.')
       }
 
-      // 3. Create order
+      if (!session) {
+        console.error('No active session found')
+        throw new Error('No active session. Please log in again.')
+      }
+
+      if (!session.access_token) {
+        console.error('Session exists but no access_token')
+        throw new Error('Invalid session. Please log in again.')
+      }
+
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      }
+
+      const registrationsResponse = await fetch('/api/registrations/create', {
+        method: 'POST',
+        headers,
+        credentials: 'include', // Ensure cookies are sent
+        body: JSON.stringify({
+          registrations: registrationsToCreate,
+          clubId,
+        }),
+      })
+
+      if (!registrationsResponse.ok) {
+        let errorData: any = {}
+        const responseText = await registrationsResponse.text()
+        try {
+          errorData = JSON.parse(responseText)
+        } catch {
+          errorData = { error: responseText || `HTTP ${registrationsResponse.status}: ${registrationsResponse.statusText}` }
+        }
+        
+        console.error('Registration creation failed:', {
+          status: registrationsResponse.status,
+          statusText: registrationsResponse.statusText,
+          responseText,
+          errorData,
+        })
+        
+        const errorMessage = errorData.error || errorData.message || `Failed to create registrations (${registrationsResponse.status})`
+        throw new Error(errorMessage)
+      }
+
+        const { registrations: newRegistrations } = await registrationsResponse.json()
+        allRegistrations.push(...newRegistrations)
+      }
+
+      // Use all registrations (existing pending + newly created) for order
+      const registrations = allRegistrations
+
+      // 4. Create order
       const { data: order, error: orderError } = await clubQuery(
         supabase
           .from('orders')
@@ -127,8 +190,8 @@ export default function CartPage() {
         throw new Error(`Failed to create order: ${orderError?.message}`)
       }
 
-      // 4. Create order items
-      const orderItems = registrations.map((reg, index) => ({
+      // 5. Create order items
+      const orderItems = registrations.map((reg: any, index: number) => ({
         order_id: order.id,
         registration_id: reg.id,
         description: `${items[index].program_name} - ${items[index].sub_program_name} (${items[index].athlete_name})`,
@@ -144,11 +207,25 @@ export default function CartPage() {
         throw new Error(`Failed to create order items: ${itemsError.message}`)
       }
 
-      // 5. Redirect to Stripe checkout
-      // For now, we'll create a checkout session via API route
+      // 6. Redirect to Stripe checkout
+      // Get session token again for the checkout API call
+      const {
+        data: { session: checkoutSession },
+      } = await supabase.auth.getSession()
+
+      if (!checkoutSession?.access_token) {
+        throw new Error('No active session. Please log in again.')
+      }
+
+      const checkoutHeaders: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${checkoutSession.access_token}`,
+      }
+
       const response = await fetch('/api/checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: checkoutHeaders,
+        credentials: 'include',
         body: JSON.stringify({
           orderId: order.id,
           amount: total,

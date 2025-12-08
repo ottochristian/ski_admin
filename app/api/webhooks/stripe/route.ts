@@ -192,30 +192,60 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Update registrations to confirmed
+      // Update registrations to confirmed and set payment status/amount
       const { data: orderItems } = await supabase
         .from('order_items')
-        .select('registration_id')
+        .select('registration_id, amount')
         .eq('order_id', orderId)
 
-      if (orderItems) {
-        const registrationIds = orderItems
-          .map((item: any) => item.registration_id)
-          .filter(Boolean) as string[]
+        if (orderItems && orderItems.length > 0) {
+          // Create a map of registration_id -> amount for efficient lookups
+          const registrationAmountMap = new Map<string, number>()
+          const registrationIds: string[] = []
 
-        if (registrationIds.length > 0) {
-          const { error: regError } = await supabase
-            .from('registrations')
-            .update({ status: 'confirmed' })
-            .in('id', registrationIds)
+          orderItems.forEach((item: any) => {
+            if (item.registration_id) {
+              registrationIds.push(item.registration_id)
+              // Store the amount for this registration
+              const currentAmount = registrationAmountMap.get(item.registration_id) || 0
+              registrationAmountMap.set(
+                item.registration_id,
+                currentAmount + Number(item.amount || 0)
+              )
+            }
+          })
 
-          if (regError) {
-            log.error('Error updating registrations', regError, {
-              orderId,
-              registrationIds,
+          if (registrationIds.length > 0) {
+            // Update each registration with its specific amount
+            const updatePromises = registrationIds.map((regId) => {
+              const amount = registrationAmountMap.get(regId) || 0
+              return supabase
+                .from('registrations')
+                .update({
+                  status: 'confirmed',
+                  payment_status: 'paid',
+                  amount_paid: amount,
+                })
+                .eq('id', regId)
             })
+
+            const results = await Promise.all(updatePromises)
+            
+            // Check for errors
+            const errors = results.filter((result) => result.error)
+            if (errors.length > 0) {
+              log.error('Error updating registrations', {
+                orderId,
+                registrationIds,
+                errors: errors.map((e) => e.error),
+              })
+            } else {
+              log.info('Registrations updated successfully', {
+                orderId,
+                registrationCount: registrationIds.length,
+              })
+            }
           }
-        }
       }
 
       // Mark event as processed successfully

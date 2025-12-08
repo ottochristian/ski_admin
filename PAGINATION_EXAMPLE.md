@@ -274,3 +274,4 @@ Update these pages following the same pattern:
   CREATE INDEX idx_registrations_club_season_created 
     ON registrations(club_id, season_id, created_at DESC);
   ```
+

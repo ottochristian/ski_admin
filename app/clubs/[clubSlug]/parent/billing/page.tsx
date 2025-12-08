@@ -172,45 +172,119 @@ export default function BillingPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
-          {orders.map(order => {
-            const totalPaid = order.payments
-              .filter(p => p.status === 'succeeded')
-              .reduce((sum, p) => sum + Number(p.amount), 0)
+        <div className="space-y-6">
+          {/* Group orders by status: Paid first, then recent pending */}
+          {(() => {
+            const now = new Date()
+            const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
 
-            const isPaid = order.status === 'paid'
-            const isPartial = order.status === 'partially_paid'
+            const paidOrders = orders.filter(
+              (order) => order.status === 'paid' || order.status === 'partially_paid'
+            )
+            
+            // Only show unpaid orders that are:
+            // 1. Very recent (within last hour) - might be processing
+            // OR
+            // 2. Have succeeded payments but order status hasn't updated yet
+            const recentUnpaidOrders = orders.filter((order) => {
+              if (order.status === 'paid' || order.status === 'partially_paid') {
+                return false // Already in paidOrders
+              }
+              
+              const orderDate = new Date(order.created_at)
+              const hasSuccessfulPayment = order.payments.some(
+                (p) => p.status === 'succeeded'
+              )
+              
+              // Show if recent OR has successful payment (webhook might be pending)
+              return orderDate > oneHourAgo || hasSuccessfulPayment
+            })
+
+            // Hide old unpaid orders (older than 1 hour, no successful payments)
+            // These are likely failed/abandoned attempts
 
             return (
-              <Card key={order.id}>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>Order #{order.id.slice(0, 8)}</CardTitle>
-                      <CardDescription>
-                        {new Date(order.created_at).toLocaleDateString()}
-                      </CardDescription>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {isPaid ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-800">
-                          <CheckCircle2 className="h-3 w-3" />
-                          Paid
-                        </span>
-                      ) : isPartial ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-1 text-xs font-medium text-yellow-800">
-                          <Clock className="h-3 w-3" />
-                          Partial
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-1 text-xs font-medium text-red-800">
-                          <XCircle className="h-3 w-3" />
-                          Unpaid
-                        </span>
-                      )}
+              <>
+                {paidOrders.length > 0 && (
+                  <div>
+                    <h2 className="text-lg font-semibold mb-4">Paid Orders</h2>
+                    <div className="space-y-4">
+                      {paidOrders.map(order => renderOrder(order))}
                     </div>
                   </div>
-                </CardHeader>
+                )}
+
+                {recentUnpaidOrders.length > 0 && (
+                  <div>
+                    <h2 className="text-lg font-semibold mb-4">Recent Orders</h2>
+                    <div className="space-y-4">
+                      {recentUnpaidOrders.map(order => renderOrder(order))}
+                    </div>
+                  </div>
+                )}
+
+                {paidOrders.length === 0 && recentUnpaidOrders.length === 0 && (
+                  <Card>
+                    <CardContent className="py-12">
+                      <div className="text-center">
+                        <p className="text-muted-foreground">
+                          No active orders. Old unpaid orders are hidden to reduce clutter.
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            )
+          })()}
+        </div>
+      )}
+    </div>
+  )
+
+  function renderOrder(order: Order) {
+    const totalPaid = order.payments
+      .filter(p => p.status === 'succeeded')
+      .reduce((sum, p) => sum + Number(p.amount), 0)
+
+    const isPaid = order.status === 'paid'
+    const isPartial = order.status === 'partially_paid'
+
+    return (
+      <Card key={order.id}>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Order #{order.id.slice(0, 8)}</CardTitle>
+              <CardDescription>
+                {new Date(order.created_at).toLocaleDateString()}
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              {isPaid ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-800">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Paid
+                </span>
+              ) : isPartial ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-1 text-xs font-medium text-yellow-800">
+                  <Clock className="h-3 w-3" />
+                  Partial
+                </span>
+              ) : totalPaid > 0 ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800">
+                  <Clock className="h-3 w-3" />
+                  Processing
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-1 text-xs font-medium text-red-800">
+                  <XCircle className="h-3 w-3" />
+                  Unpaid
+                </span>
+              )}
+            </div>
+          </div>
+        </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
                     <div>
@@ -271,12 +345,8 @@ export default function BillingPage() {
                       </div>
                     )}
                   </div>
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
+        </CardContent>
+      </Card>
+    )
+  }
 }

@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { NextRequest } from 'next/server'
 
 /**
  * Creates a server-side Supabase client with proper session management.
@@ -9,7 +10,35 @@ import { cookies } from 'next/headers'
  * const supabase = await createServerSupabaseClient()
  * const { data } = await supabase.from('profiles').select('*')
  */
-export async function createServerSupabaseClient() {
+export async function createServerSupabaseClient(request?: NextRequest) {
+  // If request is provided (API route), use request cookies
+  // Otherwise use next/headers cookies (Server Components/Actions)
+  if (request) {
+    return createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            // Get all cookies from the request
+            const allCookies: { name: string; value: string }[] = []
+            // request.cookies is a ReadonlyRequestCookies
+            request.cookies.getAll().forEach((cookie: { name: string; value: string }) => {
+              allCookies.push({ name: cookie.name, value: cookie.value })
+            })
+            return allCookies
+          },
+          setAll(cookiesToSet) {
+            // In API routes, we can't set cookies directly on the response here
+            // This is handled by the middleware or response headers
+            // But we need to implement this for SSR compatibility
+          },
+        },
+      }
+    )
+  }
+
+  // Default behavior for Server Components/Actions
   const cookieStore = await cookies()
 
   return createServerClient(
@@ -60,3 +89,4 @@ export function createSupabaseAdminClient() {
   const { createClient: createSupabaseClient } = require('@supabase/supabase-js')
   return createSupabaseClient(supabaseUrl, serviceRoleKey)
 }
+
