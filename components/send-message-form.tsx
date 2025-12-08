@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from 'next/navigation';
-import { createClient } from "@/lib/supabase/client";
+import { createBrowserSupabaseClient } from "@/lib/supabase-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,7 +38,7 @@ export function SendMessageForm({ userId, programs }: SendMessageFormProps) {
     setIsLoading(true);
     setError(null);
 
-    const supabase = createClient();
+    const supabase = createBrowserSupabaseClient();
 
     try {
       // Insert message

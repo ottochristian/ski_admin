@@ -142,7 +142,7 @@ export default function AdminDashboard() {
         ])
 
         const totalRevenue =
-          paymentData?.reduce((sum, reg) => sum + Number(reg.amount_paid || 0), 0) || 0
+          paymentData?.reduce((sum: number, reg: any) => sum + Number(reg.amount_paid || 0), 0) || 0
 
         const recentRegs = (registrationsData || []).map((reg: any) => ({
           ...reg,

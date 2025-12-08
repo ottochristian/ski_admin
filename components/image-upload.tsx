@@ -99,12 +99,12 @@ export function ImageUpload({
       if (uploadError) {
         console.error('Upload error details:', {
           message: uploadError.message,
-          statusCode: uploadError.statusCode,
+          statusCode: (uploadError as any).statusCode,
           error: uploadError,
         })
         
         // If bucket doesn't exist, try to create it (this might fail without admin access)
-        if (uploadError.message.includes('Bucket not found') || uploadError.statusCode === '404') {
+        if (uploadError.message.includes('Bucket not found') || (uploadError as any).statusCode === '404') {
           showToast({
             title: 'Storage bucket not found',
             description: `Please create a bucket named "${bucket}" in Supabase Storage and make it public`,

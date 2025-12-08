@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { useParentClub } from '@/lib/use-parent-club'
-import { useAdminSeason } from '@/lib/use-admin-season'
+// Removed useAdminSeason - it requires admin role and causes redirects for parent users
 import { supabase } from '@/lib/supabaseClient'
 import { clubQuery } from '@/lib/supabase-helpers'
 import {
@@ -37,14 +37,47 @@ export default function BillingPage() {
   const params = useParams()
   const searchParams = useSearchParams()
   const clubSlug = params.clubSlug as string
-  const { clubId, household } = useParentClub()
-  const { selectedSeason } = useAdminSeason()
+  const { clubId, household, loading: authLoading } = useParentClub()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [orders, setOrders] = useState<Order[]>([])
+  const [selectedSeason, setSelectedSeason] = useState<{ id: string; name: string } | null>(null)
 
+  // Load current season for the club
   useEffect(() => {
-    async function load() {
+    async function loadSeason() {
+      if (authLoading || !clubId) {
+        return
+      }
+
+      try {
+        const { data: seasonData, error: seasonError } = await supabase
+          .from('seasons')
+          .select('id, name')
+          .eq('club_id', clubId)
+          .eq('is_current', true)
+          .single()
+
+        if (seasonError || !seasonData) {
+          setError('No current season found. Please contact support.')
+          setLoading(false)
+          return
+        }
+
+        setSelectedSeason(seasonData)
+      } catch (err) {
+        console.error('Error loading season:', err)
+        setError('Failed to load season information')
+        setLoading(false)
+      }
+    }
+
+    loadSeason()
+  }, [clubId, authLoading])
+
+  // Load orders once we have season and household
+  useEffect(() => {
+    async function loadOrders() {
       if (!clubId || !household || !selectedSeason) {
         return
       }
@@ -91,7 +124,7 @@ export default function BillingPage() {
       }
     }
 
-    load()
+    loadOrders()
   }, [clubId, household, selectedSeason])
 
   const success = searchParams.get('success')

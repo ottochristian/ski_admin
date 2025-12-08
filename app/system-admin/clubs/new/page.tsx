@@ -93,7 +93,7 @@ export default function NewClubPage() {
             address: address.trim() || null,
             contact_email: contactEmail.trim() || null,
             timezone: timezone || 'America/Denver',
-            logo_url: logoUrl.trim() || null,
+            logo_url: logoUrl?.trim() || null,
           },
         ])
         .select()

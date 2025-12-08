@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useEffect, FormEvent } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 
+export const dynamic = 'force-dynamic'
+
 export default function LoginPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -16,15 +17,18 @@ export default function LoginPage() {
   const [message, setMessage] = useState<string | null>(null)
 
   useEffect(() => {
-    const msg = searchParams.get('message')
-    const confirmed = searchParams.get('confirmed')
-    if (msg) {
-      setMessage(decodeURIComponent(msg))
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      const msg = urlParams.get('message')
+      const confirmed = urlParams.get('confirmed')
+      if (msg) {
+        setMessage(decodeURIComponent(msg))
+      }
+      if (confirmed === 'true') {
+        setMessage('Email confirmed! You can now log in.')
+      }
     }
-    if (confirmed === 'true') {
-      setMessage('Email confirmed! You can now log in.')
-    }
-  }, [searchParams])
+  }, [])
 
   // 🔍 On mount, see if we already have a logged-in user
   // If logged in, redirect to appropriate dashboard

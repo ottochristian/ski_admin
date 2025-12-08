@@ -141,7 +141,7 @@ export default function SeasonsPage() {
       }
 
       // Set this one as current
-      const { error: setError } = await clubQuery(
+      const { error: updateError } = await clubQuery(
         supabase
           .from('seasons')
           .update({ is_current: true })
@@ -149,9 +149,9 @@ export default function SeasonsPage() {
         clubId
       )
 
-      if (setError) {
-        console.error('Error setting current season:', setError)
-        setError(`Failed to set current season: ${setError.message}`)
+      if (updateError) {
+        console.error('Error setting current season:', updateError)
+        setError(`Failed to set current season: ${updateError.message}`)
       } else {
         // Success - refresh the page and clear cached season selection
         if (typeof window !== 'undefined') {

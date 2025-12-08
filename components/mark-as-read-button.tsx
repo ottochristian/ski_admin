@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from 'next/navigation';
-import { createClient } from "@/lib/supabase/client";
+import { createBrowserSupabaseClient } from "@/lib/supabase-client";
 import { Button } from "@/components/ui/button";
 import { Check } from 'lucide-react';
 
@@ -16,7 +16,7 @@ export function MarkAsReadButton({ recipientId }: MarkAsReadButtonProps) {
 
   const handleMarkAsRead = async () => {
     setIsLoading(true);
-    const supabase = createClient();
+    const supabase = createBrowserSupabaseClient();
 
     try {
       await supabase

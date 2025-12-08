@@ -88,8 +88,8 @@ export default function CartPage() {
                 athlete_id: item.athlete_id,
                 sub_program_id: item.sub_program_id,
                 season_id: selectedSeason.id,
+                season: selectedSeason.name, // Legacy column - will be removed in cleanup migration
                 status: 'pending', // Will be confirmed after payment
-                price: item.price,
                 club_id: clubId,
               },
             ])
