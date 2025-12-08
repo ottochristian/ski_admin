@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
@@ -16,6 +17,17 @@ export function AdminSidebar({ profile }: AdminSidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
   const { club, loading: clubLoading } = useClub()
+
+  // Debug: Log club data to verify logo_url is loaded
+  useEffect(() => {
+    if (club && !clubLoading) {
+      console.log('AdminSidebar - Club data:', {
+        name: club.name,
+        logo_url: club.logo_url,
+        hasLogo: !!club.logo_url,
+      })
+    }
+  }, [club, clubLoading])
 
   async function handleSignOut() {
     await supabase.auth.signOut()
@@ -64,7 +76,7 @@ export function AdminSidebar({ profile }: AdminSidebarProps) {
   const primaryColor = club?.primary_color || '#3B82F6'
   
   return (
-    <aside className="w-64 border-r border-slate-200 bg-white p-4">
+    <aside className="w-64 border-r border-slate-200 bg-white p-4 flex flex-col h-screen">
       <div className="mb-8">
         <h2 className="text-lg font-semibold text-slate-900">Admin Portal</h2>
         {club && !clubLoading ? (
@@ -89,7 +101,7 @@ export function AdminSidebar({ profile }: AdminSidebarProps) {
         )}
       </div>
 
-      <nav className="space-y-1">
+      <nav className="space-y-1 flex-1">
         {menuItems.map((item) => {
           const Icon = item.icon
           const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href))
@@ -118,14 +130,62 @@ export function AdminSidebar({ profile }: AdminSidebarProps) {
         })}
       </nav>
 
-      <Button
-        onClick={handleSignOut}
-        variant="ghost"
-        className="mt-8 w-full justify-start gap-3 text-destructive hover:bg-red-50 hover:text-destructive"
-      >
-        <LogOut className="h-4 w-4" />
-        Sign Out
-      </Button>
+      <div className="mt-auto space-y-4">
+        {/* Club Logo in lower left corner */}
+        {club && !clubLoading && (
+          <div className="flex justify-start relative">
+            {club.logo_url ? (
+              <>
+                <img
+                  src={club.logo_url}
+                  alt={`${club.name} logo`}
+                  className="h-16 w-16 rounded-md object-cover border border-slate-200"
+                  onError={(e) => {
+                    console.error('Failed to load club logo:', club.logo_url)
+                    // Hide image and show fallback
+                    e.currentTarget.style.display = 'none'
+                    const fallback = document.getElementById(`club-logo-fallback-${club.id}`)
+                    if (fallback) {
+                      fallback.style.display = 'flex'
+                    }
+                  }}
+                />
+                {/* Fallback: Show club initial if logo fails to load */}
+                <div
+                  id={`club-logo-fallback-${club.id}`}
+                  className="h-16 w-16 rounded-md border border-slate-200 hidden items-center justify-center text-2xl font-semibold"
+                  style={{
+                    backgroundColor: `${primaryColor}15`,
+                    color: primaryColor,
+                  }}
+                >
+                  {club.name.charAt(0).toUpperCase()}
+                </div>
+              </>
+            ) : (
+              /* Show club initial if no logo */
+              <div
+                className="h-16 w-16 rounded-md border border-slate-200 flex items-center justify-center text-2xl font-semibold"
+                style={{
+                  backgroundColor: `${primaryColor}15`,
+                  color: primaryColor,
+                }}
+              >
+                {club.name.charAt(0).toUpperCase()}
+              </div>
+            )}
+          </div>
+        )}
+        
+        <Button
+          onClick={handleSignOut}
+          variant="ghost"
+          className="w-full justify-start gap-3 text-destructive hover:bg-red-50 hover:text-destructive"
+        >
+          <LogOut className="h-4 w-4" />
+          Sign Out
+        </Button>
+      </div>
     </aside>
   )
 }

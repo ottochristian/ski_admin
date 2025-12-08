@@ -74,14 +74,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Build redirect URL - must be a valid absolute URL
+    // Redirect to password setup page so invited users can set their password
     // For localhost, use http://localhost:3000
     // For production, use your actual domain
     let redirectTo: string
     if (process.env.NEXT_PUBLIC_APP_URL) {
-      redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/login`
+      redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/setup-password`
     } else {
       // Default to localhost for development
-      redirectTo = 'http://localhost:3000/login'
+      redirectTo = 'http://localhost:3000/setup-password'
     }
 
     console.log('Inviting user:', { email, redirectTo })
