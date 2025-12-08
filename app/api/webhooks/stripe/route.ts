@@ -198,10 +198,10 @@ export async function POST(request: NextRequest) {
         .select('registration_id')
         .eq('order_id', orderId)
 
-        if (orderItems) {
-          const registrationIds = orderItems
-            .map((item: any) => item.registration_id)
-            .filter(Boolean) as string[]
+      if (orderItems) {
+        const registrationIds = orderItems
+          .map((item: any) => item.registration_id)
+          .filter(Boolean) as string[]
 
         if (registrationIds.length > 0) {
           const { error: regError } = await supabase
