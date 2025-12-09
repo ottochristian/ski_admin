@@ -2,11 +2,9 @@
 
 import { useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter, usePathname } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
+import { usePathname } from 'next/navigation'
 import { Profile } from '@/lib/types'
-import { LayoutDashboard, BookOpen, FileText, Users, LogOut, Settings } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { LayoutDashboard, BookOpen, FileText, Users, Settings } from 'lucide-react'
 import { useClub } from '@/lib/club-context'
 
 interface AdminSidebarProps {
@@ -14,7 +12,6 @@ interface AdminSidebarProps {
 }
 
 export function AdminSidebar({ profile }: AdminSidebarProps) {
-  const router = useRouter()
   const pathname = usePathname()
   const { club, loading: clubLoading } = useClub()
 
@@ -28,11 +25,6 @@ export function AdminSidebar({ profile }: AdminSidebarProps) {
       })
     }
   }, [club, clubLoading])
-
-  async function handleSignOut() {
-    await supabase.auth.signOut()
-    router.replace('/login')
-  }
 
   const menuItems = [
     {
@@ -76,8 +68,8 @@ export function AdminSidebar({ profile }: AdminSidebarProps) {
   const primaryColor = club?.primary_color || '#3B82F6'
   
   return (
-    <aside className="w-64 border-r border-slate-200 bg-white p-4 flex flex-col h-screen">
-      <div className="mb-8">
+    <aside className="w-64 border-r border-slate-200 bg-white flex flex-col h-screen fixed left-0 top-0">
+      <div className="p-4 flex-shrink-0 border-b border-slate-200">
         <h2 className="text-lg font-semibold text-slate-900">Admin Portal</h2>
         {club && !clubLoading ? (
           <>
@@ -101,7 +93,7 @@ export function AdminSidebar({ profile }: AdminSidebarProps) {
         )}
       </div>
 
-      <nav className="space-y-1 flex-1">
+      <nav className="flex-1 overflow-y-auto p-4 space-y-1">
         {menuItems.map((item) => {
           const Icon = item.icon
           const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href))
@@ -129,17 +121,6 @@ export function AdminSidebar({ profile }: AdminSidebarProps) {
           )
         })}
       </nav>
-
-      <div className="mt-auto">
-        <Button
-          onClick={handleSignOut}
-          variant="ghost"
-          className="w-full justify-start gap-3 text-destructive hover:bg-red-50 hover:text-destructive"
-        >
-          <LogOut className="h-4 w-4" />
-          Sign Out
-        </Button>
-      </div>
     </aside>
   )
 }

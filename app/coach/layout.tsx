@@ -94,14 +94,16 @@ export default function CoachLayout({
   return (
     <div className="flex min-h-screen">
       <CoachSidebar profile={profile} />
-      <main className="flex-1 overflow-auto bg-slate-50">
-        <div className="border-b border-slate-200 bg-white px-8 py-4">
+      <main className="flex-1 ml-64 flex flex-col bg-slate-50">
+        <div className="fixed top-0 right-0 left-64 border-b border-slate-200 bg-white px-8 py-4 z-10">
           <div className="flex items-center justify-end gap-4">
             <CoachSeasonSelector />
             <ProfileMenu profile={profile} />
           </div>
         </div>
-        <div className="p-8">{children}</div>
+        <div className="flex-1 overflow-auto pt-16">
+          <div className="p-8">{children}</div>
+        </div>
       </main>
     </div>
   )

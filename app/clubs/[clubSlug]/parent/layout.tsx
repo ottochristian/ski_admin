@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { useParentClub } from '@/lib/use-parent-club'
 import { CartProvider } from '@/lib/cart-context'
 import { Button } from '@/components/ui/button'
-import { ShoppingCart, LogOut, LayoutDashboard, User, CreditCard } from 'lucide-react'
+import { ShoppingCart, LayoutDashboard, User, CreditCard } from 'lucide-react'
 import { useCart } from '@/lib/cart-context'
 import { ProfileMenu } from '@/components/profile-menu'
 
