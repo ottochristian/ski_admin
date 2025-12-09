@@ -12,6 +12,13 @@ export type Household = {
   primary_email?: string | null
   phone?: string | null
   address?: string | null
+  address_line1?: string | null
+  address_line2?: string | null
+  city?: string | null
+  state?: string | null
+  zip_code?: string | null
+  emergency_contact_name?: string | null
+  emergency_contact_phone?: string | null
 }
 
 export type Athlete = {
@@ -97,7 +104,9 @@ export function useParentClub() {
         // 4. Get household via household_guardians join table
         const { data: householdGuardian, error: hgError } = await supabase
           .from('household_guardians')
-          .select('household_id, households(*)')
+          .select(
+            'household_id, households(id, club_id, primary_email, phone, address, address_line1, address_line2, city, state, zip_code, emergency_contact_name, emergency_contact_phone)'
+          )
           .eq('user_id', user.id)
           .single()
 
@@ -142,6 +151,13 @@ export function useParentClub() {
           primary_email: householdData.primary_email || profileData.email,
           phone: householdData.phone || null,
           address: householdData.address || null,
+          address_line1: householdData.address_line1 || null,
+          address_line2: householdData.address_line2 || null,
+          city: householdData.city || null,
+          state: householdData.state || null,
+          zip_code: householdData.zip_code || null,
+          emergency_contact_name: householdData.emergency_contact_name || null,
+          emergency_contact_phone: householdData.emergency_contact_phone || null,
         })
 
         // 5. Get athletes for this household

@@ -10,15 +10,17 @@ import { CartProvider } from '@/lib/cart-context'
 import { Button } from '@/components/ui/button'
 import { ShoppingCart, LogOut, LayoutDashboard, User, CreditCard } from 'lucide-react'
 import { useCart } from '@/lib/cart-context'
+import { ProfileMenu } from '@/components/profile-menu'
 
-function ParentNav({ clubSlug }: { clubSlug: string }) {
+function ParentNav({
+  clubSlug,
+  profile,
+}: {
+  clubSlug: string
+  profile: { id: string; email: string; first_name?: string | null; role: string }
+}) {
   const router = useRouter()
   const { itemCount } = useCart()
-
-  async function handleSignOut() {
-    await supabase.auth.signOut()
-    router.replace('/login')
-  }
 
   const navItems = [
     { label: 'Dashboard', href: `/clubs/${clubSlug}/parent/dashboard`, icon: LayoutDashboard },
@@ -60,10 +62,7 @@ function ParentNav({ clubSlug }: { clubSlug: string }) {
               )}
             </Button>
           </Link>
-          <Button variant="ghost" size="sm" onClick={handleSignOut}>
-            <LogOut className="h-4 w-4 mr-2" />
-            Sign Out
-          </Button>
+          <ProfileMenu profile={profile} />
         </div>
       </div>
     </nav>
@@ -146,7 +145,7 @@ function ParentLayoutContent({
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <ParentNav clubSlug={clubSlug} />
+      <ParentNav clubSlug={clubSlug} profile={profile} />
       <main className="mx-auto max-w-7xl px-4 py-8">{children}</main>
     </div>
   )

@@ -18,6 +18,7 @@ import { Profile } from '@/lib/types'
 import { useAdminClub } from '@/lib/use-admin-club'
 import { useAdminSeason } from '@/lib/use-admin-season'
 import { clubQuery } from '@/lib/supabase-helpers'
+import { AdminPageHeader } from '@/components/admin-page-header'
 
 type Program = {
   id: string
@@ -204,12 +205,10 @@ export default function ProgramsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Programs</h1>
-          <p className="text-muted-foreground">
-            Manage all ski programs, including soft-deleting them.
-          </p>
-        </div>
+        <AdminPageHeader
+          title="Programs"
+          description="Manage all ski programs, including soft-deleting them."
+        />
         <Link href="/admin/programs/new">
           <Button>
             <Plus className="h-4 w-4 mr-2" />

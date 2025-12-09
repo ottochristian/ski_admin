@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Plus, Pencil, Archive, CheckCircle2, Calendar, Copy } from 'lucide-react'
 import { clubQuery } from '@/lib/supabase-helpers'
 import { ProgramStatus } from '@/lib/programStatus'
+import { AdminPageHeader } from '@/components/admin-page-header'
 
 export default function SeasonsPage() {
   const router = useRouter()
@@ -425,12 +426,10 @@ export default function SeasonsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Seasons</h1>
-          <p className="text-muted-foreground">
-            Manage seasons for your club. Programs and registrations are scoped to seasons.
-          </p>
-        </div>
+        <AdminPageHeader
+          title="Seasons"
+          description="Manage seasons for your club. Programs and registrations are scoped to seasons."
+        />
         <Button onClick={() => setShowCreateForm(!showCreateForm)}>
           <Plus className="h-4 w-4 mr-2" />
           {showCreateForm ? 'Cancel' : 'Add Season'}

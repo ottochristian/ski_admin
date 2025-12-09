@@ -13,7 +13,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Users, Calendar, MessageSquare } from 'lucide-react'
 import Link from 'next/link'
-import { LogoutButton } from '@/components/logout-button'
+import { AdminPageHeader } from '@/components/admin-page-header'
 
 type Profile = {
   id: string
@@ -30,9 +30,30 @@ type Coach = {
 
 type CoachAssignment = {
   id: string
+  role?: string | null
   programs?: { name?: string | null } | null
   sub_programs?: { name?: string | null } | null
   groups?: { name?: string | null } | null
+}
+
+const getRoleLabel = (role?: string | null): string => {
+  switch (role) {
+    case 'head_coach':
+      return 'Head Coach'
+    case 'assistant_coach':
+      return 'Assistant Coach'
+    case 'substitute_coach':
+      return 'Substitute Coach'
+    default:
+      return 'Coach'
+  }
+}
+
+const getAssignmentDisplayName = (assignment: CoachAssignment): string => {
+  const name = assignment.groups?.name || assignment.sub_programs?.name || assignment.programs?.name || 'Unknown'
+  const role = assignment.role ? getRoleLabel(assignment.role) : ''
+  // Format: "Head Coach Prep Team" or "Assistant Coach Alpine Program"
+  return role ? `${role} ${name}` : name
 }
 
 export default function CoachDashboardPage() {
@@ -102,6 +123,7 @@ export default function CoachDashboardPage() {
           .select(
             `
             id,
+            role,
             programs ( name ),
             sub_programs ( name ),
             groups ( name )
@@ -124,7 +146,7 @@ export default function CoachDashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="flex items-center justify-center py-12">
         <p className="text-muted-foreground text-sm">Loading coach dashboard…</p>
       </div>
     )
@@ -132,19 +154,17 @@ export default function CoachDashboardPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle>Something went wrong</CardTitle>
-            <CardDescription>{error}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/coach">
-              <Button>Back to Dashboard</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
+      <Card className="max-w-md mx-auto">
+        <CardHeader>
+          <CardTitle>Something went wrong</CardTitle>
+          <CardDescription>{error}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link href="/coach">
+            <Button>Back to Dashboard</Button>
+          </Link>
+        </CardContent>
+      </Card>
     )
   }
 
@@ -154,25 +174,13 @@ export default function CoachDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="border-b bg-white">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900">
-                Coach Dashboard
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Welcome, {profile.first_name || profile.email}
-              </p>
-            </div>
-            <LogoutButton />
-          </div>
-        </div>
-      </header>
+    <div className="flex flex-col gap-6">
+      <AdminPageHeader
+        title="Coach Dashboard"
+        description={`Welcome, ${profile.first_name || profile.email}`}
+      />
 
-      <div className="container mx-auto px-6 py-8">
+      <div>
         {/* Quick Actions */}
         <div className="mb-8">
           <h2 className="text-lg font-semibold text-slate-900 mb-4">
@@ -222,18 +230,20 @@ export default function CoachDashboardPage() {
           </h2>
           {assignments && assignments.length > 0 ? (
             <div className="grid md:grid-cols-2 gap-4">
-              {assignments.map(assignment => (
-                <Card key={assignment.id}>
-                  <CardHeader>
-                    <CardTitle className="text-base">
-                      {assignment.programs?.name}
-                    </CardTitle>
-                    <CardDescription>
-                      {assignment.sub_programs?.name}
-                      {assignment.groups?.name &&
-                        ` - ${assignment.groups.name}`}
-                    </CardDescription>
-                  </CardHeader>
+              {assignments.map(assignment => {
+                const displayName = getAssignmentDisplayName(assignment)
+                return (
+                  <Card key={assignment.id}>
+                    <CardHeader>
+                      <CardTitle className="text-base">
+                        {displayName}
+                      </CardTitle>
+                      {assignment.role && (
+                        <CardDescription>
+                          Role: {getRoleLabel(assignment.role)}
+                        </CardDescription>
+                      )}
+                    </CardHeader>
                   <CardContent>
                     <Link href={`/coach/assignments/${assignment.id}`}>
                       <Button
@@ -246,7 +256,8 @@ export default function CoachDashboardPage() {
                     </Link>
                   </CardContent>
                 </Card>
-              ))}
+                )
+              })}
             </div>
           ) : (
             <Card>

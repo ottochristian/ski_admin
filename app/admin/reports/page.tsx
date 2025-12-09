@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { useAdminClub } from '@/lib/use-admin-club'
 import { useAdminSeason } from '@/lib/use-admin-season'
 import { clubQuery } from '@/lib/supabase-helpers'
+import { AdminPageHeader } from '@/components/admin-page-header'
 import {
   Card,
   CardContent,
@@ -133,12 +134,10 @@ export default function ReportsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Reports</h1>
-        <p className="text-muted-foreground">
-          Financial and enrollment reports
-        </p>
-      </div>
+      <AdminPageHeader
+        title="Reports"
+        description="Financial and enrollment reports"
+      />
 
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-3">

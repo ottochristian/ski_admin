@@ -5,29 +5,24 @@ import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { Profile } from '@/lib/types'
-import { LayoutDashboard, BookOpen, FileText, Users, LogOut, Settings } from 'lucide-react'
+import {
+  LayoutDashboard,
+  Users,
+  Calendar,
+  MessageSquare,
+  LogOut,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useClub } from '@/lib/club-context'
 
-interface AdminSidebarProps {
+interface CoachSidebarProps {
   profile: Profile
 }
 
-export function AdminSidebar({ profile }: AdminSidebarProps) {
+export function CoachSidebar({ profile }: CoachSidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
   const { club, loading: clubLoading } = useClub()
-
-  // Debug: Log club data to verify logo_url is loaded
-  useEffect(() => {
-    if (club && !clubLoading) {
-      console.log('AdminSidebar - Club data:', {
-        name: club.name,
-        logo_url: club.logo_url,
-        hasLogo: !!club.logo_url,
-      })
-    }
-  }, [club, clubLoading])
 
   async function handleSignOut() {
     await supabase.auth.signOut()
@@ -37,64 +32,51 @@ export function AdminSidebar({ profile }: AdminSidebarProps) {
   const menuItems = [
     {
       label: 'Dashboard',
-      href: '/admin',
-      icon: LayoutDashboard,
-    },
-    {
-      label: 'Programs',
-      href: '/admin/programs',
-      icon: BookOpen,
-    },
-    {
-      label: 'Registrations',
-      href: '/admin/registrations',
-      icon: FileText,
-    },
-    {
-      label: 'Reports',
-      href: '/admin/reports',
+      href: '/coach',
       icon: LayoutDashboard,
     },
     {
       label: 'Athletes',
-      href: '/admin/athletes',
+      href: '/coach/athletes',
       icon: Users,
     },
     {
-      label: 'Coaches',
-      href: '/admin/coaches',
-      icon: Users,
+      label: 'Races',
+      href: '/coach/races',
+      icon: Calendar,
     },
     {
-      label: 'Settings',
-      href: '/admin/settings/seasons',
-      icon: Settings,
+      label: 'Messages',
+      href: '/coach/messages',
+      icon: MessageSquare,
     },
   ]
 
   // Get primary color for personalization, default to blue
   const primaryColor = club?.primary_color || '#3B82F6'
-  
+
   return (
     <aside className="w-64 border-r border-slate-200 bg-white p-4 flex flex-col h-screen">
       <div className="mb-8">
-        <h2 className="text-lg font-semibold text-slate-900">Admin Portal</h2>
+        <h2 className="text-lg font-semibold text-slate-900">Coach Portal</h2>
         {club && !clubLoading ? (
           <>
-            <p 
+            <p
               className="text-sm font-medium mt-1"
               style={{ color: primaryColor }}
             >
               {club.name}
             </p>
-            <p className="text-xs text-muted-foreground mt-0.5">{profile.email}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {profile.email}
+            </p>
           </>
         ) : (
           <p className="text-sm text-muted-foreground">{profile.email}</p>
         )}
         {/* Color accent bar */}
         {club && !clubLoading && (
-          <div 
+          <div
             className="h-1 w-full mt-2 rounded"
             style={{ backgroundColor: primaryColor }}
           />
@@ -104,7 +86,9 @@ export function AdminSidebar({ profile }: AdminSidebarProps) {
       <nav className="space-y-1 flex-1">
         {menuItems.map((item) => {
           const Icon = item.icon
-          const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href))
+          const isActive =
+            pathname === item.href ||
+            (item.href !== '/coach' && pathname.startsWith(item.href))
           return (
             <Link
               key={item.href}

@@ -21,6 +21,7 @@ import {
 import { useAdminClub } from '@/lib/use-admin-club'
 import { useAdminSeason } from '@/lib/use-admin-season'
 import { clubQuery } from '@/lib/supabase-helpers'
+import { AdminPageHeader } from '@/components/admin-page-header'
 
 interface Registration {
   id: string
@@ -82,7 +83,7 @@ export default function RegistrationsPage() {
             amount_paid,
             created_at,
             season_id,
-            athletes(id, first_name, last_name, date_of_birth),
+            athletes(id, first_name, last_name, date_of_birth, household_id, family_id),
             sub_programs(name, programs(name))
           `
             )
@@ -97,12 +98,84 @@ export default function RegistrationsPage() {
           return
         }
 
-        // Transform data to match our interface
-        const transformedData = (data || []).map((reg: any) => ({
-          ...reg,
-          athlete: reg.athletes,
-          program: reg.sub_programs?.programs || { name: reg.sub_programs?.name || 'Unknown' },
-        }))
+        // Extract unique household_ids and family_ids
+        const householdIds = new Set<string>()
+        const familyIds = new Set<string>()
+        ;(data || []).forEach((reg: any) => {
+          if (reg.athletes?.household_id) {
+            householdIds.add(reg.athletes.household_id)
+          }
+          if (reg.athletes?.family_id) {
+            familyIds.add(reg.athletes.family_id)
+          }
+        })
+
+        // Fetch parent emails for households via household_guardians -> profiles
+        const parentEmailMap = new Map<string, string>()
+        
+        if (householdIds.size > 0) {
+          const { data: householdGuardians } = await supabase
+            .from('household_guardians')
+            .select('household_id, profiles:user_id(email)')
+            .in('household_id', Array.from(householdIds))
+
+          if (householdGuardians) {
+            householdGuardians.forEach((hg: any) => {
+              if (hg.household_id && hg.profiles?.email) {
+                parentEmailMap.set(hg.household_id, hg.profiles.email)
+              }
+            })
+          }
+        }
+
+        // Fetch parent emails for families via profiles
+        if (familyIds.size > 0) {
+          const { data: families } = await supabase
+            .from('families')
+            .select('id, profile_id')
+            .in('id', Array.from(familyIds))
+
+          if (families) {
+            const profileIds = families.map((f: any) => f.profile_id).filter(Boolean)
+            if (profileIds.length > 0) {
+              const { data: profiles } = await supabase
+                .from('profiles')
+                .select('id, email')
+                .in('id', profileIds)
+
+              if (profiles) {
+                const profileEmailMap = new Map(profiles.map((p: any) => [p.id, p.email]))
+                families.forEach((f: any) => {
+                  if (f.id && f.profile_id && profileEmailMap.has(f.profile_id)) {
+                    parentEmailMap.set(f.id, profileEmailMap.get(f.profile_id)!)
+                  }
+                })
+              }
+            }
+          }
+        }
+
+        // Transform data to match our interface and add parent emails
+        const transformedData = (data || []).map((reg: any) => {
+          const athlete = reg.athletes
+          const householdId = athlete?.household_id
+          const familyId = athlete?.family_id
+          const parentEmail = (householdId && parentEmailMap.get(householdId)) ||
+                             (familyId && parentEmailMap.get(familyId)) ||
+                             null
+
+          return {
+            ...reg,
+            athlete: {
+              id: athlete?.id,
+              first_name: athlete?.first_name,
+              last_name: athlete?.last_name,
+              date_of_birth: athlete?.date_of_birth,
+            },
+            program: reg.sub_programs?.programs || { name: reg.sub_programs?.name || 'Unknown' },
+            parent: parentEmail ? { email: parentEmail } : null,
+          }
+        })
 
         setRegistrations(transformedData)
       } catch (err) {
@@ -132,14 +205,37 @@ export default function RegistrationsPage() {
     )
   }
 
+  const getStatusColor = (status: string) => {
+    const normalizedStatus = status?.toLowerCase() || ''
+    switch (normalizedStatus) {
+      case 'confirmed':
+      case 'processed':
+      case 'active':
+        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+      case 'pending':
+        return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
+      case 'unpaid':
+      case 'late':
+      case 'cancelled':
+      case 'failed':
+        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+    }
+  }
+
   const getPaymentStatusColor = (status: string) => {
-    switch (status) {
+    const normalizedStatus = status?.toLowerCase() || ''
+    switch (normalizedStatus) {
       case 'paid':
         return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-      case 'unpaid':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
       case 'pending':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+      case 'processing':
+        return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
+      case 'unpaid':
+      case 'late':
+      case 'failed':
+        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
       default:
         return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
     }
@@ -147,12 +243,10 @@ export default function RegistrationsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Registrations</h1>
-        <p className="text-muted-foreground">
-          View and manage all program registrations
-        </p>
-      </div>
+      <AdminPageHeader
+        title="Registrations"
+        description="View and manage all program registrations"
+      />
 
       <Card>
         <CardHeader>
@@ -182,11 +276,15 @@ export default function RegistrationsPage() {
                       <TableCell>{reg.program?.name}</TableCell>
                       <TableCell>
                         <span className="text-sm text-muted-foreground">
-                          {reg.parent?.email}
+                          {reg.parent?.email || '-'}
                         </span>
                       </TableCell>
                       <TableCell>
-                        <span className="inline-flex rounded-full bg-blue-100 px-2 py-1 text-xs font-medium capitalize text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-1 text-xs font-medium capitalize ${getStatusColor(
+                            reg.status
+                          )}`}
+                        >
                           {reg.status}
                         </span>
                       </TableCell>

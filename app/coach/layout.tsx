@@ -4,14 +4,13 @@ import type React from 'react'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
-import { AdminSidebar } from '@/components/admin-sidebar'
-import { SeasonSelector } from '@/components/season-selector'
+import { CoachSidebar } from '@/components/coach-sidebar'
+import { CoachSeasonSelector } from '@/components/coach-season-selector'
 import { ProfileMenu } from '@/components/profile-menu'
 import { Profile } from '@/lib/types'
 import { useClub } from '@/lib/club-context'
-import { getUserClub } from '@/lib/club-utils'
 
-export default function AdminLayout({
+export default function CoachLayout({
   children,
 }: {
   children: React.ReactNode
@@ -36,7 +35,7 @@ export default function AdminLayout({
           return
         }
 
-        // Fetch profile and check if admin
+        // Fetch profile and check if coach
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('*')
@@ -49,7 +48,7 @@ export default function AdminLayout({
           return
         }
 
-        if (!profileData || profileData.role !== 'admin') {
+        if (!profileData || profileData.role !== 'coach') {
           router.replace('/login')
           return
         }
@@ -58,13 +57,13 @@ export default function AdminLayout({
 
         // Verify user has a club_id
         if (!profileData.club_id) {
-          setError('No club associated with your account. Please contact an administrator.')
+          setError(
+            'No club associated with your account. Please contact an administrator.'
+          )
           setIsLoading(false)
           return
         }
 
-        // Don't redirect - just use club context on existing routes
-        // The club context will get the club from the profile
         setIsLoading(false)
       } catch (err) {
         console.error('Layout auth check error:', err)
@@ -94,11 +93,11 @@ export default function AdminLayout({
 
   return (
     <div className="flex min-h-screen">
-      <AdminSidebar profile={profile} />
+      <CoachSidebar profile={profile} />
       <main className="flex-1 overflow-auto bg-slate-50">
         <div className="border-b border-slate-200 bg-white px-8 py-4">
           <div className="flex items-center justify-end gap-4">
-            <SeasonSelector />
+            <CoachSeasonSelector />
             <ProfileMenu profile={profile} />
           </div>
         </div>

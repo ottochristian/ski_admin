@@ -15,6 +15,7 @@ interface ImageUploadProps {
   folder?: string
   maxSizeMB?: number
   accept?: string
+  label?: string
 }
 
 export function ImageUpload({
@@ -24,6 +25,7 @@ export function ImageUpload({
   folder = 'logos',
   maxSizeMB = 5,
   accept = 'image/*',
+  label,
 }: ImageUploadProps) {
   const { toast: showToast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -34,12 +36,17 @@ export function ImageUpload({
   // Sync preview with value prop when it changes from external source
   // (e.g., when loading existing data, but not during active upload)
   useEffect(() => {
-    // Only sync if we're not currently uploading
-    // This prevents the preview from reverting during upload
-    if (!isUploadingRef.current) {
-      setPreview(value || null)
+    // Always sync preview with value when value changes
+    // This ensures the preview updates immediately when a new image is uploaded
+    if (value) {
+      setPreview(value)
+      isUploadingRef.current = false
+    } else if (!uploading) {
+      // Only clear preview if we're not uploading and value is null
+      setPreview(null)
+      isUploadingRef.current = false
     }
-  }, [value])
+  }, [value, uploading])
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -97,26 +104,72 @@ export function ImageUpload({
         })
 
       if (uploadError) {
-        console.error('Upload error details:', {
-          message: uploadError.message,
+        // Better error serialization
+        const errorDetails = {
+          message: uploadError.message || 'Unknown error',
+          name: uploadError.name || 'Unknown',
           statusCode: (uploadError as any).statusCode,
+          status: (uploadError as any).status,
           error: uploadError,
-        })
+          errorString: String(uploadError),
+          errorJSON: JSON.stringify(uploadError, Object.getOwnPropertyNames(uploadError)),
+        }
         
-        // If bucket doesn't exist, try to create it (this might fail without admin access)
-        if (uploadError.message.includes('Bucket not found') || (uploadError as any).statusCode === '404') {
+        console.error('Upload error details:', errorDetails)
+        
+        // Check for specific error types
+        const errorMessage = uploadError.message || String(uploadError)
+        const errorLower = errorMessage.toLowerCase()
+        
+        // Check if bucket doesn't exist
+        if (
+          errorLower.includes('bucket not found') ||
+          errorLower.includes('does not exist') ||
+          (uploadError as any).statusCode === 404 ||
+          (uploadError as any).status === 404
+        ) {
           showToast({
             title: 'Storage bucket not found',
-            description: `Please create a bucket named "${bucket}" in Supabase Storage and make it public`,
+            description: `The bucket "${bucket}" doesn't exist. Please create it in Supabase Dashboard → Storage.`,
             variant: 'destructive',
           })
-        } else {
+        } 
+        // Check for permission/RLS errors
+        else if (
+          errorLower.includes('permission') ||
+          errorLower.includes('unauthorized') ||
+          errorLower.includes('forbidden') ||
+          (uploadError as any).statusCode === 403 ||
+          (uploadError as any).status === 403
+        ) {
           showToast({
-            title: 'Upload failed',
-            description: uploadError.message || 'Failed to upload image. Please check your Supabase Storage configuration.',
+            title: 'Permission denied',
+            description: `You don't have permission to upload to "${bucket}". Check bucket RLS policies in Supabase Dashboard.`,
             variant: 'destructive',
           })
         }
+        // Check for file too large
+        else if (
+          errorLower.includes('too large') ||
+          errorLower.includes('file size') ||
+          (uploadError as any).statusCode === 413 ||
+          (uploadError as any).status === 413
+        ) {
+          showToast({
+            title: 'File too large',
+            description: 'The file is too large. Please select a smaller image.',
+            variant: 'destructive',
+          })
+        }
+        // Generic error
+        else {
+          showToast({
+            title: 'Upload failed',
+            description: errorMessage || 'Failed to upload image. Check browser console for details.',
+            variant: 'destructive',
+          })
+        }
+        
         setPreview(null)
         onChange(null)
         return
@@ -144,8 +197,9 @@ export function ImageUpload({
       console.log('Image uploaded successfully, public URL:', publicUrl)
       console.log('Full URL path:', filePath)
       
-      // Update preview to show the uploaded image
+      // Update preview to show the uploaded image immediately
       setPreview(publicUrl)
+      isUploadingRef.current = false
       
       // Notify parent component
       onChange(publicUrl)
@@ -183,9 +237,11 @@ export function ImageUpload({
     }
   }
 
+  const displayLabel = label || (bucket === 'profile-images' ? 'Profile Picture' : 'Logo')
+
   return (
     <div className="space-y-2">
-      <Label>Logo</Label>
+      <Label>{displayLabel}</Label>
       <div className="flex items-start gap-4">
         {preview ? (
           <div className="relative">
@@ -220,7 +276,7 @@ export function ImageUpload({
             className="cursor-pointer"
           />
           <p className="text-xs text-muted-foreground">
-            Upload a logo image (max {maxSizeMB}MB). Supported formats: JPG, PNG, GIF, WebP
+            Upload an image (max {maxSizeMB}MB). Supported formats: JPG, PNG, GIF, WebP
           </p>
           {uploading && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">

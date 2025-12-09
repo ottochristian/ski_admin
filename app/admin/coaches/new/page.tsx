@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { useAdminClub } from '@/lib/use-admin-club'
-import { clubQuery, withClubData } from '@/lib/supabase-helpers'
 import {
   Card,
   CardContent,
@@ -24,6 +23,7 @@ export default function NewCoachPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -49,6 +49,7 @@ export default function NewCoachPage() {
     e.preventDefault()
     setSaving(true)
     setError(null)
+    setSuccess(null)
 
     if (!clubId) {
       setError('Club ID is required')
@@ -56,32 +57,62 @@ export default function NewCoachPage() {
       return
     }
 
-    try {
-      const { error: insertError } = await clubQuery(
-        supabase
-          .from('coaches')
-          .insert(
-            withClubData(
-              {
-                first_name: formData.firstName,
-                last_name: formData.lastName,
-                email: formData.email || null,
-                phone: formData.phone || null,
-              },
-              clubId
-            )
-          ),
-        clubId
-      )
+    if (!formData.email) {
+      setError('Email is required to send invitation')
+      setSaving(false)
+      return
+    }
 
-      if (insertError) {
-        throw insertError
+    try {
+      // Get auth token for API request
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session) {
+        setError('You must be logged in to invite coaches')
+        setSaving(false)
+        return
       }
 
-      router.push('/admin/coaches')
+      // Call the invite API route
+      const response = await fetch('/api/coaches/invite', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          phone: formData.phone || null,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send invitation')
+      }
+
+      setSuccess(data.message || `Invitation sent to ${formData.email}`)
+
+      // Clear form
+      setFormData({
+        firstName: '',
+        lastName: '',
+        email: '',
+        phone: '',
+      })
+
+      // Redirect after a short delay to show success message
+      setTimeout(() => {
+        router.push('/admin/coaches')
+      }, 2000)
     } catch (err) {
-      console.error('Error creating coach:', err)
-      setError(err instanceof Error ? err.message : 'Failed to create coach')
+      console.error('Error inviting coach:', err)
+      setError(err instanceof Error ? err.message : 'Failed to invite coach')
       setSaving(false)
     }
   }
@@ -110,14 +141,18 @@ export default function NewCoachPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Add Coach</h1>
-        <p className="text-muted-foreground">Add a new coach to your club</p>
+        <h1 className="text-3xl font-bold tracking-tight">Invite Coach</h1>
+        <p className="text-muted-foreground">
+          Send an invitation email to a new coach. They will receive a link to set their password and complete their profile.
+        </p>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Coach Information</CardTitle>
-          <CardDescription>Enter the coach's basic information</CardDescription>
+          <CardDescription>
+            Enter the coach's information. They will receive an email invitation to set up their account.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -146,7 +181,7 @@ export default function NewCoachPage() {
             </div>
 
             <div>
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">Email *</Label>
               <Input
                 id="email"
                 type="email"
@@ -154,7 +189,12 @@ export default function NewCoachPage() {
                 onChange={e =>
                   setFormData({ ...formData, email: e.target.value })
                 }
+                required
+                placeholder="coach@example.com"
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                An invitation email will be sent to this address
+              </p>
             </div>
 
             <div>
@@ -175,9 +215,15 @@ export default function NewCoachPage() {
               </div>
             )}
 
+            {success && (
+              <div className="rounded-md bg-green-50 dark:bg-green-950 p-3 text-sm text-green-800 dark:text-green-200">
+                {success}
+              </div>
+            )}
+
             <div className="flex gap-2">
               <Button type="submit" disabled={saving}>
-                {saving ? 'Creating...' : 'Create Coach'}
+                {saving ? 'Sending Invitation...' : 'Send Invitation'}
               </Button>
               <Button type="button" variant="outline" asChild>
                 <Link href="/admin/coaches">Cancel</Link>

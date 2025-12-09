@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
 import { useAdminClub } from '@/lib/use-admin-club'
 import { clubQuery } from '@/lib/supabase-helpers'
+import { AdminPageHeader } from '@/components/admin-page-header'
 
 interface Athlete {
   id: string
@@ -87,10 +88,10 @@ export default function AthletesPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Athletes</h1>
-          <p className="text-muted-foreground">Manage all registered athletes</p>
-        </div>
+        <AdminPageHeader
+          title="Athletes"
+          description="Manage all registered athletes"
+        />
         <Link href="/admin/athletes/new">
           <Button>
             <Plus className="h-4 w-4 mr-2" />

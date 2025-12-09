@@ -23,6 +23,7 @@ import { Profile } from '@/lib/types'
 import { useAdminClub } from '@/lib/use-admin-club'
 import { useAdminSeason } from '@/lib/use-admin-season'
 import { clubQuery } from '@/lib/supabase-helpers'
+import { AdminPageHeader } from '@/components/admin-page-header'
 
 interface DashboardStats {
   totalAthletes: number
@@ -226,12 +227,10 @@ export default function AdminDashboard() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">
-          Overview of your ski program operations
-        </p>
-      </div>
+      <AdminPageHeader
+        title="Dashboard"
+        description="Overview of your ski program operations"
+      />
 
       {/* Stats Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

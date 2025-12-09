@@ -33,17 +33,31 @@ export async function requireAuth(
 
     let supabase = await createServerSupabaseClient(request)
     
-    // If we have a Bearer token, use it to get the user
+    // If we have a Bearer token, verify it using admin client
     if (token) {
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.getUser(token)
+      try {
+        // Use admin client to verify the token (similar to system-admin route)
+        const { createClient } = require('@supabase/supabase-js')
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+        const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-      if (user && !error) {
-        return { user, supabase }
+        if (supabaseUrl && serviceRoleKey) {
+          const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey)
+          const {
+            data: { user },
+            error,
+          } = await supabaseAdmin.auth.getUser(token)
+
+          if (user && !error) {
+            // Return with the regular supabase client (not admin) for subsequent queries
+            return { user, supabase }
+          }
+        }
+        // If token verification fails, fall through to cookie-based auth
+      } catch (tokenError) {
+        console.error('Token verification error:', tokenError)
+        // Fall through to cookie-based auth
       }
-      // If token auth fails, fall through to cookie-based auth
     }
 
     // Try cookie-based authentication (default)
