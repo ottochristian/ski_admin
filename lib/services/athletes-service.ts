@@ -34,30 +34,37 @@ export class AthletesService extends BaseService {
 
   /**
    * Get athletes by household ID
-   * RLS ensures user can only access athletes in their household
+   * Handles both household_id (new) and family_id (legacy) automatically
+   * RLS ensures user can only access athletes in their household/family
    */
   async getAthletesByHousehold(householdId: string): Promise<QueryResult<any[]>> {
-    const result = await this.supabase
+    // Try household_id first (new structure)
+    let result = await this.supabase
       .from('athletes')
       .select('*')
       .eq('household_id', householdId)
       .order('first_name', { ascending: true })
 
+    // If no results, try family_id (legacy structure)
+    // This handles the case where householdId might actually be a family_id
+    if (!result.error && (!result.data || result.data.length === 0)) {
+      result = await this.supabase
+        .from('athletes')
+        .select('*')
+        .eq('family_id', householdId)
+        .order('first_name', { ascending: true })
+    }
+
     return handleSupabaseError(result)
   }
 
   /**
-   * Get athletes by family ID (legacy support)
-   * RLS ensures user can only access athletes in their family
+   * @deprecated Use getAthletesByHousehold() instead - it handles both household_id and family_id
+   * This method will be removed in a future version
    */
   async getAthletesByFamily(familyId: string): Promise<QueryResult<any[]>> {
-    const result = await this.supabase
-      .from('athletes')
-      .select('*')
-      .eq('family_id', familyId)
-      .order('first_name', { ascending: true })
-
-    return handleSupabaseError(result)
+    // Delegate to getAthletesByHousehold which handles both cases
+    return this.getAthletesByHousehold(familyId)
   }
 
   /**

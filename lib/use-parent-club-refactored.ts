@@ -7,7 +7,7 @@
 import { useRequireParent } from './auth-context'
 import { useClub } from './club-context'
 import { useParentHousehold } from './hooks/use-parent-household'
-import { useAthletesByHousehold, useAthletesByFamily } from './hooks/use-athletes'
+import { useAthletesByHousehold } from './hooks/use-athletes'
 
 export type Household = {
   id: string
@@ -37,7 +37,7 @@ export type Athlete = {
  * Hook for parent pages that:
  * 1. Uses useRequireParent() for authentication (no duplicate auth logic!)
  * 2. Uses useParentHousehold() to get household data
- * 3. Uses useAthletesByHousehold() or useAthletesByFamily() for athletes
+ * 3. Uses useAthletesByHousehold() for athletes (handles both household_id and family_id)
  * 4. Composes all together with useClub() for club context
  * 
  * PHASE 2: Simplified - no duplicate logic!
@@ -56,29 +56,16 @@ export function useParentClub() {
     error: householdError,
   } = useParentHousehold()
 
-  // Determine if using household_id or family_id (legacy)
-  // Legacy families have 'address' field but no 'address_line1'
-  // New households have 'address_line1' or neither field
+  // Get household ID (works for both households and legacy families)
+  // getAthletesByHousehold() handles both household_id and family_id automatically
   const householdId = householdData?.id || null
-  const hasAddressLine1 = householdData && 'address_line1' in householdData
-  const hasLegacyAddress = householdData && 'address' in householdData && householdData.address
-  const isLegacyFamily = householdData ? hasLegacyAddress && !hasAddressLine1 : false
-  const familyId = isLegacyFamily ? householdData?.id || null : null
 
   // Fetch athletes - React Query handles caching
-  // Only fetch if we have the appropriate ID
+  // getAthletesByHousehold() automatically handles both household_id and family_id
   const {
-    data: householdAthletes = [],
-    isLoading: athletesByHouseholdLoading,
-  } = useAthletesByHousehold(isLegacyFamily ? null : householdId)
-
-  const {
-    data: familyAthletes = [],
-    isLoading: athletesByFamilyLoading,
-  } = useAthletesByFamily(isLegacyFamily ? familyId : null)
-
-  // Use appropriate athletes list based on whether we're using household or family
-  const athletes = isLegacyFamily ? familyAthletes : householdAthletes
+    data: athletes = [],
+    isLoading: athletesLoading,
+  } = useAthletesByHousehold(householdId)
 
   // Resolve club ID
   const clubId = club?.id || profile?.club_id || householdData?.club_id || null
@@ -105,7 +92,7 @@ export function useParentClub() {
   const mappedAthletes: Athlete[] = athletes.map((athlete: any) => ({
     id: athlete.id,
     household_id: athlete.household_id || null,
-    family_id: athlete.family_id || null,
+    family_id: athlete.family_id || null, // Keep for backward compatibility
     first_name: athlete.first_name,
     last_name: athlete.last_name,
     date_of_birth: athlete.date_of_birth || null,
@@ -115,8 +102,7 @@ export function useParentClub() {
     authLoading ||
     clubLoading ||
     householdLoading ||
-    athletesByHouseholdLoading ||
-    athletesByFamilyLoading
+    athletesLoading
 
   const error = householdError ? householdError.message : null
 
