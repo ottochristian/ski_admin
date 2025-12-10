@@ -39,12 +39,12 @@
 - `household-guardians-service.ts` ✨ NEW
 
 ### React Query Hooks Created
-- `use-athletes.ts` (with `useAthletesByHousehold`, `useAthletesByFamily`)
+- `use-athletes.ts` (with `useAthletesByHousehold` - handles both household_id and family_id)
 - `use-coaches.ts`
 - `use-registrations.ts`
 - `use-programs.ts`
 - `use-sub-programs.ts`
-- `use-season.ts` (queries & mutations - all season hooks in one file)
+- `use-season.ts` (queries & mutations consolidated - all season hooks in one file)
 - `use-households.ts`
 - `use-orders.ts`
 - `use-parent-household.ts` ✨ NEW
@@ -144,6 +144,13 @@ export default function MyPage() {
 1. ✅ **Infinite loop in registrations page** - Fixed useEffect dependencies
 2. ✅ **4 additional potential infinite loops** - Fixed proactively
 3. ✅ **Type safety improvements** - Better TypeScript types
+
+## 🧹 Technical Debt Removed
+
+1. ✅ **Deprecated `useAthletesByFamily()`** - Consolidated into `useAthletesByHousehold()` which handles both cases
+2. ✅ **Consolidated `use-seasons.ts`** - Merged mutations into `use-season.ts` for single source of truth
+3. ✅ **Removed ~15 lines** of conditional logic from `useParentClub`
+4. ✅ **Consistent hook patterns** - All hooks follow same structure (queries + mutations together)
 
 ---
 
