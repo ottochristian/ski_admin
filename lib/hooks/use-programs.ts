@@ -17,7 +17,7 @@ export function usePrograms(
     queryKey: ['programs', seasonId, includeSubPrograms],
     queryFn: async () => {
       // RLS automatically filters by club - no manual filtering needed!
-      const result = await programsService.getProgramsByClub(
+      const result = await programsService.getPrograms(
         seasonId,
         includeSubPrograms
       )

@@ -17,6 +17,17 @@ export class ProgramsService extends BaseService {
    * @param seasonId - Optional season filter
    * @param includeSubPrograms - Whether to include nested sub_programs
    */
+  async getPrograms(
+    seasonId?: string,
+    includeSubPrograms = false
+  ): Promise<QueryResult<any[]>> {
+    // Note: Alias method name for backward compatibility
+    return this.getProgramsByClub(seasonId, includeSubPrograms)
+  }
+
+  /**
+   * @deprecated Use getPrograms() instead
+   */
   async getProgramsByClub(
     seasonId?: string,
     includeSubPrograms = false
@@ -54,6 +65,35 @@ export class ProgramsService extends BaseService {
     const result = await query.order('name', { ascending: true })
 
     return handleSupabaseError(result)
+  }
+
+  /**
+   * Count active programs
+   * RLS automatically filters by club
+   */
+  async countActivePrograms(seasonId?: string): Promise<QueryResult<number>> {
+    let query = this.supabase
+      .from('programs')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'ACTIVE')
+
+    if (seasonId) {
+      query = query.eq('season_id', seasonId)
+    }
+
+    const result = await query
+
+    if (result.error) {
+      return {
+        data: null,
+        error: new Error(result.error.message || 'Failed to count programs'),
+      }
+    }
+
+    return {
+      data: result.count || 0,
+      error: null,
+    }
   }
 
   /**

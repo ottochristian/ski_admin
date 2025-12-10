@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import {
   Card,
@@ -18,10 +17,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { useAdminClub } from '@/lib/use-admin-club'
-import { useAdminSeason } from '@/lib/use-admin-season'
-import { clubQuery } from '@/lib/supabase-helpers'
+import { useRequireAdmin } from '@/lib/auth-context'
+import { useSeason } from '@/lib/hooks/use-season'
+import { useRegistrations } from '@/lib/hooks/use-registrations'
 import { AdminPageHeader } from '@/components/admin-page-header'
+import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 
 interface Registration {
   id: string
@@ -49,265 +49,204 @@ interface Registration {
 }
 
 export default function RegistrationsPage() {
-  const router = useRouter()
-  const { clubId, loading: authLoading, error: authError } = useAdminClub()
-  const { selectedSeason, loading: seasonLoading } = useAdminSeason()
-  const [registrations, setRegistrations] = useState<Registration[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { profile, loading: authLoading } = useRequireAdmin()
+  const { selectedSeason, loading: seasonLoading } = useSeason()
+  const [parentEmailMap, setParentEmailMap] = useState<Map<string, string>>(new Map())
 
+  // PHASE 2: RLS handles club filtering automatically - no clubQuery needed!
+  const {
+    data: registrationsData = [],
+    isLoading,
+    error,
+    refetch,
+  } = useRegistrations(selectedSeason?.id)
+
+  // Load parent emails when registrations change
   useEffect(() => {
-    async function loadRegistrations() {
-      if (authLoading || seasonLoading || !clubId || !selectedSeason) {
+    async function loadParentEmails() {
+      if (registrationsData.length === 0) {
+        setParentEmailMap(new Map())
         return
       }
 
-      if (authError) {
-        setError(authError)
-        setLoading(false)
-        return
+      // Extract unique household_ids and family_ids
+      const householdIds = new Set<string>()
+      const familyIds = new Set<string>()
+      registrationsData.forEach((reg: any) => {
+        if (reg.athletes?.household_id) {
+          householdIds.add(reg.athletes.household_id)
+        }
+        if (reg.athletes?.family_id) {
+          familyIds.add(reg.athletes.family_id)
+        }
+      })
+
+      const emailMap = new Map<string, string>()
+
+      // Fetch parent emails for households via household_guardians -> profiles
+      if (householdIds.size > 0) {
+        const { data: householdGuardians } = await supabase
+          .from('household_guardians')
+          .select('household_id, profiles:user_id(email)')
+          .in('household_id', Array.from(householdIds))
+
+        if (householdGuardians) {
+          householdGuardians.forEach((hg: any) => {
+            if (hg.household_id && hg.profiles?.email) {
+              emailMap.set(hg.household_id, hg.profiles.email)
+            }
+          })
+        }
       }
 
-      try {
-        // Fetch registrations with related data, filtered by club and season
-        const { data, error: registrationsError } = await clubQuery(
-          supabase
-            .from('registrations')
-            .select(
-              `
-            id,
-            athlete_id,
-            sub_program_id,
-            status,
-            payment_status,
-            amount_paid,
-            created_at,
-            season_id,
-            athletes(id, first_name, last_name, date_of_birth, household_id, family_id),
-            sub_programs(name, programs(name))
-          `
-            )
-            .eq('season_id', selectedSeason.id)
-            .order('created_at', { ascending: false }),
-          clubId
-        )
+      // Fetch parent emails for families via profiles
+      if (familyIds.size > 0) {
+        const { data: families } = await supabase
+          .from('families')
+          .select('id, profile_id')
+          .in('id', Array.from(familyIds))
 
-        if (registrationsError) {
-          setError(registrationsError.message)
-          setLoading(false)
-          return
-        }
+        if (families) {
+          const profileIds = families.map((f: any) => f.profile_id).filter(Boolean)
+          if (profileIds.length > 0) {
+            const { data: profiles } = await supabase
+              .from('profiles')
+              .select('id, email')
+              .in('id', profileIds)
 
-        // Extract unique household_ids and family_ids
-        const householdIds = new Set<string>()
-        const familyIds = new Set<string>()
-        ;(data || []).forEach((reg: any) => {
-          if (reg.athletes?.household_id) {
-            householdIds.add(reg.athletes.household_id)
-          }
-          if (reg.athletes?.family_id) {
-            familyIds.add(reg.athletes.family_id)
-          }
-        })
-
-        // Fetch parent emails for households via household_guardians -> profiles
-        const parentEmailMap = new Map<string, string>()
-        
-        if (householdIds.size > 0) {
-          const { data: householdGuardians } = await supabase
-            .from('household_guardians')
-            .select('household_id, profiles:user_id(email)')
-            .in('household_id', Array.from(householdIds))
-
-          if (householdGuardians) {
-            householdGuardians.forEach((hg: any) => {
-              if (hg.household_id && hg.profiles?.email) {
-                parentEmailMap.set(hg.household_id, hg.profiles.email)
-              }
-            })
-          }
-        }
-
-        // Fetch parent emails for families via profiles
-        if (familyIds.size > 0) {
-          const { data: families } = await supabase
-            .from('families')
-            .select('id, profile_id')
-            .in('id', Array.from(familyIds))
-
-          if (families) {
-            const profileIds = families.map((f: any) => f.profile_id).filter(Boolean)
-            if (profileIds.length > 0) {
-              const { data: profiles } = await supabase
-                .from('profiles')
-                .select('id, email')
-                .in('id', profileIds)
-
-              if (profiles) {
-                const profileEmailMap = new Map(profiles.map((p: any) => [p.id, p.email]))
-                families.forEach((f: any) => {
-                  if (f.id && f.profile_id && profileEmailMap.has(f.profile_id)) {
-                    parentEmailMap.set(f.id, profileEmailMap.get(f.profile_id)!)
-                  }
-                })
-              }
+            if (profiles) {
+              const profileEmailMap = new Map(profiles.map((p: any) => [p.id, p.email]))
+              families.forEach((f: any) => {
+                if (f.id && f.profile_id && profileEmailMap.has(f.profile_id)) {
+                  emailMap.set(f.id, profileEmailMap.get(f.profile_id)!)
+                }
+              })
             }
           }
         }
-
-        // Transform data to match our interface and add parent emails
-        const transformedData = (data || []).map((reg: any) => {
-          const athlete = reg.athletes
-          const householdId = athlete?.household_id
-          const familyId = athlete?.family_id
-          const parentEmail = (householdId && parentEmailMap.get(householdId)) ||
-                             (familyId && parentEmailMap.get(familyId)) ||
-                             null
-
-          return {
-            ...reg,
-            athlete: {
-              id: athlete?.id,
-              first_name: athlete?.first_name,
-              last_name: athlete?.last_name,
-              date_of_birth: athlete?.date_of_birth,
-            },
-            program: reg.sub_programs?.programs || { name: reg.sub_programs?.name || 'Unknown' },
-            parent: parentEmail ? { email: parentEmail } : null,
-          }
-        })
-
-        setRegistrations(transformedData)
-      } catch (err) {
-        console.error('Error loading registrations:', err)
-        setError('Failed to load registrations')
-      } finally {
-        setLoading(false)
       }
+
+      setParentEmailMap(emailMap)
     }
 
-    loadRegistrations()
-  }, [router, clubId, authLoading, authError, selectedSeason, seasonLoading])
+    loadParentEmails()
+  }, [registrationsData])
 
-  if (authLoading || loading) {
+  // Transform data to match our interface and add parent emails
+  const registrations: Registration[] = registrationsData.map((reg: any) => {
+    const athlete = reg.athletes
+    const householdId = athlete?.household_id
+    const familyId = athlete?.family_id
+    const parentEmail = (householdId && parentEmailMap.get(householdId)) ||
+                       (familyId && parentEmailMap.get(familyId)) ||
+                       null
+
+    return {
+      ...reg,
+      athlete: {
+        id: athlete?.id,
+        first_name: athlete?.first_name,
+        last_name: athlete?.last_name,
+        date_of_birth: athlete?.date_of_birth,
+      },
+      program: reg.sub_programs?.programs || { name: reg.sub_programs?.name || 'Unknown' },
+      parent: parentEmail ? { email: parentEmail } : null,
+    }
+  })
+
+  // Show loading state
+  if (authLoading || seasonLoading || isLoading) {
+    return <InlineLoading message="Loading registrations…" />
+  }
+
+  // Show error state
+  if (error) {
+    return <ErrorState error={error} onRetry={() => refetch()} />
+  }
+
+  // Show message if no season exists
+  if (!selectedSeason) {
     return (
       <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">Loading registrations…</p>
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle>No Season Selected</CardTitle>
+            <CardDescription>
+              Please select a season to view registrations.
+            </CardDescription>
+          </CardHeader>
+        </Card>
       </div>
     )
   }
 
-  if (error || authError) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-destructive">{error}</p>
-      </div>
-    )
-  }
-
-  const getStatusColor = (status: string) => {
-    const normalizedStatus = status?.toLowerCase() || ''
-    switch (normalizedStatus) {
-      case 'confirmed':
-      case 'processed':
-      case 'active':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-      case 'pending':
-        return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
-      case 'unpaid':
-      case 'late':
-      case 'cancelled':
-      case 'failed':
-        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
-    }
-  }
-
-  const getPaymentStatusColor = (status: string) => {
-    const normalizedStatus = status?.toLowerCase() || ''
-    switch (normalizedStatus) {
-      case 'paid':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-      case 'pending':
-      case 'processing':
-        return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
-      case 'unpaid':
-      case 'late':
-      case 'failed':
-        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
-    }
+  // Auth check ensures profile exists
+  if (!profile) {
+    return null
   }
 
   return (
     <div className="flex flex-col gap-6">
       <AdminPageHeader
         title="Registrations"
-        description="View and manage all program registrations"
+        description={`All registrations for ${selectedSeason.name}`}
       />
 
       <Card>
         <CardHeader>
           <CardTitle>All Registrations</CardTitle>
-          <CardDescription>Complete list of athlete registrations</CardDescription>
+          <CardDescription>
+            Complete list of registrations for the selected season
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {registrations.length > 0 ? (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Athlete</TableHead>
-                    <TableHead>Program</TableHead>
-                    <TableHead>Parent Email</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Payment</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Athlete</TableHead>
+                  <TableHead>Program</TableHead>
+                  <TableHead>Parent Email</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Payment Status</TableHead>
+                  <TableHead>Amount Paid</TableHead>
+                  <TableHead>Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {registrations.map((reg) => (
+                  <TableRow key={reg.id}>
+                    <TableCell>
+                      {reg.athlete?.first_name} {reg.athlete?.last_name}
+                      {reg.athlete?.date_of_birth && (
+                        <div className="text-xs text-muted-foreground">
+                          DOB: {new Date(reg.athlete.date_of_birth).toLocaleDateString()}
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell>{reg.program?.name || 'Unknown'}</TableCell>
+                    <TableCell>{reg.parent?.email || 'N/A'}</TableCell>
+                    <TableCell>
+                      <span className="inline-flex rounded-full bg-blue-100 px-2 py-1 text-xs font-medium capitalize text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                        {reg.status}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="inline-flex rounded-full bg-green-100 px-2 py-1 text-xs font-medium capitalize text-green-800 dark:bg-green-900 dark:text-green-200">
+                        {reg.payment_status}
+                      </span>
+                    </TableCell>
+                    <TableCell>${Number(reg.amount_paid || 0).toFixed(2)}</TableCell>
+                    <TableCell>
+                      {new Date(reg.created_at).toLocaleDateString()}
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {registrations.map((reg) => (
-                    <TableRow key={reg.id}>
-                      <TableCell className="font-medium">
-                        {reg.athlete?.first_name} {reg.athlete?.last_name}
-                      </TableCell>
-                      <TableCell>{reg.program?.name}</TableCell>
-                      <TableCell>
-                        <span className="text-sm text-muted-foreground">
-                          {reg.parent?.email || '-'}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`inline-flex rounded-full px-2 py-1 text-xs font-medium capitalize ${getStatusColor(
-                            reg.status
-                          )}`}
-                        >
-                          {reg.status}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`inline-flex rounded-full px-2 py-1 text-xs font-medium capitalize ${getPaymentStatusColor(
-                            reg.payment_status
-                          )}`}
-                        >
-                          {reg.payment_status}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        ${Number(reg.amount_paid || 0).toFixed(2)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                ))}
+              </TableBody>
+            </Table>
           ) : (
-            <p className="py-8 text-center text-muted-foreground">
-              No registrations yet
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No registrations found for this season
             </p>
           )}
         </CardContent>
