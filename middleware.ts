@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
+/**
+ * Enhanced middleware with role-based route protection
+ * Handles authentication and authorization at the route level
+ */
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
@@ -12,10 +16,11 @@ export async function middleware(request: NextRequest) {
     '/signup',
     '/api/health',
     '/api/webhooks', // Webhooks need to be public (authenticated via signatures)
+    '/setup-password', // Password setup page
   ]
 
-  const isPublicRoute = publicRoutes.some((route) =>
-    pathname === route || pathname.startsWith(route)
+  const isPublicRoute = publicRoutes.some(
+    (route) => pathname === route || pathname.startsWith(route)
   )
 
   // Allow static assets and Next.js internals
@@ -58,32 +63,69 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Only check auth for protected routes (skip for public routes and static assets)
+  // Only check auth for protected routes
   if (!isPublicRoute) {
-    // Refresh session if expired (important for SSR)
+    // Get current user
     const {
       data: { user },
+      error: authError,
     } = await supabase.auth.getUser()
 
-    // Protect authenticated routes
-    const protectedRoutes = [
-      '/admin',
-      '/dashboard',
-      '/coach',
-      '/system-admin',
-      '/clubs', // Club routes need auth
-    ]
+    // Define role-based route patterns
+    const adminRoutes = ['/admin']
+    const systemAdminRoutes = ['/system-admin']
+    const coachRoutes = ['/coach']
+    const parentRoutes = ['/clubs']
 
-    const isProtectedRoute = protectedRoutes.some((route) =>
+    const isAdminRoute = adminRoutes.some((route) => pathname.startsWith(route))
+    const isSystemAdminRoute = systemAdminRoutes.some((route) =>
       pathname.startsWith(route)
     )
+    const isCoachRoute = coachRoutes.some((route) => pathname.startsWith(route))
+    const isParentRoute = parentRoutes.some((route) => pathname.startsWith(route))
 
+    const isProtectedRoute =
+      isAdminRoute || isSystemAdminRoute || isCoachRoute || isParentRoute
+
+    // If accessing a protected route, check authentication
     if (isProtectedRoute) {
-      if (!user) {
+      if (!user || authError) {
         // Redirect to login if not authenticated
         const loginUrl = new URL('/login', request.url)
         loginUrl.searchParams.set('redirect', pathname)
         return NextResponse.redirect(loginUrl)
+      }
+
+      // Get user profile to check role
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+      // Role-based access control
+      if (isSystemAdminRoute && profile?.role !== 'system_admin') {
+        // System admin routes - only system_admin role
+        const redirectUrl = new URL('/', request.url)
+        return NextResponse.redirect(redirectUrl)
+      }
+
+      if (isAdminRoute && profile?.role !== 'admin' && profile?.role !== 'system_admin') {
+        // Admin routes - admin or system_admin role
+        const redirectUrl = new URL('/', request.url)
+        return NextResponse.redirect(redirectUrl)
+      }
+
+      if (isCoachRoute && profile?.role !== 'coach') {
+        // Coach routes - coach role only
+        const redirectUrl = new URL('/', request.url)
+        return NextResponse.redirect(redirectUrl)
+      }
+
+      if (isParentRoute && profile?.role !== 'parent') {
+        // Parent routes - parent role only
+        const redirectUrl = new URL('/', request.url)
+        return NextResponse.redirect(redirectUrl)
       }
     }
   }
