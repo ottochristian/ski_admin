@@ -3,13 +3,21 @@ import { Program } from '../types'
 
 /**
  * Service for program-related database operations
+ * 
+ * PHASE 2: RLS-FIRST APPROACH
+ * - Removed manual club_id filtering - RLS handles it automatically
+ * - Queries rely on RLS policies to scope data by club
+ * - Simpler, more secure, less error-prone
  */
 export class ProgramsService extends BaseService {
   /**
-   * Get all programs for a club with optional nested sub_programs
+   * Get all programs for the authenticated user's club
+   * RLS automatically filters by club - no manual filtering needed!
+   * 
+   * @param seasonId - Optional season filter
+   * @param includeSubPrograms - Whether to include nested sub_programs
    */
   async getProgramsByClub(
-    clubId: string,
     seasonId?: string,
     includeSubPrograms = false
   ): Promise<QueryResult<any[]>> {
@@ -37,8 +45,8 @@ export class ProgramsService extends BaseService {
       selectQuery = this.supabase.from('programs').select('*')
     }
 
-    let query = selectQuery.eq('club_id', clubId)
-
+    // Only filter by season if provided - RLS handles club filtering automatically
+    let query = selectQuery
     if (seasonId) {
       query = query.eq('season_id', seasonId)
     }
@@ -49,7 +57,8 @@ export class ProgramsService extends BaseService {
   }
 
   /**
-   * Get program by ID (with club check via RLS)
+   * Get program by ID
+   * RLS ensures user can only access programs in their club
    */
   async getProgramById(programId: string): Promise<QueryResult<Program>> {
     const result = await this.supabase
@@ -63,10 +72,11 @@ export class ProgramsService extends BaseService {
 
   /**
    * Create a new program
+   * Still need club_id for INSERT - RLS will verify user can insert to that club
    */
   async createProgram(data: {
     name: string
-    club_id: string
+    club_id: string  // Still required for INSERT
     season_id: string
     status: string
     description?: string
@@ -82,6 +92,7 @@ export class ProgramsService extends BaseService {
 
   /**
    * Update program
+   * RLS ensures user can only update programs in their club
    */
   async updateProgram(
     programId: string,
@@ -99,6 +110,7 @@ export class ProgramsService extends BaseService {
 
   /**
    * Delete program
+   * RLS ensures user can only delete programs in their club
    */
   async deleteProgram(programId: string): Promise<QueryResult<void>> {
     const result = await this.supabase

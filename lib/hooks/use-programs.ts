@@ -3,26 +3,27 @@ import { programsService } from '../services/programs-service'
 import { Program } from '../types'
 
 /**
- * React Query hook for fetching programs by club
+ * React Query hook for fetching programs
+ * PHASE 2: RLS handles club filtering automatically - no clubId needed!
+ * 
+ * @param seasonId - Optional season filter
+ * @param includeSubPrograms - Whether to include nested sub_programs
  */
 export function usePrograms(
-  clubId: string | null,
   seasonId?: string,
   includeSubPrograms = false
 ) {
   return useQuery({
-    queryKey: ['programs', clubId, seasonId, includeSubPrograms],
+    queryKey: ['programs', seasonId, includeSubPrograms],
     queryFn: async () => {
-      if (!clubId) throw new Error('Club ID is required')
+      // RLS automatically filters by club - no manual filtering needed!
       const result = await programsService.getProgramsByClub(
-        clubId,
         seasonId,
         includeSubPrograms
       )
       if (result.error) throw result.error
       return result.data || []
     },
-    enabled: !!clubId, // Only run query if clubId is provided
   })
 }
 
@@ -61,9 +62,9 @@ export function useCreateProgram() {
       return result.data!
     },
     onSuccess: (_, variables) => {
-      // Invalidate programs list for this club and season
+      // Invalidate programs list for this season (RLS handles club filtering)
       queryClient.invalidateQueries({
-        queryKey: ['programs', variables.club_id, variables.season_id],
+        queryKey: ['programs', variables.season_id],
       })
     },
   })

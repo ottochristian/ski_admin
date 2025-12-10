@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
@@ -14,11 +14,11 @@ import {
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus, Pencil, Trash2, Eye } from 'lucide-react'
-import { Profile } from '@/lib/types'
-import { useAdminClub } from '@/lib/use-admin-club'
+import { useRequireAdmin } from '@/lib/auth-context'
 import { useAdminSeason } from '@/lib/use-admin-season'
-import { clubQuery } from '@/lib/supabase-helpers'
+import { usePrograms } from '@/lib/hooks/use-programs'
 import { AdminPageHeader } from '@/components/admin-page-header'
+import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 
 type Program = {
   id: string
@@ -41,75 +41,30 @@ type ProgramWithSubPrograms = Program & {
 
 export default function ProgramsPage() {
   const router = useRouter()
-  const { clubId, profile, loading: authLoading, error: authError } = useAdminClub()
+  const { profile, loading: authLoading } = useRequireAdmin()
   const { selectedSeason, loading: seasonLoading } = useAdminSeason()
 
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [programs, setPrograms] = useState<ProgramWithSubPrograms[]>([])
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deletingSubProgramId, setDeletingSubProgramId] = useState<string | null>(null)
 
-  useEffect(() => {
-    async function load() {
-      if (authLoading || seasonLoading || !clubId || !selectedSeason) {
-        return
-      }
+  // PHASE 2: RLS handles club filtering automatically - no clubQuery needed!
+  // React Query handles loading, error, and caching
+  const {
+    data: allPrograms = [],
+    isLoading,
+    error,
+    refetch,
+  } = usePrograms(selectedSeason?.id, true) // Include sub_programs, RLS filters by club
 
-      if (authError) {
-        setError(authError)
-        setLoading(false)
-        return
-      }
-
-      setLoading(true)
-      setError(null)
-
-      // Load programs with their sub-programs filtered by club and season
-      const { data, error: programsError } = await clubQuery(
-        supabase
-          .from('programs')
-          .select(`
-            id, 
-            name, 
-            description, 
-            status, 
-            club_id,
-            season_id,
-            sub_programs (
-              id,
-              name,
-              description,
-              status,
-              program_id
-            )
-          `)
-          .eq('season_id', selectedSeason.id)
-          .order('name', { ascending: true }),
-        clubId
-      )
-
-      if (programsError) {
-        setError(programsError.message)
-      } else {
-        const allPrograms = (data || []) as any[]
-        // Only show ACTIVE programs (or rows with null status from before we added the enum)
-        const activePrograms = allPrograms
-          .filter(p => p.status === ProgramStatus.ACTIVE || p.status === null)
-          .map(program => ({
-            ...program,
-            sub_programs: (program.sub_programs || []).filter(
-              (sp: SubProgram) => sp.status === ProgramStatus.ACTIVE
-            )
-          })) as ProgramWithSubPrograms[]
-        setPrograms(activePrograms)
-      }
-
-      setLoading(false)
-    }
-
-    load()
-  }, [clubId, authLoading, authError, selectedSeason, seasonLoading])
+  // Filter to active programs only (matching original behavior)
+  const programs = allPrograms
+    .filter((p) => p.status === ProgramStatus.ACTIVE || p.status === null)
+    .map((program) => ({
+      ...program,
+      sub_programs: (program.sub_programs || []).filter(
+        (sp: SubProgram) => sp.status === ProgramStatus.ACTIVE
+      ),
+    })) as ProgramWithSubPrograms[]
 
   async function handleDelete(programId: string) {
     const confirmDelete = window.confirm(
@@ -119,7 +74,6 @@ export default function ProgramsPage() {
     if (!confirmDelete) return
 
     setDeletingId(programId)
-    setError(null)
 
     const { error } = await supabase.rpc('soft_delete_program', {
       program_id: programId,
@@ -127,10 +81,10 @@ export default function ProgramsPage() {
 
     if (error) {
       console.error('Error soft deleting program:', error)
-      setError(error.message)
+      alert(`Error deleting program: ${error.message}`)
     } else {
-      // Remove from local state so the UI updates immediately
-      setPrograms(prev => prev.filter(p => p.id !== programId))
+      // Refetch programs list - React Query will update automatically
+      refetch()
     }
 
     setDeletingId(null)
@@ -144,7 +98,6 @@ export default function ProgramsPage() {
     if (!confirmDelete) return
 
     setDeletingSubProgramId(subProgramId)
-    setError(null)
 
     const { error } = await supabase.rpc('soft_delete_sub_program', {
       sub_program_id: subProgramId,
@@ -152,54 +105,28 @@ export default function ProgramsPage() {
 
     if (error) {
       console.error('Error soft deleting sub-program:', error)
-      setError(error.message)
+      alert(`Error deleting sub-program: ${error.message}`)
     } else {
-      // Remove from local state so the UI updates immediately
-      setPrograms(prev =>
-        prev.map(program =>
-          program.id === programId
-            ? {
-                ...program,
-                sub_programs: program.sub_programs.filter(
-                  sp => sp.id !== subProgramId
-                ),
-              }
-            : program
-        )
-      )
+      // Refetch programs list - React Query will update automatically
+      refetch()
     }
 
     setDeletingSubProgramId(null)
   }
 
+  // Show loading state
+  if (authLoading || seasonLoading || isLoading) {
+    return <InlineLoading message="Loading programs…" />
+  }
+
+  // Show error state
+  if (error) {
+    return <ErrorState error={error} onRetry={() => refetch()} />
+  }
+
+  // Auth check ensures profile exists, but TypeScript needs this
   if (!profile) {
     return null
-  }
-
-  if (loading || authLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">Loading programs…</p>
-      </div>
-    )
-  }
-
-  if (error || authError) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle>Something went wrong</CardTitle>
-            <CardDescription>{error || authError}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="outline" onClick={() => window.location.reload()}>
-              Try again
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
   }
 
   return (
@@ -217,11 +144,6 @@ export default function ProgramsPage() {
         </Link>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-md p-4">
-          <p className="text-sm text-red-800">{error}</p>
-        </div>
-      )}
 
       <Card>
         <CardHeader>
