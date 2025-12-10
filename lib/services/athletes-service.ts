@@ -33,6 +33,34 @@ export class AthletesService extends BaseService {
   }
 
   /**
+   * Get athletes by household ID
+   * RLS ensures user can only access athletes in their household
+   */
+  async getAthletesByHousehold(householdId: string): Promise<QueryResult<any[]>> {
+    const result = await this.supabase
+      .from('athletes')
+      .select('*')
+      .eq('household_id', householdId)
+      .order('first_name', { ascending: true })
+
+    return handleSupabaseError(result)
+  }
+
+  /**
+   * Get athletes by family ID (legacy support)
+   * RLS ensures user can only access athletes in their family
+   */
+  async getAthletesByFamily(familyId: string): Promise<QueryResult<any[]>> {
+    const result = await this.supabase
+      .from('athletes')
+      .select('*')
+      .eq('family_id', familyId)
+      .order('first_name', { ascending: true })
+
+    return handleSupabaseError(result)
+  }
+
+  /**
    * Count athletes
    * RLS automatically filters by club
    */

@@ -18,6 +18,40 @@ export function useAthletes() {
 }
 
 /**
+ * React Query hook for fetching athletes by household
+ * PHASE 2: RLS handles club filtering automatically
+ */
+export function useAthletesByHousehold(householdId: string | null) {
+  return useQuery({
+    queryKey: ['athletes', 'household', householdId],
+    queryFn: async () => {
+      if (!householdId) throw new Error('Household ID is required')
+      const result = await athletesService.getAthletesByHousehold(householdId)
+      if (result.error) throw result.error
+      return result.data || []
+    },
+    enabled: !!householdId,
+  })
+}
+
+/**
+ * React Query hook for fetching athletes by family (legacy support)
+ * PHASE 2: RLS handles club filtering automatically
+ */
+export function useAthletesByFamily(familyId: string | null) {
+  return useQuery({
+    queryKey: ['athletes', 'family', familyId],
+    queryFn: async () => {
+      if (!familyId) throw new Error('Family ID is required')
+      const result = await athletesService.getAthletesByFamily(familyId)
+      if (result.error) throw result.error
+      return result.data || []
+    },
+    enabled: !!familyId,
+  })
+}
+
+/**
  * React Query hook for counting athletes
  */
 export function useAthletesCount() {
