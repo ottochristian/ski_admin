@@ -50,8 +50,10 @@ export class SubProgramsService extends BaseService {
     program_id: string
     club_id: string
     season_id?: string
-    description?: string
+    description?: string | null
     status?: string
+    registration_fee?: number | null
+    max_capacity?: number | null
   }): Promise<QueryResult<any>> {
     const result = await this.supabase
       .from('sub_programs')

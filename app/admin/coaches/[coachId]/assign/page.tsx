@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
-import { useAdminClub } from '@/lib/use-admin-club'
-import { useAdminSeason } from '@/lib/use-admin-season'
-import { clubQuery } from '@/lib/supabase-helpers'
+import { useRequireAdmin } from '@/lib/auth-context'
+import { useSeason } from '@/lib/hooks/use-season'
+import { useCoaches } from '@/lib/hooks/use-coaches'
+import { usePrograms } from '@/lib/hooks/use-programs'
+import { coachAssignmentsService } from '@/lib/services/coach-assignments-service'
 import {
   Card,
   CardContent,
@@ -16,9 +17,16 @@ import {
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
+import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 
 interface Program {
   id: string
@@ -59,105 +67,73 @@ export default function AssignCoachPage() {
   const params = useParams()
   const router = useRouter()
   const coachId = params.coachId as string
-  const { clubId, loading: authLoading, error: authError } = useAdminClub()
-  const { selectedSeason, loading: seasonLoading } = useAdminSeason()
+
+  const { profile, loading: authLoading } = useRequireAdmin()
+  const { selectedSeason, loading: seasonLoading } = useSeason()
+
+  // PHASE 2: RLS handles club filtering automatically
+  const {
+    data: coaches = [],
+    isLoading: coachesLoading,
+    error: coachesError,
+  } = useCoaches(true) // Include assignments
+
+  const {
+    data: programs = [],
+    isLoading: programsLoading,
+    error: programsError,
+  } = usePrograms(selectedSeason?.id, true) // Include sub-programs
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [coach, setCoach] = useState<{ first_name?: string; last_name?: string } | null>(null)
-  const [programs, setPrograms] = useState<Program[]>([])
-  const [existingAssignments, setExistingAssignments] = useState<CoachAssignment[]>([])
-  const [selectedAssignments, setSelectedAssignments] = useState<Set<string>>(new Set())
+  const [existingAssignments, setExistingAssignments] = useState<
+    CoachAssignment[]
+  >([])
+  const [selectedAssignments, setSelectedAssignments] = useState<Set<string>>(
+    new Set()
+  )
   // Map of assignment key -> role
-  const [assignmentRoles, setAssignmentRoles] = useState<Map<string, CoachRole>>(new Map())
+  const [assignmentRoles, setAssignmentRoles] = useState<
+    Map<string, CoachRole>
+  >(new Map())
 
+  // Find the coach
+  const coach = coaches.find((c: any) => c.id === coachId)
+
+  // Load existing assignments
   useEffect(() => {
-    async function loadData() {
-      if (authLoading || seasonLoading || !clubId || !selectedSeason) {
-        return
-      }
-
-      if (authError) {
-        setError(authError)
-        setLoading(false)
+    async function loadAssignments() {
+      if (
+        authLoading ||
+        seasonLoading ||
+        coachesLoading ||
+        programsLoading ||
+        !selectedSeason ||
+        !coach
+      ) {
         return
       }
 
       try {
-        // Load coach info
-        const { data: coachData, error: coachError } = await clubQuery(
-          supabase
-            .from('coaches')
-            .select('first_name, last_name')
-            .eq('id', coachId)
-            .single(),
-          clubId
+        setLoading(true)
+        setError(null)
+
+        // PHASE 2: RLS handles club filtering automatically
+        const result = await coachAssignmentsService.getAssignmentsByCoach(
+          coachId,
+          selectedSeason.id
         )
 
-        if (coachError || !coachData) {
-          setError('Coach not found')
-          setLoading(false)
-          return
-        }
-
-        setCoach(coachData)
-
-        // Load programs with sub-programs and groups (hierarchical)
-        const { data: programsData, error: programsError } = await clubQuery(
-          supabase
-            .from('programs')
-            .select(`
-              id,
-              name,
-              sub_programs (
-                id,
-                name,
-                program_id,
-                groups (
-                  id,
-                  name,
-                  sub_program_id
-                )
-              )
-            `)
-            .order('name', { ascending: true }),
-          clubId
-        )
-
-        if (programsError) {
-          setError(programsError.message)
-          setLoading(false)
-          return
-        }
-
-        setPrograms(programsData || [])
-
-        // Load existing assignments for this coach
-        const { data: assignmentsData, error: assignmentsError } = await clubQuery(
-          supabase
-            .from('coach_assignments')
-            .select('id, program_id, sub_program_id, group_id, role')
-            .eq('coach_id', coachId)
-            .eq('season_id', selectedSeason.id),
-          clubId
-        )
-
-        if (assignmentsError) {
-          console.error('Error loading assignments:', {
-            error: assignmentsError,
-            message: assignmentsError.message,
-            details: assignmentsError.details,
-            hint: assignmentsError.hint,
-          })
-          // Don't block the UI if assignments fail to load - just start with empty assignments
+        if (result.error) {
+          console.error('Error loading assignments:', result.error)
           setExistingAssignments([])
         } else {
-          setExistingAssignments(assignmentsData || [])
+          setExistingAssignments(result.data || [])
           // Pre-select existing assignments and their roles
           const selected = new Set<string>()
           const roles = new Map<string, CoachRole>()
-          assignmentsData?.forEach((assignment: CoachAssignment) => {
+          ;(result.data || []).forEach((assignment: CoachAssignment) => {
             let key: string
             if (assignment.group_id) {
               key = `group_${assignment.group_id}`
@@ -169,21 +145,32 @@ export default function AssignCoachPage() {
               return
             }
             selected.add(key)
-            roles.set(key, (assignment.role || 'assistant_coach') as CoachRole)
+            roles.set(
+              key,
+              (assignment.role || 'assistant_coach') as CoachRole
+            )
           })
           setSelectedAssignments(selected)
           setAssignmentRoles(roles)
         }
       } catch (err) {
-        console.error('Error loading data:', err)
-        setError('Failed to load data')
+        console.error('Error loading assignments:', err)
+        setError('Failed to load assignments')
       } finally {
         setLoading(false)
       }
     }
 
-    loadData()
-  }, [clubId, coachId, authLoading, authError, selectedSeason, seasonLoading])
+    loadAssignments()
+  }, [
+    coachId,
+    selectedSeason?.id,
+    coach,
+    authLoading,
+    seasonLoading,
+    coachesLoading,
+    programsLoading,
+  ])
 
   const toggleAssignment = (key: string) => {
     const newSelected = new Set(selectedAssignments)
@@ -210,17 +197,21 @@ export default function AssignCoachPage() {
   }
 
   const getRoleLabel = (role: CoachRole): string => {
-    return COACH_ROLES.find(r => r.value === role)?.label || role
+    return COACH_ROLES.find((r) => r.value === role)?.label || role
   }
 
-  const getAssignmentDisplayName = (program: Program, subProgram?: SubProgram, group?: Group): string => {
+  const getAssignmentDisplayName = (
+    program: Program,
+    subProgram?: SubProgram,
+    group?: Group
+  ): string => {
     if (group) return group.name
     if (subProgram) return subProgram.name
     return program.name
   }
 
   async function handleSave() {
-    if (!clubId || !selectedSeason) {
+    if (!profile?.club_id || !selectedSeason) {
       setError('Missing club or season information')
       return
     }
@@ -229,38 +220,18 @@ export default function AssignCoachPage() {
     setError(null)
 
     try {
-      // Delete existing assignments for this coach/season
-      const { error: deleteError } = await clubQuery(
-        supabase
-          .from('coach_assignments')
-          .delete()
-          .eq('coach_id', coachId)
-          .eq('season_id', selectedSeason.id),
-        clubId
-      )
-
-      if (deleteError) {
-        throw deleteError
-      }
-
-      // Create new assignments from selected items
+      // Build assignments array
       const assignmentsToCreate: Array<{
-        coach_id: string
-        club_id: string
-        season_id: string
         program_id?: string
         sub_program_id?: string
         group_id?: string
-        role: CoachRole
+        role: string
       }> = []
 
       selectedAssignments.forEach((key) => {
         const [type, id] = key.split('_')
         const role = assignmentRoles.get(key) || 'assistant_coach'
         const assignment: any = {
-          coach_id: coachId,
-          club_id: clubId,
-          season_id: selectedSeason.id,
           role,
         }
 
@@ -275,140 +246,213 @@ export default function AssignCoachPage() {
         assignmentsToCreate.push(assignment)
       })
 
-      if (assignmentsToCreate.length > 0) {
-        const { error: insertError } = await clubQuery(
-          supabase.from('coach_assignments').insert(assignmentsToCreate),
-          clubId
-        )
+      // PHASE 2: RLS ensures user can only manage assignments in their club
+      const result = await coachAssignmentsService.saveAssignments(
+        coachId,
+        selectedSeason.id,
+        profile.club_id,
+        assignmentsToCreate
+      )
 
-        if (insertError) {
-          throw insertError
-        }
+      if (result.error) {
+        throw result.error
       }
 
       router.push('/admin/coaches')
     } catch (err) {
       console.error('Error saving assignments:', err)
-      setError(err instanceof Error ? err.message : 'Failed to save assignments')
+      setError(
+        err instanceof Error ? err.message : 'Failed to save assignments'
+      )
       setSaving(false)
     }
   }
 
-  if (authLoading || seasonLoading || loading) {
+  const isLoading =
+    authLoading ||
+    seasonLoading ||
+    coachesLoading ||
+    programsLoading ||
+    loading
+
+  // Show loading state
+  if (isLoading) {
+    return <InlineLoading message="Loading coach assignments…" />
+  }
+
+  // Show error state
+  if (coachesError || programsError) {
+    return (
+      <ErrorState
+        error={coachesError || programsError}
+        onRetry={() => router.refresh()}
+      />
+    )
+  }
+
+  // Show message if coach not found
+  if (!coach) {
     return (
       <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">Loading...</p>
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle>Coach Not Found</CardTitle>
+            <CardDescription>
+              The coach you're looking for doesn't exist or you don't have
+              access to them.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" onClick={() => router.push('/admin/coaches')}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Coaches
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
-  if (error || authError) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="text-center">
-          <p className="text-destructive mb-4">{error || authError}</p>
-          <Button asChild variant="outline">
-            <Link href="/admin/coaches">Back to Coaches</Link>
-          </Button>
-        </div>
-      </div>
-    )
+  // Auth check ensures profile exists
+  if (!profile || !selectedSeason) {
+    return null
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/admin/coaches">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
+      <div>
+        <Button
+          variant="ghost"
+          onClick={() => router.push('/admin/coaches')}
+          className="mb-4"
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Coaches
         </Button>
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Assign Coach: {coach?.first_name} {coach?.last_name}
-          </h1>
-          <p className="text-muted-foreground">
-            Select programs, sub-programs, or groups for {selectedSeason?.name}
-          </p>
-        </div>
+        <h1 className="text-3xl font-bold">
+          Assign {coach.first_name} {coach.last_name}
+        </h1>
+        <p className="text-muted-foreground">
+          Assign this coach to programs, sub-programs, or groups for{' '}
+          {selectedSeason.name}
+        </p>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-md p-4">
+          <p className="text-sm text-red-800">{error}</p>
+        </div>
+      )}
 
       <Card>
         <CardHeader>
-          <CardTitle>Assignments</CardTitle>
+          <CardTitle>Select Assignments</CardTitle>
           <CardDescription>
-            Check the boxes to assign this coach to programs, sub-programs, or groups.
-            Select the role (Head Coach, Assistant Coach, or Substitute Coach) for each assignment.
-            You can assign at any level - program-wide, sub-program specific, or group specific.
+            Choose which programs, sub-programs, or groups this coach will be
+            assigned to
           </CardDescription>
         </CardHeader>
         <CardContent>
           {programs.length === 0 ? (
-            <p className="py-8 text-center text-muted-foreground">
-              No programs found. Create programs first before assigning coaches.
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No programs available for the selected season
             </p>
           ) : (
             <div className="space-y-6">
-              {programs.map((program) => (
+              {programs.map((program: Program) => (
                 <div key={program.id} className="border rounded-lg p-4">
-                  <div className="flex items-center gap-3 mb-3">
-                    <Checkbox
-                      id={`program_${program.id}`}
-                      checked={selectedAssignments.has(`program_${program.id}`)}
-                      onCheckedChange={() => toggleAssignment(`program_${program.id}`)}
-                    />
-                    <Label
-                      htmlFor={`program_${program.id}`}
-                      className="text-lg font-semibold cursor-pointer flex-1"
-                    >
-                      {program.name}
-                    </Label>
-                    {selectedAssignments.has(`program_${program.id}`) && (
-                      <Select
-                        value={assignmentRoles.get(`program_${program.id}`) || 'assistant_coach'}
-                        onValueChange={(value) => setAssignmentRole(`program_${program.id}`, value as CoachRole)}
+                  <div className="space-y-3">
+                    {/* Program level */}
+                    <div className="flex items-center gap-3">
+                      <Checkbox
+                        id={`program_${program.id}`}
+                        checked={selectedAssignments.has(`program_${program.id}`)}
+                        onCheckedChange={() =>
+                          toggleAssignment(`program_${program.id}`)
+                        }
+                      />
+                      <Label
+                        htmlFor={`program_${program.id}`}
+                        className="font-semibold cursor-pointer"
                       >
-                        <SelectTrigger className="w-48">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {COACH_ROLES.map((role) => (
-                            <SelectItem key={role.value} value={role.value}>
-                              {role.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
+                        {program.name} (Program)
+                      </Label>
+                      {selectedAssignments.has(`program_${program.id}`) && (
+                        <Select
+                          value={
+                            assignmentRoles.get(`program_${program.id}`) ||
+                            'assistant_coach'
+                          }
+                          onValueChange={(value) =>
+                            setAssignmentRole(
+                              `program_${program.id}`,
+                              value as CoachRole
+                            )
+                          }
+                        >
+                          <SelectTrigger className="w-40">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {COACH_ROLES.map((role) => (
+                              <SelectItem key={role.value} value={role.value}>
+                                {role.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
 
-                      {program.sub_programs && program.sub_programs.length > 0 && (
-                    <div className="ml-6 space-y-3">
-                      {program.sub_programs.map((subProgram) => (
-                        <div key={subProgram.id} className="border-l-2 pl-4">
-                          <div className="flex items-center gap-3 mb-2">
+                    {/* Sub-programs */}
+                    {program.sub_programs &&
+                      program.sub_programs.length > 0 &&
+                      program.sub_programs.map((subProgram: SubProgram) => (
+                        <div
+                          key={subProgram.id}
+                          className="ml-8 space-y-2 border-l-2 pl-4"
+                        >
+                          <div className="flex items-center gap-3">
                             <Checkbox
                               id={`subprogram_${subProgram.id}`}
-                              checked={selectedAssignments.has(`subprogram_${subProgram.id}`)}
-                              onCheckedChange={() => toggleAssignment(`subprogram_${subProgram.id}`)}
+                              checked={selectedAssignments.has(
+                                `subprogram_${subProgram.id}`
+                              )}
+                              onCheckedChange={() =>
+                                toggleAssignment(`subprogram_${subProgram.id}`)
+                              }
                             />
                             <Label
                               htmlFor={`subprogram_${subProgram.id}`}
-                              className="font-medium cursor-pointer flex-1"
+                              className="cursor-pointer"
                             >
-                              {subProgram.name}
+                              {subProgram.name} (Sub-Program)
                             </Label>
-                            {selectedAssignments.has(`subprogram_${subProgram.id}`) && (
+                            {selectedAssignments.has(
+                              `subprogram_${subProgram.id}`
+                            ) && (
                               <Select
-                                value={assignmentRoles.get(`subprogram_${subProgram.id}`) || 'assistant_coach'}
-                                onValueChange={(value) => setAssignmentRole(`subprogram_${subProgram.id}`, value as CoachRole)}
+                                value={
+                                  assignmentRoles.get(
+                                    `subprogram_${subProgram.id}`
+                                  ) || 'assistant_coach'
+                                }
+                                onValueChange={(value) =>
+                                  setAssignmentRole(
+                                    `subprogram_${subProgram.id}`,
+                                    value as CoachRole
+                                  )
+                                }
                               >
-                                <SelectTrigger className="w-48">
+                                <SelectTrigger className="w-40">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {COACH_ROLES.map((role) => (
-                                    <SelectItem key={role.value} value={role.value}>
+                                    <SelectItem
+                                      key={role.value}
+                                      value={role.value}
+                                    >
                                       {role.label}
                                     </SelectItem>
                                   ))}
@@ -417,46 +461,64 @@ export default function AssignCoachPage() {
                             )}
                           </div>
 
-                          {subProgram.groups && subProgram.groups.length > 0 && (
-                            <div className="ml-6 space-y-2">
-                              {subProgram.groups.map((group) => (
-                                <div key={group.id} className="flex items-center gap-3">
-                                  <Checkbox
-                                    id={`group_${group.id}`}
-                                    checked={selectedAssignments.has(`group_${group.id}`)}
-                                    onCheckedChange={() => toggleAssignment(`group_${group.id}`)}
-                                  />
-                                  <Label
-                                    htmlFor={`group_${group.id}`}
-                                    className="text-sm cursor-pointer flex-1"
-                                  >
-                                    {group.name}
-                                  </Label>
-                                  {selectedAssignments.has(`group_${group.id}`) && (
-                                    <Select
-                                      value={assignmentRoles.get(`group_${group.id}`) || 'assistant_coach'}
-                                      onValueChange={(value) => setAssignmentRole(`group_${group.id}`, value as CoachRole)}
-                                    >
-                                      <SelectTrigger className="w-48">
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {COACH_ROLES.map((role) => (
-                                          <SelectItem key={role.value} value={role.value}>
-                                            {role.label}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
+                          {/* Groups */}
+                          {subProgram.groups &&
+                            subProgram.groups.length > 0 &&
+                            subProgram.groups.map((group: Group) => (
+                              <div
+                                key={group.id}
+                                className="ml-8 flex items-center gap-3"
+                              >
+                                <Checkbox
+                                  id={`group_${group.id}`}
+                                  checked={selectedAssignments.has(
+                                    `group_${group.id}`
                                   )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
+                                  onCheckedChange={() =>
+                                    toggleAssignment(`group_${group.id}`)
+                                  }
+                                />
+                                <Label
+                                  htmlFor={`group_${group.id}`}
+                                  className="cursor-pointer text-sm"
+                                >
+                                  {group.name} (Group)
+                                </Label>
+                                {selectedAssignments.has(
+                                  `group_${group.id}`
+                                ) && (
+                                  <Select
+                                    value={
+                                      assignmentRoles.get(`group_${group.id}`) ||
+                                      'assistant_coach'
+                                    }
+                                    onValueChange={(value) =>
+                                      setAssignmentRole(
+                                        `group_${group.id}`,
+                                        value as CoachRole
+                                      )
+                                    }
+                                  >
+                                    <SelectTrigger className="w-40">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {COACH_ROLES.map((role) => (
+                                        <SelectItem
+                                          key={role.value}
+                                          value={role.value}
+                                        >
+                                          {role.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                )}
+                              </div>
+                            ))}
                         </div>
                       ))}
-                    </div>
-                  )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -464,18 +526,12 @@ export default function AssignCoachPage() {
         </CardContent>
       </Card>
 
-      {error && (
-        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
-      <div className="flex gap-2">
+      <div className="flex gap-2 justify-end">
+        <Button variant="outline" onClick={() => router.push('/admin/coaches')}>
+          Cancel
+        </Button>
         <Button onClick={handleSave} disabled={saving}>
           {saving ? 'Saving...' : 'Save Assignments'}
-        </Button>
-        <Button variant="outline" asChild>
-          <Link href="/admin/coaches">Cancel</Link>
         </Button>
       </div>
     </div>
