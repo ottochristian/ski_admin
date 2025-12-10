@@ -50,13 +50,14 @@ export default function ProgramsPage() {
   const { selectedSeason, loading: seasonLoading } = useAdminSeason()
   const { club } = useClub()
 
-  // React Query hook for programs - handles loading, error, and caching automatically
+  // React Query hook for programs - RLS handles club filtering automatically!
+  // No need to pass clubId - much simpler!
   const {
     data: programs = [],
     isLoading,
     error,
     refetch,
-  } = usePrograms(club?.id || null, selectedSeason?.id, true) // Include sub_programs
+  } = usePrograms(selectedSeason?.id, true) // Include sub_programs
 
   // Filter to active programs only (matching original behavior)
   const activePrograms = programs

@@ -1,9 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
 import {
   Card,
   CardContent,
@@ -13,17 +10,10 @@ import {
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
-import { useAdminClub } from '@/lib/use-admin-club'
-import { clubQuery } from '@/lib/supabase-helpers'
+import { useRequireAdmin } from '@/lib/auth-context'
+import { useCoaches } from '@/lib/hooks/use-coaches'
 import { AdminPageHeader } from '@/components/admin-page-header'
-
-interface Coach {
-  id: string
-  first_name?: string
-  last_name?: string
-  email?: string
-  specialization?: string
-}
+import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 
 interface CoachAssignment {
   id: string
@@ -56,105 +46,36 @@ const getAssignmentDisplayName = (assignment: CoachAssignment): string => {
 }
 
 export default function CoachesPage() {
-  const router = useRouter()
-  const { clubId, loading: authLoading, error: authError } = useAdminClub()
-  const [coaches, setCoaches] = useState<Coach[]>([])
-  const [assignmentsMap, setAssignmentsMap] = useState<Map<string, CoachAssignment[]>>(new Map())
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { profile, loading: authLoading } = useRequireAdmin()
 
-  useEffect(() => {
-    async function loadCoaches() {
-      if (authLoading || !clubId) {
-        return
-      }
+  // PHASE 2: RLS handles club filtering automatically - no clubQuery needed!
+  // Include assignments in the query
+  const {
+    data: coaches = [],
+    isLoading,
+    error,
+    refetch,
+  } = useCoaches(true) // Include assignments
 
-      if (authError) {
-        setError(authError)
-        setLoading(false)
-        return
-      }
+  // Transform data to match expected format
+  const coachesWithAssignments = coaches.map((coach: any) => ({
+    ...coach,
+    assignments: coach.coach_assignments || [],
+  }))
 
-      try {
-        const { data, error: coachesError } = await clubQuery(
-          supabase
-            .from('coaches')
-            .select('*')
-            .order('first_name', { ascending: true }),
-          clubId
-        )
-
-        if (coachesError) {
-          setError(coachesError.message)
-        } else {
-          setCoaches(data || [])
-          
-          // Load assignments for all coaches
-          if (data && data.length > 0) {
-            const coachIds = data.map((c: Coach) => c.id)
-            const { data: assignmentsData, error: assignmentsError } = await clubQuery(
-              supabase
-                .from('coach_assignments')
-                .select(`
-                  id,
-                  coach_id,
-                  program_id,
-                  sub_program_id,
-                  group_id,
-                  role,
-                  programs (name),
-                  sub_programs (name),
-                  groups (name)
-                `)
-                .in('coach_id', coachIds),
-              clubId
-            )
-
-            if (assignmentsError) {
-              console.error('Error loading coach assignments:', {
-                error: assignmentsError,
-                message: assignmentsError.message,
-                details: assignmentsError.details,
-                hint: assignmentsError.hint,
-              })
-              // Don't block the UI - just show coaches without assignments
-              setAssignmentsMap(new Map())
-            } else {
-              // Group assignments by coach_id
-              const assignmentsByCoach = new Map<string, CoachAssignment[]>()
-              assignmentsData?.forEach((assignment: CoachAssignment & { coach_id: string }) => {
-                const existing = assignmentsByCoach.get(assignment.coach_id) || []
-                assignmentsByCoach.set(assignment.coach_id, [...existing, assignment])
-              })
-              setAssignmentsMap(assignmentsByCoach)
-            }
-          }
-        }
-      } catch (err) {
-        console.error('Error loading coaches:', err)
-        setError('Failed to load coaches')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadCoaches()
-  }, [router, clubId, authLoading, authError])
-
-  if (authLoading || loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">Loading coaches…</p>
-      </div>
-    )
+  // Show loading state
+  if (authLoading || isLoading) {
+    return <InlineLoading message="Loading coaches…" />
   }
 
-  if (error || authError) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-destructive">{error}</p>
-      </div>
-    )
+  // Show error state
+  if (error) {
+    return <ErrorState error={error} onRetry={() => refetch()} />
+  }
+
+  // Auth check ensures profile exists
+  if (!profile) {
+    return null
   }
 
   return (
@@ -178,10 +99,10 @@ export default function CoachesPage() {
           <CardDescription>Complete list of coaches in the system</CardDescription>
         </CardHeader>
         <CardContent>
-          {coaches.length > 0 ? (
+          {coachesWithAssignments.length > 0 ? (
             <div className="space-y-4">
-              {coaches.map((coach) => {
-                const assignments = assignmentsMap.get(coach.id) || []
+              {coachesWithAssignments.map((coach) => {
+                const assignments = coach.assignments || []
                 return (
                   <div
                     key={coach.id}
@@ -201,7 +122,7 @@ export default function CoachesPage() {
                       )}
                       {assignments.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1">
-                          {assignments.slice(0, 3).map((assignment) => {
+                          {assignments.slice(0, 3).map((assignment: CoachAssignment) => {
                             const displayName = getAssignmentDisplayName(assignment)
                             const isHeadCoach = assignment.role === 'head_coach'
                             const isSubstitute = assignment.role === 'substitute_coach'

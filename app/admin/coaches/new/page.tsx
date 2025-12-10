@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
-import { useAdminClub } from '@/lib/use-admin-club'
+import { useRequireAdmin } from '@/lib/auth-context'
 import {
   Card,
   CardContent,
@@ -15,12 +15,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import Link from 'next/link'
+import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 
 export default function NewCoachPage() {
   const router = useRouter()
-  const { clubId, loading: authLoading, error: authError } = useAdminClub()
+  const { profile, loading: authLoading } = useRequireAdmin()
 
-  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -31,27 +31,13 @@ export default function NewCoachPage() {
     phone: '',
   })
 
-  useEffect(() => {
-    if (authLoading) {
-      return
-    }
-
-    if (authError) {
-      setError(authError)
-      setLoading(false)
-      return
-    }
-
-    setLoading(false)
-  }, [authLoading, authError])
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
     setError(null)
     setSuccess(null)
 
-    if (!clubId) {
+    if (!profile?.club_id) {
       setError('Club ID is required')
       setSaving(false)
       return
@@ -97,86 +83,84 @@ export default function NewCoachPage() {
       }
 
       setSuccess(data.message || `Invitation sent to ${formData.email}`)
+      setFormData({ firstName: '', lastName: '', email: '', phone: '' })
 
-      // Clear form
-      setFormData({
-        firstName: '',
-        lastName: '',
-        email: '',
-        phone: '',
-      })
-
-      // Redirect after a short delay to show success message
+      // Redirect after 2 seconds
       setTimeout(() => {
         router.push('/admin/coaches')
       }, 2000)
     } catch (err) {
       console.error('Error inviting coach:', err)
-      setError(err instanceof Error ? err.message : 'Failed to invite coach')
+      setError(err instanceof Error ? err.message : 'Failed to send invitation')
       setSaving(false)
     }
   }
 
-  if (authLoading || loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">Loading...</p>
-      </div>
-    )
+  // Show loading state
+  if (authLoading) {
+    return <InlineLoading message="Loading…" />
   }
 
-  if (error || authError) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="text-center">
-          <p className="text-destructive mb-4">{error || authError}</p>
-          <Button asChild variant="outline">
-            <Link href="/admin/coaches">Back to Coaches</Link>
-          </Button>
-        </div>
-      </div>
-    )
+  // Auth check ensures profile exists
+  if (!profile) {
+    return null
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Invite Coach</h1>
-        <p className="text-muted-foreground">
-          Send an invitation email to a new coach. They will receive a link to set their password and complete their profile.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Invite Coach</h1>
+          <p className="text-muted-foreground">
+            Send an invitation email to a new coach
+          </p>
+        </div>
+        <Link href="/admin/coaches">
+          <Button variant="outline">Back to Coaches</Button>
+        </Link>
       </div>
 
-      <Card>
+      <Card className="max-w-xl">
         <CardHeader>
           <CardTitle>Coach Information</CardTitle>
           <CardDescription>
-            Enter the coach's information. They will receive an email invitation to set up their account.
+            Enter the coach's details. They will receive an email invitation to
+            create their account.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                <p className="text-sm text-red-800">{error}</p>
+              </div>
+            )}
+
+            {success && (
+              <div className="bg-green-50 border border-green-200 rounded-md p-4">
+                <p className="text-sm text-green-800">{success}</p>
+              </div>
+            )}
+
             <div>
-              <Label htmlFor="firstName">First Name *</Label>
+              <Label htmlFor="firstName">First Name</Label>
               <Input
                 id="firstName"
                 value={formData.firstName}
-                onChange={e =>
+                onChange={(e) =>
                   setFormData({ ...formData, firstName: e.target.value })
                 }
-                required
               />
             </div>
 
             <div>
-              <Label htmlFor="lastName">Last Name *</Label>
+              <Label htmlFor="lastName">Last Name</Label>
               <Input
                 id="lastName"
                 value={formData.lastName}
-                onChange={e =>
+                onChange={(e) =>
                   setFormData({ ...formData, lastName: e.target.value })
                 }
-                required
               />
             </div>
 
@@ -185,16 +169,12 @@ export default function NewCoachPage() {
               <Input
                 id="email"
                 type="email"
+                required
                 value={formData.email}
-                onChange={e =>
+                onChange={(e) =>
                   setFormData({ ...formData, email: e.target.value })
                 }
-                required
-                placeholder="coach@example.com"
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                An invitation email will be sent to this address
-              </p>
             </div>
 
             <div>
@@ -203,30 +183,22 @@ export default function NewCoachPage() {
                 id="phone"
                 type="tel"
                 value={formData.phone}
-                onChange={e =>
+                onChange={(e) =>
                   setFormData({ ...formData, phone: e.target.value })
                 }
               />
             </div>
 
-            {error && (
-              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                {error}
-              </div>
-            )}
-
-            {success && (
-              <div className="rounded-md bg-green-50 dark:bg-green-950 p-3 text-sm text-green-800 dark:text-green-200">
-                {success}
-              </div>
-            )}
-
             <div className="flex gap-2">
               <Button type="submit" disabled={saving}>
-                {saving ? 'Sending Invitation...' : 'Send Invitation'}
+                {saving ? 'Sending…' : 'Send Invitation'}
               </Button>
-              <Button type="button" variant="outline" asChild>
-                <Link href="/admin/coaches">Cancel</Link>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => router.push('/admin/coaches')}
+              >
+                Cancel
               </Button>
             </div>
           </form>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
@@ -13,11 +13,12 @@ import {
   CardContent,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus, Pencil, Trash2, ArrowLeft } from 'lucide-react'
-import { Profile } from '@/lib/types'
-import { useAdminClub } from '@/lib/use-admin-club'
-import { useAdminSeason } from '@/lib/use-admin-season'
-import { clubQuery } from '@/lib/supabase-helpers'
+import { Pencil, Trash2, ArrowLeft } from 'lucide-react'
+import { useRequireAdmin } from '@/lib/auth-context'
+import { useSeason } from '@/lib/hooks/use-season'
+import { usePrograms } from '@/lib/hooks/use-programs'
+import { useSubProgramsByProgram } from '@/lib/hooks/use-sub-programs'
+import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 
 type Program = {
   id: string
@@ -38,79 +39,36 @@ export default function SubProgramsPage() {
   const programId =
     Array.isArray(rawProgramId) ? rawProgramId[0] : rawProgramId
 
-  const { clubId, profile, loading: authLoading, error: authError } = useAdminClub()
-  const { selectedSeason, loading: seasonLoading } = useAdminSeason()
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [program, setProgram] = useState<Program | null>(null)
-  const [subPrograms, setSubPrograms] = useState<SubProgram[]>([])
+  const { profile, loading: authLoading } = useRequireAdmin()
+  const { selectedSeason, loading: seasonLoading } = useSeason()
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  useEffect(() => {
-    async function load() {
-      // 🚧 Guard against bad URLs like /admin/programs/undefined/sub-programs
-      if (!programId || programId === 'undefined') {
-        console.error('Invalid programId in route:', programId)
-        setLoading(false)
-        router.push('/admin/programs')
-        return
-      }
+  // Guard against invalid programId
+  if (!programId || programId === 'undefined') {
+    router.push('/admin/programs')
+    return null
+  }
 
-      if (authLoading || seasonLoading || !clubId || !selectedSeason) {
-        return
-      }
+  // PHASE 2: RLS handles club filtering automatically
+  const { data: allPrograms = [], isLoading: programsLoading } = usePrograms(
+    selectedSeason?.id
+  )
+  const {
+    data: subPrograms = [],
+    isLoading: subProgramsLoading,
+    error: subProgramsError,
+    refetch: refetchSubPrograms,
+  } = useSubProgramsByProgram(programId, selectedSeason?.id)
 
-      if (authError) {
-        setError(authError)
-        setLoading(false)
-        return
-      }
+  // Find the program
+  const program = allPrograms.find((p: any) => p.id === programId) as
+    | Program
+    | undefined
 
-      setLoading(true)
-      setError(null)
-
-      // Fetch parent program (for header) - verify it belongs to this club and season
-      const { data: programData, error: programError } = await clubQuery(
-        supabase
-          .from('programs')
-          .select('id, name, season_id')
-          .eq('id', programId)
-          .eq('season_id', selectedSeason.id)
-          .single(),
-        clubId
-      )
-
-      if (programError || !programData) {
-        setError(programError?.message ?? 'Program not found for the selected season')
-        setLoading(false)
-        return
-      }
-
-      setProgram(programData as Program)
-
-      // Load ACTIVE sub-programs for this program - filtered by club and season
-      const { data, error: subProgramsError } = await clubQuery(
-        supabase
-          .from('sub_programs')
-          .select('id, name, description, status, season_id')
-          .eq('program_id', programId)
-          .eq('season_id', selectedSeason.id)
-          .eq('status', ProgramStatus.ACTIVE)
-          .order('name', { ascending: true }),
-        clubId
-      )
-
-      if (subProgramsError) {
-        setError(subProgramsError.message)
-      } else {
-        setSubPrograms((data || []) as SubProgram[])
-      }
-
-      setLoading(false)
-    }
-
-    load()
-  }, [router, programId, clubId, authLoading, authError, selectedSeason, seasonLoading])
+  // Filter to active sub-programs only
+  const activeSubPrograms = subPrograms.filter(
+    (sp: any) => sp.status === ProgramStatus.ACTIVE
+  ) as SubProgram[]
 
   async function handleDelete(subProgramId: string) {
     const confirmDelete = window.confirm(
@@ -120,7 +78,6 @@ export default function SubProgramsPage() {
     if (!confirmDelete) return
 
     setDeletingId(subProgramId)
-    setError(null)
 
     const { error } = await supabase.rpc('soft_delete_sub_program', {
       sub_program_id: subProgramId,
@@ -128,33 +85,46 @@ export default function SubProgramsPage() {
 
     if (error) {
       console.error('Error soft deleting sub-program:', error)
-      setError(error.message)
+      alert(`Error deleting sub-program: ${error.message}`)
     } else {
-      setSubPrograms(prev => prev.filter(sp => sp.id !== subProgramId))
+      // Refetch sub-programs list
+      refetchSubPrograms()
     }
 
     setDeletingId(null)
   }
 
-  if (authLoading || loading) {
+  const isLoading =
+    authLoading || seasonLoading || programsLoading || subProgramsLoading
+
+  // Show loading state
+  if (isLoading) {
+    return <InlineLoading message="Loading sub-programs…" />
+  }
+
+  // Show error state
+  if (subProgramsError) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">Loading sub-programs…</p>
-      </div>
+      <ErrorState error={subProgramsError} onRetry={() => refetchSubPrograms()} />
     )
   }
 
-  if (error || authError) {
+  // Show message if program not found
+  if (!program) {
     return (
       <div className="flex items-center justify-center py-12">
         <Card className="max-w-md">
           <CardHeader>
-            <CardTitle>Something went wrong</CardTitle>
-            <CardDescription>{error || authError}</CardDescription>
+            <CardTitle>Program Not Found</CardTitle>
+            <CardDescription>
+              The program you're looking for doesn't exist or doesn't belong to
+              this season.
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button variant="outline" onClick={() => router.refresh()}>
-              Try again
+            <Button variant="outline" onClick={() => router.push('/admin/programs')}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Programs
             </Button>
           </CardContent>
         </Card>
@@ -162,7 +132,8 @@ export default function SubProgramsPage() {
     )
   }
 
-  if (!profile || !program) {
+  // Auth check ensures profile exists
+  if (!profile) {
     return null
   }
 
@@ -170,89 +141,72 @@ export default function SubProgramsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => router.push('/admin/programs')}
-              aria-label="Back to programs"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <h1 className="text-3xl font-bold tracking-tight">
-              {program.name} – Sub-programs
-            </h1>
-          </div>
+          <Button
+            variant="ghost"
+            onClick={() => router.push('/admin/programs')}
+            className="mb-2"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Programs
+          </Button>
+          <h1 className="text-2xl font-bold">{program.name} - Sub-Programs</h1>
           <p className="text-muted-foreground">
-            Manage sub-programs for this program. Deleting a sub-program
-            will also delete its groups (soft delete).
+            Manage sub-programs for this program
           </p>
         </div>
         <Link href={`/admin/programs/${programId}/sub-programs/new`}>
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Sub-program
-          </Button>
+          <Button>Add Sub-Program</Button>
         </Link>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Active Sub-programs</CardTitle>
+          <CardTitle>Active Sub-Programs</CardTitle>
           <CardDescription>
             All active sub-programs for this program
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {subPrograms.length === 0 ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              No active sub-programs yet. Click &quot;Add Sub-program&quot; to
-              create one.
-            </div>
-          ) : (
+          {activeSubPrograms.length > 0 ? (
             <div className="space-y-4">
-              {subPrograms.map(sp => (
+              {activeSubPrograms.map((subProgram) => (
                 <div
-                  key={sp.id}
-                  className="flex items-center justify-between border-b pb-4 last:border-0"
+                  key={subProgram.id}
+                  className="flex items-start justify-between border-b pb-4 last:border-0"
                 >
-                  <div>
-                    <h3 className="font-medium text-slate-900">{sp.name}</h3>
-                    {sp.description && (
-                      <p className="text-sm text-muted-foreground">
-                        {sp.description}
+                  <div className="flex-1">
+                    <h3 className="font-semibold">{subProgram.name}</h3>
+                    {subProgram.description && (
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {subProgram.description}
                       </p>
                     )}
                   </div>
                   <div className="flex gap-2">
-                    <Link
-                      href={`/admin/programs/sub-programs/${sp.id}/edit`}
-                    >
+                    <Link href={`/admin/sub-programs/${subProgram.id}/edit`}>
                       <Button variant="outline" size="sm">
-                        <Pencil className="h-4 w-4 mr-1" />
+                        <Pencil className="h-4 w-4 mr-2" />
                         Edit
-                      </Button>
-                    </Link>
-                    <Link
-                      href={`/admin/programs/sub-programs/${sp.id}/groups`}
-                    >
-                      <Button variant="outline" size="sm">
-                        Groups
                       </Button>
                     </Link>
                     <Button
                       variant="destructive"
                       size="sm"
-                      onClick={() => handleDelete(sp.id)}
-                      disabled={deletingId === sp.id}
+                      onClick={() => handleDelete(subProgram.id)}
+                      disabled={deletingId === subProgram.id}
                     >
-                      <Trash2 className="h-4 w-4 mr-1" />
-                      {deletingId === sp.id ? 'Deleting…' : 'Delete'}
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      {deletingId === subProgram.id ? 'Deleting...' : 'Delete'}
                     </Button>
                   </div>
                 </div>
               ))}
             </div>
+          ) : (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No active sub-programs yet. Click &quot;Add Sub-Program&quot; to
+              create one.
+            </p>
           )}
         </CardContent>
       </Card>

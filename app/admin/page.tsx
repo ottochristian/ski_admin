@@ -1,9 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
 import {
   Card,
   CardContent,
@@ -19,189 +17,66 @@ import {
   DollarSign,
   TrendingUp,
 } from 'lucide-react'
-import { Profile } from '@/lib/types'
-import { useAdminClub } from '@/lib/use-admin-club'
-import { useAdminSeason } from '@/lib/use-admin-season'
-import { clubQuery } from '@/lib/supabase-helpers'
+import { useRequireAdmin } from '@/lib/auth-context'
+import { useSeason } from '@/lib/hooks/use-season'
+import { useAthletesCount } from '@/lib/hooks/use-athletes'
+import { usePrograms } from '@/lib/hooks/use-programs'
+import {
+  useRegistrationsCount,
+  useTotalRevenue,
+  useRecentRegistrations,
+} from '@/lib/hooks/use-registrations'
 import { AdminPageHeader } from '@/components/admin-page-header'
-
-interface DashboardStats {
-  totalAthletes: number
-  activePrograms: number
-  totalRegistrations: number
-  totalRevenue: number
-  recentRegistrations: Array<{
-    id: string
-    status: string
-    athlete?: { first_name?: string; last_name?: string }
-    program?: { name: string }
-  }>
-}
+import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
+import { programsService } from '@/lib/services/programs-service'
 
 export default function AdminDashboard() {
   const router = useRouter()
-  const { clubId, profile, loading: authLoading, error: authError } = useAdminClub()
-  const { selectedSeason, loading: seasonLoading } = useAdminSeason()
-  const [stats, setStats] = useState<DashboardStats>({
-    totalAthletes: 0,
-    activePrograms: 0,
-    totalRegistrations: 0,
-    totalRevenue: 0,
-    recentRegistrations: [],
-  })
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { profile, loading: authLoading } = useRequireAdmin()
+  const { selectedSeason, loading: seasonLoading } = useSeason()
 
-  useEffect(() => {
-    async function loadDashboardStats() {
-      // Add debug logging
-      console.log('Dashboard loading check:', {
-        authLoading,
-        seasonLoading,
-        clubId,
-        selectedSeason: selectedSeason?.id,
-        authError,
-      })
+  // PHASE 2: RLS handles club filtering automatically - no clubQuery needed!
+  // React Query handles loading, error, and caching
+  const { data: totalAthletes = 0, isLoading: athletesLoading } = useAthletesCount()
+  
+  // Get programs count (filter by status and season)
+  const { data: allPrograms = [], isLoading: programsLoading } = usePrograms(selectedSeason?.id)
+  const programsCount = allPrograms.filter((p: any) => p.status === 'ACTIVE').length
 
-      if (authLoading || seasonLoading) {
-        console.log('Waiting for auth or season to load...')
-        return
-      }
+  const { data: totalRegistrations = 0, isLoading: registrationsLoading } =
+    useRegistrationsCount(selectedSeason?.id)
+  const { data: totalRevenue = 0, isLoading: revenueLoading } = useTotalRevenue(
+    selectedSeason?.id
+  )
+  const {
+    data: recentRegistrations = [],
+    isLoading: recentRegsLoading,
+  } = useRecentRegistrations(selectedSeason?.id || null, 5)
 
-      if (!clubId) {
-        console.log('No clubId - setting error')
-        setError('No club associated with your account. Please contact an administrator.')
-        setLoading(false)
-        return
-      }
+  // Transform recent registrations to match expected format
+  const transformedRecentRegs = recentRegistrations.map((reg: any) => ({
+    ...reg,
+    athlete: reg.athletes,
+    program: reg.sub_programs?.programs || { name: reg.sub_programs?.name || 'Unknown' },
+  }))
 
-      if (!selectedSeason) {
-        console.log('No selectedSeason - this might be the issue')
-        // Don't block forever - show error if no season exists
-        setError('No season found for this club. Please create a season first.')
-        setLoading(false)
-        return
-      }
-
-      if (authError) {
-        setError(authError)
-        setLoading(false)
-        return
-      }
-
-      try {
-        // Load all stats in parallel with club and season filtering
-        const [
-          { count: athletesCount },
-          { count: programsCount },
-          { count: registrationsCount },
-          { data: registrationsData },
-          { data: paymentData },
-        ] = await Promise.all([
-          clubQuery(
-            supabase.from('athletes').select('*', { count: 'exact', head: true }),
-            clubId
-          ),
-          clubQuery(
-            supabase
-              .from('programs')
-              .select('*', { count: 'exact', head: true })
-              .eq('status', 'ACTIVE')
-              .eq('season_id', selectedSeason.id),
-            clubId
-          ),
-          clubQuery(
-            supabase
-              .from('registrations')
-              .select('*', { count: 'exact', head: true })
-              .eq('season_id', selectedSeason.id),
-            clubId
-          ),
-          clubQuery(
-            supabase
-              .from('registrations')
-              .select(
-                `
-              id,
-              status,
-              athletes(first_name, last_name),
-              sub_programs(name, programs(name))
-            `
-              )
-              .eq('season_id', selectedSeason.id)
-              .order('created_at', { ascending: false })
-              .limit(5),
-            clubId
-          ),
-          clubQuery(
-            supabase
-              .from('registrations')
-              .select('amount_paid, status')
-              .eq('season_id', selectedSeason.id)
-              .eq('status', 'confirmed'), // Only count confirmed (paid) registrations
-            clubId
-          ),
-        ])
-
-        const totalRevenue =
-          paymentData?.reduce((sum: number, reg: any) => sum + Number(reg.amount_paid || 0), 0) || 0
-
-        const recentRegs = (registrationsData || []).map((reg: any) => ({
-          ...reg,
-          athlete: reg.athletes,
-          program: reg.sub_programs?.programs || { name: reg.sub_programs?.name || 'Unknown' },
-        }))
-
-        setStats({
-          totalAthletes: athletesCount || 0,
-          activePrograms: programsCount || 0,
-          totalRegistrations: registrationsCount || 0,
-          totalRevenue,
-          recentRegistrations: recentRegs,
-        })
-      } catch (err) {
-        console.error('Error loading dashboard stats:', err)
-        setError('Failed to load dashboard data')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadDashboardStats()
-  }, [router, clubId, authLoading, authError, selectedSeason?.id, seasonLoading])
+  const isLoading =
+    authLoading ||
+    seasonLoading ||
+    athletesLoading ||
+    programsLoading ||
+    registrationsLoading ||
+    revenueLoading ||
+    recentRegsLoading
 
   // Show loading state
-  if (authLoading || seasonLoading || loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="text-center">
-          <p className="text-muted-foreground">Loading dashboard…</p>
-          {!clubId && <p className="text-xs text-muted-foreground mt-2">Waiting for club...</p>}
-          {clubId && !selectedSeason && (
-            <p className="text-xs text-muted-foreground mt-2">Waiting for season...</p>
-          )}
-        </div>
-      </div>
-    )
+  if (isLoading) {
+    return <InlineLoading message="Loading dashboard…" />
   }
 
-  // Show error state
-  if (error || authError) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle>Something went wrong</CardTitle>
-            <CardDescription>{error || authError}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="outline" onClick={() => router.refresh()}>
-              Try again
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
+  // Auth check ensures profile exists
+  if (!profile) {
+    return null
   }
 
   // Show message if no season exists
@@ -240,7 +115,7 @@ export default function AdminDashboard() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalAthletes}</div>
+            <div className="text-2xl font-bold">{totalAthletes}</div>
           </CardContent>
         </Card>
 
@@ -252,7 +127,7 @@ export default function AdminDashboard() {
             <BookOpen className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.activePrograms}</div>
+            <div className="text-2xl font-bold">{programsCount}</div>
           </CardContent>
         </Card>
 
@@ -265,7 +140,7 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {stats.totalRegistrations}
+              {totalRegistrations}
             </div>
           </CardContent>
         </Card>
@@ -279,7 +154,7 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${stats.totalRevenue.toFixed(2)}
+              ${totalRevenue.toFixed(2)}
             </div>
           </CardContent>
         </Card>
@@ -347,9 +222,9 @@ export default function AdminDashboard() {
           <CardDescription>Latest athlete registrations</CardDescription>
         </CardHeader>
         <CardContent>
-          {stats.recentRegistrations.length > 0 ? (
+          {transformedRecentRegs.length > 0 ? (
             <div className="space-y-4">
-              {stats.recentRegistrations.map((reg) => (
+              {transformedRecentRegs.map((reg) => (
                 <div
                   key={reg.id}
                   className="flex items-center justify-between border-b pb-3 last:border-0"

@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
-import { useAdminClub } from '@/lib/use-admin-club'
-import { clubQuery, withClubData } from '@/lib/supabase-helpers'
+import { useRequireAdmin } from '@/lib/auth-context'
+import { useHouseholds } from '@/lib/hooks/use-households'
+import { athletesService } from '@/lib/services/athletes-service'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   Card,
   CardContent,
@@ -16,12 +18,20 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import Link from 'next/link'
+import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 
 export default function NewAthletePage() {
   const router = useRouter()
-  const { clubId, loading: authLoading, error: authError } = useAdminClub()
+  const queryClient = useQueryClient()
+  const { profile, loading: authLoading } = useRequireAdmin()
 
-  const [loading, setLoading] = useState(true)
+  // PHASE 2: RLS handles club filtering automatically
+  const {
+    data: households = [],
+    isLoading: householdsLoading,
+    error: householdsError,
+  } = useHouseholds()
+
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
@@ -29,57 +39,15 @@ export default function NewAthletePage() {
     lastName: '',
     dateOfBirth: '',
     gender: '',
-    householdId: '', // Admin can select household
+    householdId: '',
   })
-  const [households, setHouseholds] = useState<Array<{ id: string; name: string }>>([])
-
-  useEffect(() => {
-    if (authLoading || !clubId) {
-      return
-    }
-
-    if (authError) {
-      setError(authError)
-      setLoading(false)
-      return
-    }
-
-    async function loadHouseholds() {
-      try {
-        const { data, error: householdsError } = await clubQuery(
-          supabase
-            .from('households')
-            .select('id, primary_email')
-            .order('primary_email'),
-          clubId
-        )
-
-        if (householdsError) {
-          console.error('Error loading households:', householdsError)
-        } else {
-          setHouseholds(
-            (data || []).map((h: any) => ({
-              id: h.id,
-              name: h.primary_email || `Household ${h.id.slice(0, 8)}`,
-            }))
-          )
-        }
-      } catch (err) {
-        console.error('Error loading households:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadHouseholds()
-  }, [authLoading, authError, clubId])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
     setError(null)
 
-    if (!clubId) {
+    if (!profile?.club_id) {
       setError('Club ID is required')
       setSaving(false)
       return
@@ -92,97 +60,90 @@ export default function NewAthletePage() {
     }
 
     try {
-      const { error: insertError } = await clubQuery(
-        supabase
-          .from('athletes')
-          .insert(
-            withClubData(
-              {
-                household_id: formData.householdId,
-                first_name: formData.firstName,
-                last_name: formData.lastName,
-                date_of_birth: formData.dateOfBirth || null,
-                gender: formData.gender || null,
-              },
-              clubId
-            )
-          ),
-        clubId
-      )
+      // Get household to ensure it belongs to the club (RLS will enforce this)
+      const householdResult = await supabase
+        .from('households')
+        .select('id')
+        .eq('id', formData.householdId)
+        .single()
 
-      if (insertError) {
-        throw insertError
+      if (householdResult.error || !householdResult.data) {
+        setError('Household not found or access denied')
+        setSaving(false)
+        return
       }
 
+      // Create athlete - RLS ensures club_id is set correctly
+      const { error: insertError } = await supabase.from('athletes').insert({
+        first_name: formData.firstName,
+        last_name: formData.lastName,
+        date_of_birth: formData.dateOfBirth || null,
+        gender: formData.gender || null,
+        household_id: formData.householdId,
+        club_id: profile.club_id,
+      })
+
+      if (insertError) {
+        setError(insertError.message)
+        setSaving(false)
+        return
+      }
+
+      // Invalidate athletes query
+      queryClient.invalidateQueries({ queryKey: ['athletes'] })
+
+      // Redirect to athletes list
       router.push('/admin/athletes')
     } catch (err) {
       console.error('Error creating athlete:', err)
-      setError(err instanceof Error ? err.message : 'Failed to create athlete')
+      setError('Failed to create athlete')
       setSaving(false)
     }
   }
 
-  if (authLoading || loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">Loading...</p>
-      </div>
-    )
+  const isLoading = authLoading || householdsLoading
+
+  // Show loading state
+  if (isLoading) {
+    return <InlineLoading message="Loading households…" />
   }
 
-  if (error || authError) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="text-center">
-          <p className="text-destructive mb-4">{error || authError}</p>
-          <Button asChild variant="outline">
-            <Link href="/admin/athletes">Back to Athletes</Link>
-          </Button>
-        </div>
-      </div>
-    )
+  // Show error state
+  if (householdsError) {
+    return <ErrorState error={householdsError} onRetry={() => router.refresh()} />
+  }
+
+  // Auth check ensures profile exists
+  if (!profile) {
+    return null
   }
 
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Add Athlete</h1>
-        <p className="text-muted-foreground">Add a new athlete to a household</p>
+        <h1 className="text-3xl font-bold">Add New Athlete</h1>
+        <p className="text-muted-foreground">Create a new athlete profile</p>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Athlete Information</CardTitle>
-          <CardDescription>Enter the athlete's basic information</CardDescription>
+          <CardDescription>Enter the athlete's details</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label htmlFor="householdId">Household *</Label>
-              <select
-                id="householdId"
-                value={formData.householdId}
-                onChange={e =>
-                  setFormData({ ...formData, householdId: e.target.value })
-                }
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                required
-              >
-                <option value="">Select a household</option>
-                {households.map(household => (
-                  <option key={household.id} value={household.id}>
-                    {household.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                <p className="text-sm text-red-800">{error}</p>
+              </div>
+            )}
 
             <div>
               <Label htmlFor="firstName">First Name *</Label>
               <Input
                 id="firstName"
                 value={formData.firstName}
-                onChange={e =>
+                onChange={(e) =>
                   setFormData({ ...formData, firstName: e.target.value })
                 }
                 required
@@ -194,7 +155,7 @@ export default function NewAthletePage() {
               <Input
                 id="lastName"
                 value={formData.lastName}
-                onChange={e =>
+                onChange={(e) =>
                   setFormData({ ...formData, lastName: e.target.value })
                 }
                 required
@@ -207,7 +168,7 @@ export default function NewAthletePage() {
                 id="dateOfBirth"
                 type="date"
                 value={formData.dateOfBirth}
-                onChange={e =>
+                onChange={(e) =>
                   setFormData({ ...formData, dateOfBirth: e.target.value })
                 }
               />
@@ -215,33 +176,46 @@ export default function NewAthletePage() {
 
             <div>
               <Label htmlFor="gender">Gender</Label>
-              <select
+              <Input
                 id="gender"
                 value={formData.gender}
-                onChange={e =>
+                onChange={(e) =>
                   setFormData({ ...formData, gender: e.target.value })
                 }
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="">Select gender</option>
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-                <option value="other">Other</option>
-              </select>
+                placeholder="e.g., M, F, Other"
+              />
             </div>
 
-            {error && (
-              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                {error}
-              </div>
-            )}
+            <div>
+              <Label htmlFor="householdId">Household *</Label>
+              <select
+                id="householdId"
+                value={formData.householdId}
+                onChange={(e) =>
+                  setFormData({ ...formData, householdId: e.target.value })
+                }
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                required
+              >
+                <option value="">Select a household</option>
+                {households.map((h: any) => (
+                  <option key={h.id} value={h.id}>
+                    {h.primary_email || `Household ${h.id.slice(0, 8)}`}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             <div className="flex gap-2">
               <Button type="submit" disabled={saving}>
                 {saving ? 'Creating...' : 'Create Athlete'}
               </Button>
-              <Button type="button" variant="outline" asChild>
-                <Link href="/admin/athletes">Cancel</Link>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => router.push('/admin/athletes')}
+              >
+                Cancel
               </Button>
             </div>
           </form>

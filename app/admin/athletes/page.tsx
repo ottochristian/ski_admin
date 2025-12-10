@@ -1,9 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
 import {
   Card,
   CardContent,
@@ -13,9 +10,10 @@ import {
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
-import { useAdminClub } from '@/lib/use-admin-club'
-import { clubQuery } from '@/lib/supabase-helpers'
+import { useRequireAdmin } from '@/lib/auth-context'
+import { useAthletes } from '@/lib/hooks/use-athletes'
 import { AdminPageHeader } from '@/components/admin-page-header'
+import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 
 interface Athlete {
   id: string
@@ -26,63 +24,29 @@ interface Athlete {
 }
 
 export default function AthletesPage() {
-  const router = useRouter()
-  const { clubId, loading: authLoading, error: authError } = useAdminClub()
-  const [athletes, setAthletes] = useState<Athlete[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { profile, loading: authLoading } = useRequireAdmin()
 
-  useEffect(() => {
-    async function loadAthletes() {
-      if (authLoading || !clubId) {
-        return
-      }
+  // PHASE 2: RLS handles club filtering automatically - no clubQuery needed!
+  const {
+    data: athletes = [],
+    isLoading,
+    error,
+    refetch,
+  } = useAthletes()
 
-      if (authError) {
-        setError(authError)
-        setLoading(false)
-        return
-      }
-
-      try {
-        const { data, error: athletesError } = await clubQuery(
-          supabase
-            .from('athletes')
-            .select('*')
-            .order('first_name', { ascending: true }),
-          clubId
-        )
-
-        if (athletesError) {
-          setError(athletesError.message)
-        } else {
-          setAthletes(data || [])
-        }
-      } catch (err) {
-        console.error('Error loading athletes:', err)
-        setError('Failed to load athletes')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadAthletes()
-  }, [router, clubId, authLoading, authError])
-
-  if (authLoading || loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">Loading athletes…</p>
-      </div>
-    )
+  // Show loading state
+  if (authLoading || isLoading) {
+    return <InlineLoading message="Loading athletes…" />
   }
 
-  if (error || authError) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-destructive">{error}</p>
-      </div>
-    )
+  // Show error state
+  if (error) {
+    return <ErrorState error={error} onRetry={() => refetch()} />
+  }
+
+  // Auth check ensures profile exists
+  if (!profile) {
+    return null
   }
 
   return (

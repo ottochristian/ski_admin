@@ -2,10 +2,14 @@
 
 import { useEffect, useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
-import { useAdminClub } from '@/lib/use-admin-club'
-import { useAdminSeason, Season } from '@/lib/use-admin-season'
+import { useRequireAdmin } from '@/lib/auth-context'
+import {
+  useSeason,
+  useCreateSeason,
+  useUpdateSeason,
+  useDeleteSeason,
+} from '@/lib/hooks/use-season'
 import {
   Card,
   CardContent,
@@ -14,19 +18,22 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus, Pencil, Archive, CheckCircle2, Calendar, Copy } from 'lucide-react'
-import { clubQuery } from '@/lib/supabase-helpers'
+import { Plus, Archive, CheckCircle2, Calendar, Copy } from 'lucide-react'
 import { ProgramStatus } from '@/lib/programStatus'
 import { AdminPageHeader } from '@/components/admin-page-header'
+import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 
 export default function SeasonsPage() {
   const router = useRouter()
-  const { clubId, loading: authLoading, error: authError } = useAdminClub()
-  const { seasons, loading: seasonsLoading, error: seasonsError } = useAdminSeason()
-  const [loading, setLoading] = useState(false)
+  const { profile, loading: authLoading } = useRequireAdmin()
+  const { seasons, loading: seasonsLoading } = useSeason()
+
+  const createSeason = useCreateSeason()
+  const updateSeason = useUpdateSeason()
+  const deleteSeason = useDeleteSeason()
+
   const [error, setError] = useState<string | null>(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
   const [cloningSeasonId, setCloningSeasonId] = useState<string | null>(null)
 
   // Form state
@@ -36,176 +43,92 @@ export default function SeasonsPage() {
   const [isCurrent, setIsCurrent] = useState(false)
   const [status, setStatus] = useState<'draft' | 'active' | 'archived'>('draft')
 
-  useEffect(() => {
-    if (seasonsError) {
-      setError(seasonsError)
-    }
-  }, [seasonsError])
-
   async function handleCreate(e: FormEvent) {
     e.preventDefault()
 
-    if (!clubId) {
+    if (!profile?.club_id) {
       setError('No club associated with your account')
       return
     }
 
-    setLoading(true)
     setError(null)
 
     try {
-      // If setting as current, unset other current seasons first
-      if (isCurrent) {
-        await clubQuery(
-          supabase
-            .from('seasons')
-            .update({ is_current: false })
-            .eq('is_current', true),
-          clubId
-        )
-      }
+      await createSeason.mutateAsync({
+        name,
+        start_date: startDate,
+        end_date: endDate,
+        is_current: isCurrent,
+        status,
+        club_id: profile.club_id,
+      })
 
-      const { error: insertError } = await clubQuery(
-        supabase.from('seasons').insert([
-          {
-            name,
-            start_date: startDate,
-            end_date: endDate,
-            is_current: isCurrent,
-            status,
-            club_id: clubId,
-          },
-        ]),
-        clubId
-      )
-
-      if (insertError) {
-        setError(insertError.message)
-      } else {
-        // Reset form
-        setName('')
-        setStartDate('')
-        setEndDate('')
-        setIsCurrent(false)
-        setStatus('draft')
-        setShowCreateForm(false)
-        router.refresh()
-      }
+      // Reset form
+      setName('')
+      setStartDate('')
+      setEndDate('')
+      setIsCurrent(false)
+      setStatus('draft')
+      setShowCreateForm(false)
     } catch (err) {
       console.error('Error creating season:', err)
-      setError('Failed to create season')
-    } finally {
-      setLoading(false)
+      setError(err instanceof Error ? err.message : 'Failed to create season')
     }
   }
 
   async function handleSetCurrent(seasonId: string) {
-    if (!clubId) {
+    if (!profile?.club_id) {
       setError('No club associated with your account')
       return
     }
 
-    setLoading(true)
     setError(null)
 
     try {
-      // First, verify the season belongs to this club
-      const { data: seasonData, error: verifyError } = await clubQuery(
-        supabase
-          .from('seasons')
-          .select('id, name')
-          .eq('id', seasonId)
-          .single(),
-        clubId
-      )
+      await updateSeason.mutateAsync({
+        seasonId,
+        updates: { is_current: true },
+      })
 
-      if (verifyError || !seasonData) {
-        setError('Season not found or does not belong to your club')
-        setLoading(false)
-        return
+      // Force a full page refresh to clear cached season selection
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('selectedSeasonId')
       }
-
-      // Unset all current seasons for this club
-      const { error: unsetError } = await clubQuery(
-        supabase
-          .from('seasons')
-          .update({ is_current: false })
-          .eq('is_current', true),
-        clubId
-      )
-
-      if (unsetError) {
-        console.error('Error unsetting current seasons:', unsetError)
-        setError(`Failed to unset current seasons: ${unsetError.message}`)
-        setLoading(false)
-        return
-      }
-
-      // Set this one as current
-      const { error: updateError } = await clubQuery(
-        supabase
-          .from('seasons')
-          .update({ is_current: true })
-          .eq('id', seasonId),
-        clubId
-      )
-
-      if (updateError) {
-        console.error('Error setting current season:', updateError)
-        setError(`Failed to set current season: ${updateError.message}`)
-      } else {
-        // Success - refresh the page and clear cached season selection
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('selectedSeasonId')
-        }
-        // Use window.location to force a full page refresh
-        window.location.reload()
-      }
+      window.location.reload()
     } catch (err) {
       console.error('Error setting current season:', err)
-      setError(`Failed to set current season: ${err instanceof Error ? err.message : 'Unknown error'}`)
-    } finally {
-      setLoading(false)
+      setError(
+        err instanceof Error ? err.message : 'Failed to set current season'
+      )
     }
   }
 
   async function handleArchive(seasonId: string) {
-    if (!confirm('Are you sure you want to archive this season? This will hide it from most views.')) {
+    if (!confirm('Are you sure you want to archive this season?')) {
       return
     }
 
-    setLoading(true)
     setError(null)
 
     try {
-      const { error } = await clubQuery(
-        supabase
-          .from('seasons')
-          .update({ status: 'archived' })
-          .eq('id', seasonId),
-        clubId
-      )
-
-      if (error) {
-        setError(error.message)
-      } else {
-        router.refresh()
-      }
+      await updateSeason.mutateAsync({
+        seasonId,
+        updates: { status: 'archived' },
+      })
     } catch (err) {
       console.error('Error archiving season:', err)
-      setError('Failed to archive season')
-    } finally {
-      setLoading(false)
+      setError(err instanceof Error ? err.message : 'Failed to archive season')
     }
   }
 
+  // Clone season functionality (complex - keeps existing logic for now)
   async function handleCloneSeason(sourceSeasonId: string) {
-    if (!clubId) {
+    if (!profile?.club_id) {
       setError('No club associated with your account')
       return
     }
 
-    const sourceSeason = seasons.find(s => s.id === sourceSeasonId)
+    const sourceSeason = seasons.find((s) => s.id === sourceSeasonId)
     if (!sourceSeason) {
       setError('Source season not found')
       return
@@ -221,98 +144,92 @@ export default function SeasonsPage() {
     }
 
     setCloningSeasonId(sourceSeasonId)
-    setLoading(true)
     setError(null)
 
     try {
       // 1. Create new season
-      // Calculate dates: keep the same month/day as source, but adjust year
       const sourceStart = new Date(sourceSeason.start_date)
       const sourceEnd = new Date(sourceSeason.end_date)
       const currentYear = new Date().getFullYear()
-      
-      const newStartDate = new Date(currentYear, sourceStart.getMonth(), sourceStart.getDate())
-      const newEndDate = new Date(currentYear + 1, sourceEnd.getMonth(), sourceEnd.getDate())
 
-      const { data: newSeason, error: seasonError } = await clubQuery(
-        supabase
-          .from('seasons')
-          .insert([
-            {
-              name: newSeasonName,
-              start_date: newStartDate.toISOString().split('T')[0],
-              end_date: newEndDate.toISOString().split('T')[0],
-              is_current: false,
-              status: 'draft',
-              club_id: clubId,
-            },
-          ])
-          .select()
-          .single(),
-        clubId
+      const newStartDate = new Date(
+        currentYear,
+        sourceStart.getMonth(),
+        sourceStart.getDate()
       )
+      const newEndDate = new Date(
+        currentYear + 1,
+        sourceEnd.getMonth(),
+        sourceEnd.getDate()
+      )
+
+      // PHASE 2: Use seasonsService instead of clubQuery
+      const { data: newSeason, error: seasonError } = await supabase
+        .from('seasons')
+        .insert([
+          {
+            name: newSeasonName,
+            start_date: newStartDate.toISOString().split('T')[0],
+            end_date: newEndDate.toISOString().split('T')[0],
+            is_current: false,
+            status: 'draft',
+            club_id: profile.club_id,
+          },
+        ])
+        .select()
+        .single()
 
       if (seasonError || !newSeason) {
         setError(seasonError?.message || 'Failed to create new season')
-        setLoading(false)
         setCloningSeasonId(null)
         return
       }
 
-      // 2. Fetch all programs from source season with sub-programs and groups
-      const { data: sourcePrograms, error: programsError } = await clubQuery(
-        supabase
-          .from('programs')
-          .select(`
+      // 2. Fetch all programs from source season - RLS handles filtering
+      const { data: sourcePrograms, error: programsError } = await supabase
+        .from('programs')
+        .select(`
+          id,
+          name,
+          description,
+          status,
+          sub_programs (
             id,
             name,
             description,
             status,
-            sub_programs (
+            registration_fee,
+            max_capacity,
+            groups (
               id,
               name,
-              description,
-              status,
-              registration_fee,
-              max_capacity,
-              is_active,
-              groups (
-                id,
-                name,
-                status
-              )
+              status
             )
-          `)
-          .eq('season_id', sourceSeasonId),
-        clubId
-      )
+          )
+        `)
+        .eq('season_id', sourceSeasonId)
 
       if (programsError) {
         setError(`Failed to load programs: ${programsError.message}`)
-        setLoading(false)
         setCloningSeasonId(null)
         return
       }
 
-      // 3. Clone programs and sub-programs
+      // 3. Clone programs and sub-programs - RLS handles filtering
       for (const program of sourcePrograms || []) {
-        // Create new program
-        const { data: newProgram, error: programError } = await clubQuery(
-          supabase
-            .from('programs')
-            .insert([
-              {
-                name: program.name,
-                description: program.description,
-                status: ProgramStatus.INACTIVE, // Start as inactive so admin can review
-                season_id: newSeason.id,
-                club_id: clubId,
-              },
-            ])
-            .select()
-            .single(),
-          clubId
-        )
+        const { data: newProgram, error: programError } = await supabase
+          .from('programs')
+          .insert([
+            {
+              name: program.name,
+              description: program.description,
+              status: ProgramStatus.INACTIVE,
+              season_id: newSeason.id,
+              club_id: profile.club_id,
+            },
+          ])
+          .select()
+          .single()
 
         if (programError || !newProgram) {
           console.error('Error cloning program:', program.name, programError)
@@ -322,9 +239,8 @@ export default function SeasonsPage() {
         // Clone sub-programs and their groups
         if (program.sub_programs && program.sub_programs.length > 0) {
           for (const sp of program.sub_programs) {
-            // Create new sub-program
-            const { data: newSubProgram, error: subProgramError } = await clubQuery(
-              supabase
+            const { data: newSubProgram, error: subProgramError } =
+              await supabase
                 .from('sub_programs')
                 .insert([
                   {
@@ -334,94 +250,100 @@ export default function SeasonsPage() {
                     status: ProgramStatus.INACTIVE,
                     registration_fee: sp.registration_fee || null,
                     max_capacity: sp.max_capacity || null,
-                    is_active: false, // Start as inactive
                     season_id: newSeason.id,
-                    club_id: clubId,
+                    club_id: profile.club_id,
                   },
                 ])
                 .select()
-                .single(),
-              clubId
-            )
+                .single()
 
             if (subProgramError || !newSubProgram) {
-              console.error('Error cloning sub-program:', sp.name, subProgramError)
+              console.error(
+                'Error cloning sub-program:',
+                sp.name,
+                subProgramError
+              )
               continue
             }
 
-            // Clone groups for this sub-program
+            // Clone groups
             if (sp.groups && sp.groups.length > 0) {
               const groupsToInsert = sp.groups.map((group: any) => ({
                 sub_program_id: newSubProgram.id,
                 name: group.name,
-                status: ProgramStatus.INACTIVE, // Start as inactive
-                club_id: clubId,
+                status: ProgramStatus.INACTIVE,
+                club_id: profile.club_id,
               }))
 
-              const { error: groupsError } = await clubQuery(
-                supabase.from('groups').insert(groupsToInsert),
-                clubId
-              )
+              const { error: groupsError } = await supabase
+                .from('groups')
+                .insert(groupsToInsert)
 
               if (groupsError) {
-                console.error('Error cloning groups for sub-program:', sp.name, groupsError)
+                console.error(
+                  'Error cloning groups for sub-program:',
+                  sp.name,
+                  groupsError
+                )
               }
             }
           }
         }
       }
 
-      // Count total items cloned
-      const totalSubPrograms = sourcePrograms?.reduce((sum: number, p: any) => sum + (p.sub_programs?.length || 0), 0) || 0
-      const totalGroups = sourcePrograms?.reduce((sum: number, p: any) => 
-        sum + (p.sub_programs?.reduce((spSum: number, sp: any) => spSum + (sp.groups?.length || 0), 0) || 0), 0
-      ) || 0
+      const totalSubPrograms =
+        sourcePrograms?.reduce(
+          (sum: number, p: any) => sum + (p.sub_programs?.length || 0),
+          0
+        ) || 0
+      const totalGroups =
+        sourcePrograms?.reduce(
+          (sum: number, p: any) =>
+            sum +
+            (p.sub_programs?.reduce(
+              (spSum: number, sp: any) => spSum + (sp.groups?.length || 0),
+              0
+            ) || 0),
+          0
+        ) || 0
 
-      router.refresh()
+      // Invalidate queries
+      window.location.reload()
+
       alert(
         `Successfully cloned from ${sourceSeason.name} to ${newSeasonName}:\n` +
-        `- ${sourcePrograms?.length || 0} programs\n` +
-        `- ${totalSubPrograms} sub-programs\n` +
-        `- ${totalGroups} groups\n\n` +
-        `All items are set to INACTIVE for review.`
+          `- ${sourcePrograms?.length || 0} programs\n` +
+          `- ${totalSubPrograms} sub-programs\n` +
+          `- ${totalGroups} groups\n\n` +
+          `All items are set to INACTIVE for review.`
       )
     } catch (err) {
       console.error('Error cloning season:', err)
       setError('Failed to clone season')
     } finally {
-      setLoading(false)
       setCloningSeasonId(null)
     }
   }
 
-  if (authLoading || seasonsLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">Loading seasons…</p>
-      </div>
-    )
+  const isLoading = authLoading || seasonsLoading
+
+  // Show loading state
+  if (isLoading) {
+    return <InlineLoading message="Loading seasons…" />
   }
 
-  if (authError || seasonsError) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle>Something went wrong</CardTitle>
-            <CardDescription>{authError || seasonsError}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/admin">
-              <Button>Back to Dashboard</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-    )
+  // Auth check ensures profile exists
+  if (!profile) {
+    return null
   }
 
-  const activeSeasons = seasons.filter(s => s.status !== 'archived')
-  const archivedSeasons = seasons.filter(s => s.status === 'archived')
+  const activeSeasons = seasons.filter((s) => s.status !== 'archived')
+  const archivedSeasons = seasons.filter((s) => s.status === 'archived')
+
+  const loading =
+    createSeason.isPending ||
+    updateSeason.isPending ||
+    deleteSeason.isPending
 
   return (
     <div className="flex flex-col gap-6">
@@ -447,7 +369,8 @@ export default function SeasonsPage() {
           <CardHeader>
             <CardTitle>Create New Season</CardTitle>
             <CardDescription>
-              Create a new season for your club. You can set it as the current season.
+              Create a new season for your club. You can set it as the current
+              season.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -460,7 +383,7 @@ export default function SeasonsPage() {
                   type="text"
                   required
                   value={name}
-                  onChange={e => setName(e.target.value)}
+                  onChange={(e) => setName(e.target.value)}
                   placeholder="2025-2026"
                   className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                 />
@@ -475,7 +398,7 @@ export default function SeasonsPage() {
                     type="date"
                     required
                     value={startDate}
-                    onChange={e => setStartDate(e.target.value)}
+                    onChange={(e) => setStartDate(e.target.value)}
                     className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                   />
                 </div>
@@ -487,7 +410,7 @@ export default function SeasonsPage() {
                     type="date"
                     required
                     value={endDate}
-                    onChange={e => setEndDate(e.target.value)}
+                    onChange={(e) => setEndDate(e.target.value)}
                     className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                   />
                 </div>
@@ -499,7 +422,7 @@ export default function SeasonsPage() {
                     id="isCurrent"
                     type="checkbox"
                     checked={isCurrent}
-                    onChange={e => setIsCurrent(e.target.checked)}
+                    onChange={(e) => setIsCurrent(e.target.checked)}
                     className="h-4 w-4 rounded border-slate-300"
                   />
                   <label htmlFor="isCurrent" className="text-sm text-slate-700">
@@ -513,8 +436,10 @@ export default function SeasonsPage() {
                   </label>
                   <select
                     value={status}
-                    onChange={e =>
-                      setStatus(e.target.value as 'draft' | 'active' | 'archived')
+                    onChange={(e) =>
+                      setStatus(
+                        e.target.value as 'draft' | 'active' | 'archived'
+                      )
                     }
                     className="rounded-md border border-slate-300 px-3 py-2 text-sm"
                   >
@@ -556,7 +481,7 @@ export default function SeasonsPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {activeSeasons.map(season => (
+              {activeSeasons.map((season) => (
                 <div
                   key={season.id}
                   className="flex items-center justify-between border rounded-lg p-4"
@@ -565,7 +490,9 @@ export default function SeasonsPage() {
                     <Calendar className="h-5 w-5 text-slate-400" />
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-slate-900">{season.name}</h3>
+                        <h3 className="font-semibold text-slate-900">
+                          {season.name}
+                        </h3>
                         {season.is_current && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
                             <CheckCircle2 className="h-3 w-3" />
@@ -632,11 +559,13 @@ export default function SeasonsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Archived Seasons</CardTitle>
-            <CardDescription>Past seasons that are no longer active</CardDescription>
+            <CardDescription>
+              Past seasons that are no longer active
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {archivedSeasons.map(season => (
+              {archivedSeasons.map((season) => (
                 <div
                   key={season.id}
                   className="flex items-center justify-between border rounded-lg p-4 opacity-60"
@@ -644,7 +573,9 @@ export default function SeasonsPage() {
                   <div className="flex items-center gap-4">
                     <Calendar className="h-5 w-5 text-slate-400" />
                     <div>
-                      <h3 className="font-semibold text-slate-900">{season.name}</h3>
+                      <h3 className="font-semibold text-slate-900">
+                        {season.name}
+                      </h3>
                       <p className="text-sm text-muted-foreground mt-1">
                         {new Date(season.start_date).toLocaleDateString()} –{' '}
                         {new Date(season.end_date).toLocaleDateString()}
