@@ -15,7 +15,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Plus, Pencil, Trash2, Eye } from 'lucide-react'
 import { useRequireAdmin } from '@/lib/auth-context'
-import { useAdminSeason } from '@/lib/use-admin-season'
+import { useSeason } from '@/lib/hooks/use-season'
 import { usePrograms } from '@/lib/hooks/use-programs'
 import { AdminPageHeader } from '@/components/admin-page-header'
 import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
@@ -42,7 +42,7 @@ type ProgramWithSubPrograms = Program & {
 export default function ProgramsPage() {
   const router = useRouter()
   const { profile, loading: authLoading } = useRequireAdmin()
-  const { selectedSeason, loading: seasonLoading } = useAdminSeason()
+  const { currentSeason: selectedSeason, loading: seasonLoading } = useSeason()
 
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deletingSubProgramId, setDeletingSubProgramId] = useState<string | null>(null)

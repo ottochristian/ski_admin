@@ -3,7 +3,7 @@
 import { useEffect, useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
-import { useAdminClub } from '@/lib/use-admin-club'
+import { useRequireAdmin } from '@/lib/auth-context'
 import { useClub } from '@/lib/club-context'
 import {
   Card,
@@ -19,10 +19,11 @@ import { ImageUpload } from '@/components/image-upload'
 import { Loader2 } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 
 export default function BrandingPage() {
   const router = useRouter()
-  const { clubId, loading: authLoading, error: authError } = useAdminClub()
+  const { profile, loading: authLoading } = useRequireAdmin()
   const { club, loading: clubLoading, refreshClub } = useClub()
   const { toast: showToast } = useToast()
   const [loading, setLoading] = useState(false)
@@ -46,7 +47,7 @@ export default function BrandingPage() {
     setError(null)
     setSuccess(false)
 
-    if (!clubId) {
+    if (!profile?.club_id) {
       setError('No club associated with your account')
       setLoading(false)
       return
@@ -68,10 +69,11 @@ export default function BrandingPage() {
 
       console.log('Updating club branding:', updateData)
 
+      // PHASE 2: RLS ensures user can only update their club
       const { data: updatedClub, error: updateError } = await supabase
         .from('clubs')
         .update(updateData)
-        .eq('id', clubId)
+        .eq('id', profile.club_id)
         .select()
         .single()
 
@@ -82,206 +84,126 @@ export default function BrandingPage() {
         return
       }
 
-      console.log('Club branding updated successfully:', updatedClub)
-
-      // Refresh club context to show updated branding immediately
-      await refreshClub()
-
       setSuccess(true)
+      refreshClub() // Refresh club context
+
       showToast({
-        title: 'Branding updated',
-        description: 'Your club branding has been updated successfully',
+        title: 'Success',
+        description: 'Club branding updated successfully',
       })
 
-      // Clear success message after a few seconds
-      setTimeout(() => setSuccess(false), 3000)
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setSuccess(false)
+      }, 3000)
     } catch (err) {
-      console.error('Error updating club branding:', err)
-      setError(err instanceof Error ? err.message : 'Failed to update club branding')
+      console.error('Error updating branding:', err)
+      setError('An unexpected error occurred')
+      setLoading(false)
     } finally {
       setLoading(false)
     }
   }
 
-  if (authLoading || clubLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <p>Loading...</p>
-        </div>
-      </div>
-    )
+  const isLoading = authLoading || clubLoading
+
+  // Show loading state
+  if (isLoading) {
+    return <InlineLoading message="Loading club branding…" />
   }
 
-  if (authError) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Alert variant="destructive">
-          <AlertDescription>{authError}</AlertDescription>
-        </Alert>
-      </div>
-    )
+  // Show error state
+  if (error && !success) {
+    return <ErrorState error={error} onRetry={() => router.refresh()} />
+  }
+
+  // Auth check ensures profile exists
+  if (!profile || !club) {
+    return null
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-2xl font-bold text-slate-900">Club Branding</h2>
+        <h1 className="text-3xl font-bold tracking-tight">Club Branding</h1>
         <p className="text-muted-foreground">
-          Customize your club's logo and primary color
+          Customize your club's visual identity
         </p>
       </div>
 
-      <Card>
+      {success && (
+        <Alert className="border-green-200 bg-green-50">
+          <AlertDescription className="text-green-800">
+            Club branding updated successfully!
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <Card className="max-w-2xl">
         <CardHeader>
           <CardTitle>Branding Settings</CardTitle>
           <CardDescription>
-            Update your club's visual identity. Changes will be reflected across the admin portal.
+            Set your club's primary color and logo. These will be used throughout
+            the portal.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            {success && (
-              <Alert>
-                <AlertDescription>
-                  Branding updated successfully! Changes are now visible.
-                </AlertDescription>
-              </Alert>
-            )}
-
-            <div className="grid gap-6 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="primaryColor">Primary Color</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="primaryColor"
-                    type="color"
-                    value={primaryColor}
-                    onChange={(e) => setPrimaryColor(e.target.value)}
-                    className="w-20 h-10"
-                  />
-                  <Input
-                    type="text"
-                    value={primaryColor}
-                    onChange={(e) => setPrimaryColor(e.target.value)}
-                    placeholder="#3B82F6"
-                    pattern="^#[0-9A-Fa-f]{6}$"
-                    className="flex-1"
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Used for branding and UI personalization throughout the admin portal
-                </p>
-                {/* Color preview */}
-                <div className="mt-2">
-                  <div
-                    className="h-12 w-full rounded-md border border-slate-200"
-                    style={{ backgroundColor: primaryColor }}
-                  />
-                </div>
+            <div>
+              <Label htmlFor="primaryColor">Primary Color</Label>
+              <div className="flex gap-2 items-center mt-1">
+                <input
+                  type="color"
+                  id="primaryColor"
+                  value={primaryColor}
+                  onChange={(e) => setPrimaryColor(e.target.value)}
+                  className="h-10 w-20 rounded border cursor-pointer"
+                />
+                <Input
+                  type="text"
+                  value={primaryColor}
+                  onChange={(e) => setPrimaryColor(e.target.value)}
+                  placeholder="#3B82F6"
+                  pattern="^#[0-9A-Fa-f]{6}$"
+                  className="flex-1"
+                />
               </div>
+              <p className="text-sm text-muted-foreground mt-1">
+                Choose a hex color for your club's primary brand color
+              </p>
+            </div>
 
-              <div className="space-y-2 md:col-span-2">
+            <div>
+              <Label>Club Logo</Label>
+              <div className="mt-2">
                 <ImageUpload
                   value={logoUrl}
                   onChange={(url) => {
-                    console.log('ImageUpload onChange called with URL:', url)
                     setLogoUrl(url)
+                    setSuccess(false) // Reset success state
                   }}
                   bucket="club-logos"
                   folder="logos"
-                  maxSizeMB={5}
                 />
-                {process.env.NODE_ENV === 'development' && (
-                  <p className="text-xs text-muted-foreground">
-                    Debug: logoUrl = {logoUrl || 'null'}
-                  </p>
-                )}
               </div>
+              <p className="text-sm text-muted-foreground mt-2">
+                Upload your club's logo. Recommended size: 200x200px or larger.
+              </p>
             </div>
 
-            <div className="flex justify-end gap-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  // Reset to current club values
-                  if (club) {
-                    setPrimaryColor(club.primary_color || '#3B82F6')
-                    setLogoUrl(club.logo_url || null)
-                  }
-                }}
-                disabled={loading}
-              >
-                Reset
-              </Button>
+            {error && !success && (
+              <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                <p className="text-sm text-red-800">{error}</p>
+              </div>
+            )}
+
+            <div className="flex gap-3 justify-end">
               <Button type="submit" disabled={loading}>
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  'Save Changes'
-                )}
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {loading ? 'Saving…' : 'Save Changes'}
               </Button>
             </div>
           </form>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Preview</CardTitle>
-          <CardDescription>
-            See how your branding will appear
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="flex items-center gap-4">
-              {logoUrl ? (
-                <img
-                  src={logoUrl}
-                  alt="Club logo preview"
-                  className="h-16 w-16 rounded-md object-cover border border-slate-200"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none'
-                  }}
-                />
-              ) : (
-                <div
-                  className="h-16 w-16 rounded-md border border-slate-200 flex items-center justify-center text-2xl font-semibold"
-                  style={{
-                    backgroundColor: `${primaryColor}15`,
-                    color: primaryColor,
-                  }}
-                >
-                  {club?.name?.charAt(0).toUpperCase() || 'C'}
-                </div>
-              )}
-              <div>
-                <h3
-                  className="text-lg font-semibold"
-                  style={{ color: primaryColor }}
-                >
-                  {club?.name || 'Club Name'}
-                </h3>
-                <p className="text-sm text-muted-foreground">Admin Portal</p>
-              </div>
-            </div>
-            <div
-              className="h-2 w-full rounded"
-              style={{ backgroundColor: primaryColor }}
-            />
-          </div>
         </CardContent>
       </Card>
     </div>

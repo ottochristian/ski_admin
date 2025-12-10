@@ -3,7 +3,7 @@
 import { useEffect, useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
-import { useAdminClub } from '@/lib/use-admin-club'
+import { useRequireAdmin } from '@/lib/auth-context'
 import {
   Card,
   CardContent,
@@ -19,6 +19,7 @@ import { AdminPageHeader } from '@/components/admin-page-header'
 import { useToast } from '@/components/ui/use-toast'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
+import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 
 interface ProfileData {
   id: string
@@ -34,7 +35,7 @@ interface CoachData {
 
 export default function AdminProfilePage() {
   const router = useRouter()
-  const { clubId, loading: clubLoading } = useAdminClub()
+  const { profile: authProfile, loading: authLoading } = useRequireAdmin()
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -51,62 +52,56 @@ export default function AdminProfilePage() {
 
   useEffect(() => {
     async function loadProfile() {
-      if (clubLoading) return
+      if (authLoading) return
 
       try {
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser()
-
-        if (userError || !user) {
-          router.push('/login')
-          return
-        }
-
-        // Load profile
+        // PHASE 2: useRequireAdmin already provides profile, but we need full data
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('*')
-          .eq('id', user.id)
+          .eq('id', authProfile?.id || '')
           .single()
 
         if (profileError) {
           setError('Failed to load profile')
+          setLoading(false)
           return
         }
 
         setProfile(profileData as ProfileData)
-
-        // Load coach data if admin is also a coach
-        const { data: coach } = await supabase
-          .from('coaches')
-          .select('phone')
-          .eq('profile_id', user.id)
-          .maybeSingle()
-
-        if (coach) {
-          setCoachData(coach as CoachData)
-        }
-
-        // Populate form
         setFormData({
           firstName: profileData.first_name || '',
           lastName: profileData.last_name || '',
           email: profileData.email || '',
-          phone: coach?.phone || '',
+          phone: '',
           avatarUrl: profileData.avatar_url || '',
         })
+
+        // Also check if user is a coach and load coach data
+        const { data: coachDataResult } = await supabase
+          .from('coaches')
+          .select('phone')
+          .eq('user_id', profileData.id)
+          .maybeSingle()
+
+        if (coachDataResult) {
+          setCoachData(coachDataResult as CoachData)
+          setFormData((prev) => ({
+            ...prev,
+            phone: coachDataResult.phone || '',
+          }))
+        }
+
+        setLoading(false)
       } catch (err) {
         console.error('Error loading profile:', err)
         setError('Failed to load profile')
-      } finally {
         setLoading(false)
       }
     }
 
     loadProfile()
-  }, [router, clubLoading])
+  }, [authLoading, authProfile])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -114,12 +109,8 @@ export default function AdminProfilePage() {
     setError(null)
 
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (!user || !profile) {
-        setError('Not authenticated')
+      if (!profile) {
+        setError('Profile not loaded')
         setSaving(false)
         return
       }
@@ -132,162 +123,132 @@ export default function AdminProfilePage() {
           last_name: formData.lastName || null,
           avatar_url: formData.avatarUrl || null,
         })
-        .eq('id', user.id)
+        .eq('id', profile.id)
 
       if (profileError) {
         throw profileError
       }
 
-      // Update email in auth if changed
-      if (formData.email !== profile.email) {
-        const { error: emailError } = await supabase.auth.updateUser({
-          email: formData.email,
-        })
-
-        if (emailError) {
-          throw emailError
-        }
-      }
-
-      // Update coach phone if coach record exists
+      // Update coach data if exists
       if (coachData) {
         const { error: coachError } = await supabase
           .from('coaches')
           .update({
             phone: formData.phone || null,
           })
-          .eq('profile_id', user.id)
+          .eq('user_id', profile.id)
 
         if (coachError) {
-          console.error('Error updating coach phone:', coachError)
-          // Don't fail the whole update if coach update fails
+          console.error('Error updating coach data:', coachError)
+          // Don't throw - coach update is optional
         }
       }
 
       toast({
-        title: 'Profile updated',
-        description: 'Your profile has been updated successfully.',
+        title: 'Success',
+        description: 'Profile updated successfully',
       })
 
-      // Refresh the page to update the profile menu avatar
-      setTimeout(() => {
-        window.location.reload()
-      }, 500)
+      // Refresh page data
+      router.refresh()
     } catch (err) {
       console.error('Error updating profile:', err)
-      setError(
-        err instanceof Error ? err.message : 'Failed to update profile'
-      )
+      setError(err instanceof Error ? err.message : 'Failed to update profile')
     } finally {
       setSaving(false)
     }
   }
 
-  if (loading || clubLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">Loading profile...</p>
-      </div>
-    )
+  // Show loading state
+  if (authLoading || loading) {
+    return <InlineLoading message="Loading profile…" />
   }
 
+  // Show error state
   if (error && !profile) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle>Error</CardTitle>
-            <CardDescription>{error}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/admin">
-              <Button>Back to Dashboard</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-    )
+    return <ErrorState error={error} onRetry={() => router.refresh()} />
+  }
+
+  // Auth check ensures profile exists
+  if (!authProfile || !profile) {
+    return null
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/admin">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-        <AdminPageHeader
-          title="Profile Settings"
-          description="Manage your personal information and preferences"
-        />
-      </div>
+      <AdminPageHeader
+        title="Profile Settings"
+        description="Manage your personal information and profile"
+      />
 
-      <Card>
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-md p-4">
+          <p className="text-sm text-red-800">{error}</p>
+        </div>
+      )}
+
+      <Card className="max-w-2xl">
         <CardHeader>
           <CardTitle>Personal Information</CardTitle>
           <CardDescription>
-            Update your profile information and photo
+            Update your name, email, and profile picture
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Profile Image */}
             <div>
-              <ImageUpload
-                value={formData.avatarUrl}
-                onChange={(url) => {
-                  setFormData({ ...formData, avatarUrl: url || '' })
-                }}
-                bucket="profile-images"
-                folder="avatars"
-                maxSizeMB={2}
-                label="Profile Picture"
-              />
+              <Label>Profile Picture</Label>
+              <div className="mt-2">
+                <ImageUpload
+                  value={formData.avatarUrl}
+                  onChange={(url) => {
+                    setFormData({ ...formData, avatarUrl: url || '' })
+                  }}
+                  bucket="profile-images"
+                  folder="avatars"
+                />
+              </div>
             </div>
 
-            {/* First Name */}
-            <div>
-              <Label htmlFor="firstName">First Name</Label>
-              <Input
-                id="firstName"
-                value={formData.firstName}
-                onChange={(e) =>
-                  setFormData({ ...formData, firstName: e.target.value })
-                }
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="firstName">First Name</Label>
+                <Input
+                  id="firstName"
+                  value={formData.firstName}
+                  onChange={(e) =>
+                    setFormData({ ...formData, firstName: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="lastName">Last Name</Label>
+                <Input
+                  id="lastName"
+                  value={formData.lastName}
+                  onChange={(e) =>
+                    setFormData({ ...formData, lastName: e.target.value })
+                  }
+                />
+              </div>
             </div>
 
-            {/* Last Name */}
-            <div>
-              <Label htmlFor="lastName">Last Name</Label>
-              <Input
-                id="lastName"
-                value={formData.lastName}
-                onChange={(e) =>
-                  setFormData({ ...formData, lastName: e.target.value })
-                }
-              />
-            </div>
-
-            {/* Email */}
             <div>
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
                 value={formData.email}
-                onChange={(e) =>
-                  setFormData({ ...formData, email: e.target.value })
-                }
-                required
+                disabled
+                className="bg-gray-50"
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                Changing your email will require verification
+              <p className="text-sm text-muted-foreground mt-1">
+                Email cannot be changed here. Contact support to change your
+                email.
               </p>
             </div>
 
-            {/* Phone (if coach) */}
             {coachData && (
               <div>
                 <Label htmlFor="phone">Phone</Label>
@@ -302,18 +263,9 @@ export default function AdminProfilePage() {
               </div>
             )}
 
-            {error && (
-              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                {error}
-              </div>
-            )}
-
-            <div className="flex gap-2">
+            <div className="flex gap-3 justify-end">
               <Button type="submit" disabled={saving}>
-                {saving ? 'Saving...' : 'Save Changes'}
-              </Button>
-              <Button type="button" variant="outline" asChild>
-                <Link href="/admin">Cancel</Link>
+                {saving ? 'Saving…' : 'Save Changes'}
               </Button>
             </div>
           </form>
