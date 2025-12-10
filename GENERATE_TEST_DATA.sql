@@ -49,13 +49,22 @@ BEGIN
   SELECT id INTO jackson_club_id FROM clubs WHERE slug = 'jackson' OR name ILIKE '%Jackson%' LIMIT 1;
   
   -- Delete in order (respecting foreign keys)
+  -- Must delete in reverse dependency order (children before parents)
   
-  -- Delete registrations
+  -- Delete order_items first (references registrations via registration_id)
+  DELETE FROM order_items;
+  
+  -- Delete payments (may reference orders)
+  DELETE FROM payments;
+  
+  -- Delete orders
+  DELETE FROM orders;
+  
+  -- Delete registrations (now safe since order_items are deleted)
   DELETE FROM registrations;
   
-  -- Delete order items and orders
-  DELETE FROM order_items;
-  DELETE FROM orders;
+  -- Delete webhook_events (may reference orders/registrations)
+  DELETE FROM webhook_events;
   
   -- Delete athletes
   DELETE FROM athletes;
