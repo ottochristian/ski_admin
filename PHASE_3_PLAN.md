@@ -1,21 +1,23 @@
-# Phase 3: Security & Route Consolidation Plan
+# Phase 3: Route Consolidation & Type System Plan
 
 ## 🎯 Overview
 
-Phase 3 combines **critical security hardening** (from `NEXT_STEPS_PRIORITIZED.md`) with **route consolidation & type system** (from `CODEBASE_AUDIT_AND_RESTRUCTURE_PLAN.md`) in a prioritized order.
+Phase 3 focuses on **route consolidation & type system overhaul** for better maintainability and developer experience during active development.
 
-**Rationale:** Security hardening is critical for production readiness, but route consolidation is important for maintainability. We'll do both, starting with security.
+**Note:** Security hardening tasks (Supabase client migration, input validation, error monitoring) are deferred until closer to production. These provide value during development but aren't blocking for active feature work.
 
 ---
 
-## 🔒 Part 1: Security Hardening (Week 1) - HIGHEST PRIORITY
+## 🔒 Security Hardening (DEFERRED)
 
-### Why First?
-- **Production Risk:** Incomplete Supabase client migration = session/auth issues
-- **Security:** No input validation = injection attacks possible
-- **Visibility:** No error monitoring = blind to production issues
+### When to Do This: ~2-4 weeks before production launch
 
-These are **blockers** for production launch.
+The following tasks are important for production but can wait:
+1. **Complete Supabase Client Migration** - Better session handling (not critical during dev)
+2. **Input Validation** - Prevents bugs, but can add incrementally as needed
+3. **Error Monitoring (Sentry)** - Only needed once you have real users
+
+**Recommendation:** Tackle these when you're ~80% feature-complete and preparing for production launch.
 
 ### 1. Complete Supabase Client Migration
 **Time:** 4-6 hours  
@@ -97,12 +99,13 @@ npx @sentry/wizard@latest -i nextjs
 
 ---
 
-## 🛣️ Part 2: Route Consolidation (Week 2) - Option A
+## 🛣️ Part 1: Route Consolidation (Week 1) - Option A
 
-### Why Second?
-- Not blocking production launch
-- Important for maintainability and developer experience
-- Makes multi-club support cleaner
+### Why First?
+- **Developer Experience:** Cleaner URLs make development easier
+- **Maintainability:** Single route pattern = less confusion
+- **Multi-Club Support:** Foundation for future multi-club features
+- **Immediate Value:** Makes the codebase more navigable right now
 
 ### Goal: Fully Club-Aware Routes
 
@@ -175,7 +178,7 @@ app/clubs/[clubSlug]/admin/
 
 ---
 
-## 📦 Part 3: Type System Overhaul (Week 2-3)
+## 📦 Part 2: Type System Overhaul (Week 2)
 
 ### Goal: Comprehensive, Centralized Type System
 
@@ -240,33 +243,25 @@ lib/types/
 
 ## 📊 Timeline
 
-### Week 1: Security Hardening (CRITICAL)
-- Day 1-2: Supabase client migration (API routes)
-- Day 3: Input validation setup
-- Day 4: Error monitoring (Sentry)
-- Day 5: Testing & fixes
-
-### Week 2: Route Consolidation + Type System Start
+### Week 1: Route Consolidation
 - Day 1-3: Move admin pages to club-aware routes
 - Day 4-5: Update navigation & consolidate redirects
-- Start: Generate types from schema
+- Testing & fixes
 
-### Week 3: Type System Completion
-- Day 1-2: Create type structure & migrate inline types
-- Day 3-4: Fix type safety issues
+### Week 2: Type System Overhaul
+- Day 1: Generate types from Supabase schema
+- Day 2-3: Create type structure & migrate inline types
+- Day 4: Fix type safety issues
 - Day 5: Testing & cleanup
 
-**Total: ~2-3 weeks**
+**Total: ~2 weeks**
+
+### Future (Before Production):
+- Security hardening tasks (deferred)
 
 ---
 
 ## 🎯 Success Metrics
-
-### Security Hardening
-- [ ] 100% of API routes use SSR client
-- [ ] All API routes have input validation
-- [ ] Error monitoring active (Sentry dashboard)
-- [ ] Zero unvalidated user input
 
 ### Route Consolidation
 - [ ] All routes follow `/clubs/[clubSlug]/...` pattern
@@ -284,12 +279,14 @@ lib/types/
 
 ## 🚨 Priority Decision
 
-**If time is limited, do in this order:**
-1. ✅ **Security Hardening** (MUST HAVE for production)
-2. ⚠️ **Route Consolidation** (SHOULD HAVE for maintainability)
-3. ⚠️ **Type System** (NICE TO HAVE, but important long-term)
+**Current Focus (Active Development):**
+1. ✅ **Route Consolidation** (SHOULD HAVE - improves DX immediately)
+2. ✅ **Type System** (SHOULD HAVE - prevents bugs during development)
 
-**Recommendation:** Do all three, but security hardening is non-negotiable for production.
+**Deferred (Before Production Launch):**
+- ⏳ **Security Hardening** (Do ~2-4 weeks before production)
+
+**Recommendation:** Focus on route consolidation and type system now. These provide immediate value during development. Security hardening can wait until you're preparing for production launch.
 
 ---
 
@@ -305,5 +302,6 @@ Phase 3 builds on Phase 2's foundation:
 
 **Next Steps:**
 1. Review and approve this plan
-2. Start with Part 1: Security Hardening
-3. Proceed to Part 2 & 3 in parallel or sequentially based on priorities
+2. Start with Part 1: Route Consolidation (Option A - fully club-aware)
+3. Proceed to Part 2: Type System Overhaul
+4. Security hardening will be addressed before production launch
