@@ -70,11 +70,14 @@ export default function ParentProgramsPage() {
   ) as ProgramWithSubPrograms[]
 
   // Set default athlete if available
+  // Use stable athlete IDs instead of athletes array to avoid infinite loops
+  const athleteIds = athletes?.map((a) => a.id).join(',') || ''
   useEffect(() => {
     if (athletes && athletes.length > 0 && !selectedAthleteId) {
       setSelectedAthleteId(athletes[0].id)
     }
-  }, [athletes, selectedAthleteId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [athleteIds, selectedAthleteId])
 
   const handleAddToCart = (
     subProgram: SubProgram,

@@ -34,12 +34,21 @@ export default function BrandingPage() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
 
   // Load existing club branding data
+  // Use stable club properties instead of club object to avoid infinite loops
   useEffect(() => {
     if (club && !clubLoading) {
-      setPrimaryColor(club.primary_color || '#3B82F6')
-      setLogoUrl(club.logo_url || null)
+      // Only update if values actually changed to prevent unnecessary re-renders
+      setPrimaryColor((prev) => {
+        const newColor = club.primary_color || '#3B82F6'
+        return prev !== newColor ? newColor : prev
+      })
+      setLogoUrl((prev) => {
+        const newUrl = club.logo_url || null
+        return prev !== newUrl ? newUrl : prev
+      })
     }
-  }, [club, clubLoading])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [club?.id, club?.primary_color, club?.logo_url, clubLoading])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()

@@ -162,10 +162,12 @@ export default function AssignCoachPage() {
     }
 
     loadAssignments()
+    // Use coach?.id instead of coach object to avoid infinite loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     coachId,
     selectedSeason?.id,
-    coach,
+    coach?.id, // Use stable ID instead of object reference
     authLoading,
     seasonLoading,
     coachesLoading,

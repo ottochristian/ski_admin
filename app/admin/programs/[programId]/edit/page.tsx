@@ -57,15 +57,17 @@ export default function EditProgramPage() {
   const [isActive, setIsActive] = useState(true)
 
   // Initialize form when program is loaded
+  // Use program ID instead of program object to avoid infinite loops
   useEffect(() => {
     if (program) {
-      setName(program.name ?? '')
-      setDescription(program.description ?? '')
-      setIsActive(
-        program.status === ProgramStatus.ACTIVE || !program.status
-      )
+      // Only update if values actually changed to prevent unnecessary re-renders
+      setName((prev) => (prev !== (program.name ?? '') ? program.name ?? '' : prev))
+      setDescription((prev) => (prev !== (program.description ?? '') ? program.description ?? '' : prev))
+      const newIsActive = program.status === ProgramStatus.ACTIVE || !program.status
+      setIsActive((prev) => (prev !== newIsActive ? newIsActive : prev))
     }
-  }, [program])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [program?.id, program?.name, program?.description, program?.status])
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
