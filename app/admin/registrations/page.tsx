@@ -62,10 +62,17 @@ export default function RegistrationsPage() {
   } = useRegistrations(selectedSeason?.id)
 
   // Load parent emails when registrations change
+  // Use a stable key based on registration IDs to avoid infinite loops
+  const registrationsKey = registrationsData.map((r: any) => r.id).join(',')
+  
   useEffect(() => {
     async function loadParentEmails() {
       if (registrationsData.length === 0) {
-        setParentEmailMap(new Map())
+        // Only update if map is not empty to avoid unnecessary re-renders
+        setParentEmailMap((prev) => {
+          if (prev.size === 0) return prev
+          return new Map()
+        })
         return
       }
 
@@ -130,7 +137,8 @@ export default function RegistrationsPage() {
     }
 
     loadParentEmails()
-  }, [registrationsData])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [registrationsKey])
 
   // Transform data to match our interface and add parent emails
   const registrations: Registration[] = registrationsData.map((reg: any) => {
