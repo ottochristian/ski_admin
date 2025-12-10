@@ -72,8 +72,9 @@ BEGIN
   -- Delete coach assignments
   DELETE FROM coach_assignments;
   
-  -- Delete coaches (except system admin if they have a coach record)
-  DELETE FROM coaches WHERE profile_id != COALESCE(system_admin_id, '00000000-0000-0000-0000-000000000000'::uuid);
+  -- Delete ALL coaches (we'll recreate them in Part 2)
+  -- Must delete coaches before deleting clubs (they reference clubs via club_id)
+  DELETE FROM coaches;
   
   -- Delete groups
   DELETE FROM groups;
@@ -94,20 +95,28 @@ BEGIN
   DELETE FROM households WHERE club_id NOT IN (COALESCE(gtssf_club_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(jackson_club_id, '00000000-0000-0000-0000-000000000000'::uuid));
   
   -- Delete profiles (except system admin)
-  -- But first, set system admin's club_id to GTSSF (or Jackson as fallback) if it references a club we're about to delete
-  -- Note: system_admin role doesn't need club_id, but column has NOT NULL constraint
+  -- But first, handle system admin's club_id
+  -- System admin shouldn't have a club, but if column has NOT NULL constraint,
+  -- assign to GTSSF temporarily (will be set back later if needed)
   IF system_admin_id IS NOT NULL THEN
+    -- Update system admin's club_id if it references a club being deleted
     UPDATE profiles 
     SET club_id = COALESCE(gtssf_club_id, jackson_club_id) 
     WHERE id = system_admin_id 
       AND club_id IS NOT NULL
       AND club_id NOT IN (COALESCE(gtssf_club_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(jackson_club_id, '00000000-0000-0000-0000-000000000000'::uuid));
     
-    -- Also ensure system admin has a club_id (use GTSSF as default)
+    -- Ensure system admin has a club_id (temporarily assign to GTSSF if NULL)
+    -- Note: This is only if column has NOT NULL constraint
+    -- You may want to make club_id nullable for system_admin role after cleanup
     UPDATE profiles 
     SET club_id = COALESCE(gtssf_club_id, jackson_club_id) 
     WHERE id = system_admin_id 
-      AND club_id IS NULL;
+      AND club_id IS NULL
+      AND (SELECT is_nullable FROM information_schema.columns 
+           WHERE table_schema = 'public' 
+           AND table_name = 'profiles' 
+           AND column_name = 'club_id') = 'NO';
   END IF;
   
   -- Delete profiles (except system admin)
@@ -118,8 +127,15 @@ BEGIN
   -- Or use the Supabase Management API
   
   -- Delete clubs (except GTSSF and Jackson)
-  -- Now safe since all profiles (except system admin with null/valid club_id) are deleted
+  -- Now safe since:
+  -- - All profiles (except system admin with valid club_id) are deleted
+  -- - All coaches are deleted
+  -- - All other dependent records are deleted
   DELETE FROM clubs WHERE id NOT IN (COALESCE(gtssf_club_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(jackson_club_id, '00000000-0000-0000-0000-000000000000'::uuid));
+  
+  -- Optional: After cleanup, you may want to make club_id nullable for system_admin role
+  -- This would require: ALTER TABLE profiles ALTER COLUMN club_id DROP NOT NULL;
+  -- Then: UPDATE profiles SET club_id = NULL WHERE role = 'system_admin';
   
   RAISE NOTICE 'Data deleted (except system admin and GTSSF/Jackson clubs)';
 END $$;
