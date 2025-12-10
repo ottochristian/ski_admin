@@ -44,8 +44,7 @@
 - `use-registrations.ts`
 - `use-programs.ts`
 - `use-sub-programs.ts`
-- `use-season.ts` (base hook for all roles)
-- `use-seasons.ts` (mutations)
+- `use-season.ts` (queries & mutations - all season hooks in one file)
 - `use-households.ts`
 - `use-orders.ts`
 - `use-parent-household.ts` ✨ NEW

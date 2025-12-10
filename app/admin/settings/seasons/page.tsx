@@ -4,12 +4,12 @@ import { useEffect, useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { useRequireAdmin } from '@/lib/auth-context'
-import { useSeason } from '@/lib/hooks/use-season'
 import {
+  useSeason,
   useCreateSeason,
   useUpdateSeason,
   useDeleteSeason,
-} from '@/lib/hooks/use-seasons'
+} from '@/lib/hooks/use-season'
 import {
   Card,
   CardContent,

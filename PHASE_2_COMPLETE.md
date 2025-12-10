@@ -50,7 +50,7 @@
 - `use-programs.ts` - Program data fetching
 - `use-sub-programs.ts` - Sub-program data fetching
 - `use-season.ts` - Base season hook (all roles)
-- `use-seasons.ts` - Season mutations
+- `use-season.ts` - Season queries & mutations (consolidated)
 - `use-households.ts` - Household data fetching
 - `use-orders.ts` - Order data fetching
 
