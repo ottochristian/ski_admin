@@ -87,13 +87,34 @@ function ParentLayoutContent({
     )
   }
 
-  if (error || !profile) {
+  if (error && !profile) {
+    // Only show error if profile is missing - other errors will be handled below
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="max-w-md rounded-lg border border-red-200 bg-red-50 p-6">
           <h2 className="text-lg font-semibold text-red-900">Access Denied</h2>
           <p className="mt-2 text-sm text-red-700">
             {error || 'Profile not found. Please contact support.'}
+          </p>
+          <Button
+            onClick={() => router.push('/login')}
+            className="mt-4"
+            variant="outline"
+          >
+            Go to Login
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!profile) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="max-w-md rounded-lg border border-red-200 bg-red-50 p-6">
+          <h2 className="text-lg font-semibold text-red-900">Access Denied</h2>
+          <p className="mt-2 text-sm text-red-700">
+            Profile not found. Please contact support.
           </p>
           <Button
             onClick={() => router.push('/login')}

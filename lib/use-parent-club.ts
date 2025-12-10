@@ -102,23 +102,46 @@ export function useParentClub() {
         setClubId(resolvedClubId)
 
         // 4. Get household via household_guardians join table
+        // Fetch in two steps to avoid RLS issues with nested queries
+        console.log('[useParentClub] Attempting to load household for user:', user.id)
+        
+        // Step 1: Get household_guardians record (simpler query, less likely to hit RLS issues)
         const { data: householdGuardian, error: hgError } = await supabase
           .from('household_guardians')
-          .select(
-            'household_id, households(id, club_id, primary_email, phone, address, address_line1, address_line2, city, state, zip_code, emergency_contact_name, emergency_contact_phone)'
-          )
+          .select('household_id')
           .eq('user_id', user.id)
-          .single()
+          .maybeSingle()
 
-        if (hgError || !householdGuardian) {
+        console.log('[useParentClub] Household guardian query result:', {
+          hasData: !!householdGuardian,
+          householdId: householdGuardian?.household_id,
+          error: hgError ? {
+            message: hgError.message,
+            code: hgError.code,
+            details: hgError.details,
+            hint: hgError.hint,
+          } : null,
+        })
+
+        if (hgError || !householdGuardian || !householdGuardian.household_id) {
+          console.log('[useParentClub] Household guardian not found, trying families table...', { 
+            hgError,
+            errorDetails: hgError ? {
+              message: hgError.message,
+              code: hgError.code,
+              details: hgError.details,
+            } : null,
+          })
+          
           // Try legacy families table as fallback
-          const { data: familyData } = await supabase
+          const { data: familyData, error: familyError } = await supabase
             .from('families')
             .select('*')
             .eq('profile_id', user.id)
-            .single()
+            .maybeSingle()
 
           if (familyData) {
+            console.log('[useParentClub] Found family data, mapping to household structure')
             // Map family to household structure
             setHousehold({
               id: familyData.id,
@@ -139,18 +162,70 @@ export function useParentClub() {
             return
           }
 
-          setError('No household found. Please contact support.')
+          // No household or family found - don't set error, let layout handle it
+          console.warn('[useParentClub] No household or family found for user:', user.id)
+          setHousehold(null)
           setLoading(false)
           return
         }
 
-        const householdData = householdGuardian.households as any
+        // Step 2: Fetch household directly using household_id (separate query avoids nested RLS issues)
+        console.log('[useParentClub] Fetching household with ID:', householdGuardian.household_id)
+        const { data: householdData, error: householdError } = await supabase
+          .from('households')
+          .select('*')
+          .eq('id', householdGuardian.household_id)
+          .maybeSingle()
+
+        console.log('[useParentClub] Household fetch result:', {
+          hasData: !!householdData,
+          householdId: householdData?.id,
+          error: householdError ? {
+            message: householdError.message,
+            code: householdError.code,
+            details: householdError.details,
+          } : null,
+        })
+
+        if (householdError || !householdData) {
+          console.error('[useParentClub] Failed to fetch household:', householdError)
+          // Try families table as fallback
+          const { data: familyData } = await supabase
+            .from('families')
+            .select('*')
+            .eq('profile_id', user.id)
+            .maybeSingle()
+
+          if (familyData) {
+            console.log('[useParentClub] Using family data as fallback')
+            setHousehold({
+              id: familyData.id,
+              club_id: familyData.club_id || resolvedClubId,
+              primary_email: familyData.email || profileData.email,
+              phone: familyData.phone || null,
+              address: familyData.address || null,
+            })
+            const { data: athletesData } = await supabase
+              .from('athletes')
+              .select('*')
+              .eq('family_id', familyData.id)
+            setAthletes((athletesData || []) as Athlete[])
+            setLoading(false)
+            return
+          }
+
+          setHousehold(null)
+          setLoading(false)
+          return
+        }
+
+        // Successfully loaded household
         setHousehold({
           id: householdData.id,
           club_id: householdData.club_id || resolvedClubId,
           primary_email: householdData.primary_email || profileData.email,
           phone: householdData.phone || null,
-          address: householdData.address || null,
+          address: null, // Legacy field - households table uses address_line1/address_line2 instead
           address_line1: householdData.address_line1 || null,
           address_line2: householdData.address_line2 || null,
           city: householdData.city || null,

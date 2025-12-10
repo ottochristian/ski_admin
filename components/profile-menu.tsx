@@ -130,26 +130,26 @@ export function ProfileMenu({ profile }: ProfileMenuProps) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>
-          <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">{displayName}</p>
-            <p className="text-xs leading-none text-muted-foreground">
+          <div className="flex flex-col space-y-0.5">
+            <p className="text-sm font-semibold leading-tight text-slate-900">{displayName}</p>
+            <p className="text-xs leading-tight text-slate-500">
               {profile.email}
             </p>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link href={getProfileEditRoute()} className="cursor-pointer">
-            <User className="mr-2 h-4 w-4" />
+          <Link href={getProfileEditRoute()} className="cursor-pointer text-slate-700">
+            <User className="h-4 w-4 text-slate-500" />
             Edit Profile
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={handleSignOut}
-          className="text-destructive focus:text-destructive cursor-pointer"
+          className="text-red-600 hover:text-red-700 hover:bg-red-50 cursor-pointer"
         >
-          <LogOut className="mr-2 h-4 w-4" />
+          <LogOut className="h-4 w-4 text-red-600" />
           Sign Out
         </DropdownMenuItem>
       </DropdownMenuContent>
