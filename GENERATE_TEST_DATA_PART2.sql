@@ -48,21 +48,21 @@ BEGIN
 END $$;
 
 -- Step 2: Create athletes for each parent
--- First name = Club name, Last name = "Athlete A", "Athlete B", etc.
+-- First name = Club name, Last name = "Athlete A", "Athlete B", etc. (sequential per club)
 DO $$
 DECLARE
   household_rec RECORD;
   athlete_id UUID;
-  parent_counter INTEGER := 0;
+  athlete_counter INTEGER := 0; -- Counter per club
+  current_club_id UUID := NULL;
   athlete_letter CHAR;
-  club_name TEXT;
 BEGIN
   FOR household_rec IN
     SELECT 
       h.id as household_id, 
       h.club_id, 
       hg.user_id, 
-      p.first_name as parent_first_name, -- This is the club name
+      p.first_name as parent_first_name, -- This is the club name (GTSSF or Jackson)
       p.last_name as parent_last_name,
       c.name as club_name
     FROM households h
@@ -72,16 +72,18 @@ BEGIN
     WHERE hg.is_primary = true
     ORDER BY h.club_id, p.last_name
   LOOP
-    -- Extract letter from parent last name (e.g., "Parent A" -> "A")
-    athlete_letter := SUBSTRING(household_rec.parent_last_name FROM '([A-Z])$');
-    
-    -- If no letter found, use counter
-    IF athlete_letter IS NULL THEN
-      parent_counter := parent_counter + 1;
-      athlete_letter := CHR(64 + parent_counter); -- A, B, C, etc.
+    -- Reset counter when we move to a new club
+    IF current_club_id IS NULL OR current_club_id != household_rec.club_id THEN
+      current_club_id := household_rec.club_id;
+      athlete_counter := 0;
     END IF;
     
-    -- Create 2 athletes per parent: "Athlete A", "Athlete AB" (for second athlete)
+    -- Increment counter and get letter (A, B, C, etc.)
+    athlete_counter := athlete_counter + 1;
+    athlete_letter := CHR(64 + athlete_counter); -- A = 65, B = 66, etc.
+    
+    -- Create 2 athletes per parent
+    -- First athlete: "Athlete A", "Athlete B", etc.
     INSERT INTO athletes (
       club_id,
       household_id,
@@ -93,12 +95,14 @@ BEGIN
       household_rec.club_id,
       household_rec.household_id,
       household_rec.parent_first_name, -- Club name (e.g., "GTSSF" or "Jackson")
-      'Athlete ' || athlete_letter, -- First athlete: "Athlete A"
+      'Athlete ' || athlete_letter, -- "Athlete A", "Athlete B", etc.
       (CURRENT_DATE - INTERVAL '10 years')::DATE
-    )
-    RETURNING id INTO athlete_id;
+    );
     
-    -- Second athlete for same parent: "Athlete AB"
+    -- Second athlete: "Athlete AB", "Athlete BB", etc.
+    athlete_counter := athlete_counter + 1;
+    athlete_letter := CHR(64 + athlete_counter);
+    
     INSERT INTO athletes (
       club_id,
       household_id,
@@ -110,11 +114,11 @@ BEGIN
       household_rec.club_id,
       household_rec.household_id,
       household_rec.parent_first_name, -- Club name
-      'Athlete ' || athlete_letter || 'B', -- Second athlete: "Athlete AB"
+      'Athlete ' || athlete_letter, -- "Athlete B", "Athlete C", etc.
       (CURRENT_DATE - INTERVAL '8 years')::DATE
     );
     
-    RAISE NOTICE 'Created athletes for % % parent', household_rec.parent_first_name, household_rec.parent_last_name;
+    RAISE NOTICE 'Created 2 athletes for % % parent (club: %)', household_rec.parent_first_name, household_rec.parent_last_name, household_rec.club_name;
   END LOOP;
 END $$;
 
