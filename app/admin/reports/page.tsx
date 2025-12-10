@@ -1,11 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
-import { useAdminClub } from '@/lib/use-admin-club'
-import { useAdminSeason } from '@/lib/use-admin-season'
-import { clubQuery } from '@/lib/supabase-helpers'
+import { useMemo } from 'react'
+import { useRequireAdmin } from '@/lib/auth-context'
+import { useSeason } from '@/lib/hooks/use-season'
+import { usePrograms } from '@/lib/hooks/use-programs'
+import { useRegistrations } from '@/lib/hooks/use-registrations'
 import { AdminPageHeader } from '@/components/admin-page-header'
 import {
   Card,
@@ -14,122 +13,91 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-
-interface Program {
-  id: string
-  name: string
-  price?: number
-  max_participants?: number
-  registrations: Array<{
-    id: string
-    status: string
-    payment_status: string
-    amount_paid: number
-  }>
-}
+import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
+import { ProgramStatus } from '@/lib/programStatus'
 
 export default function ReportsPage() {
-  const router = useRouter()
-  const { clubId, loading: authLoading, error: authError } = useAdminClub()
-  const { selectedSeason, loading: seasonLoading } = useAdminSeason()
-  const [programs, setPrograms] = useState<Program[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [totalRevenue, setTotalRevenue] = useState(0)
-  const [totalRegistrations, setTotalRegistrations] = useState(0)
+  const { profile, loading: authLoading } = useRequireAdmin()
+  const { selectedSeason, loading: seasonLoading } = useSeason()
 
-  useEffect(() => {
-    async function loadReports() {
-      if (authLoading || seasonLoading || !clubId || !selectedSeason) {
-        return
+  // PHASE 2: RLS handles club filtering automatically
+  const { data: allPrograms = [], isLoading: programsLoading } = usePrograms(
+    selectedSeason?.id
+  )
+  const { data: allRegistrations = [], isLoading: registrationsLoading } =
+    useRegistrations(selectedSeason?.id)
+
+  // Filter to active programs only
+  const programs = allPrograms.filter(
+    (p: any) => p.status === ProgramStatus.ACTIVE || p.status === null
+  )
+
+  // Combine programs with their registrations
+  const programsWithRegistrations = useMemo(() => {
+    return programs.map((program: any) => {
+      const programRegistrations = allRegistrations.filter(
+        (reg: any) =>
+          reg.sub_programs?.programs?.id === program.id ||
+          (reg.program_id === program.id && !reg.sub_program_id)
+      )
+
+      return {
+        ...program,
+        registrations: programRegistrations,
       }
+    })
+  }, [programs, allRegistrations])
 
-      if (authError) {
-        setError(authError)
-        setLoading(false)
-        return
+  // Calculate totals
+  const totals = useMemo(() => {
+    let revenue = 0
+    let registrations = 0
+
+    programsWithRegistrations.forEach((program: any) => {
+      if (program.registrations) {
+        registrations += program.registrations.length
+        revenue += program.registrations.reduce((sum: number, reg: any) => {
+          return sum + Number(reg.amount_paid || 0)
+        }, 0)
       }
+    })
 
-      try {
-        // Fetch programs with registrations, filtered by club and season
-        const { data, error: programsError } = await clubQuery(
-          supabase
-            .from('programs')
-            .select(
-              `
-            id,
-            name,
-            registrations!inner(
-              id,
-              status,
-              payment_status,
-              amount_paid,
-              season_id
-            )
-          `
-            )
-            .eq('status', 'ACTIVE')
-            .eq('season_id', selectedSeason.id)
-            .order('name', { ascending: true }),
-          clubId
-        )
+    return { revenue, registrations }
+  }, [programsWithRegistrations])
 
-        if (programsError) {
-          setError(programsError.message)
-          setLoading(false)
-          return
-        }
+  const isLoading =
+    authLoading ||
+    seasonLoading ||
+    programsLoading ||
+    registrationsLoading
 
-        const programsData = (data || []) as Program[]
-        // Filter registrations to only include those from the selected season
-        const filteredPrograms = programsData.map(program => ({
-          ...program,
-          registrations: (program.registrations || []).filter(
-            (reg: any) => reg.season_id === selectedSeason.id
-          ),
-        }))
-        setPrograms(filteredPrograms)
+  // Show loading state
+  if (isLoading) {
+    return <InlineLoading message="Loading reports…" />
+  }
 
-        // Calculate totals
-        let revenue = 0
-        let registrations = 0
+  // Show error state
+  // (React Query handles errors, but we can add error handling if needed)
 
-        filteredPrograms.forEach((program) => {
-          if (program.registrations) {
-            registrations += program.registrations.length
-            revenue += program.registrations.reduce((sum, reg) => {
-              return sum + Number(reg.amount_paid || 0)
-            }, 0)
-          }
-        })
-
-        setTotalRevenue(revenue)
-        setTotalRegistrations(registrations)
-      } catch (err) {
-        console.error('Error loading reports:', err)
-        setError('Failed to load reports')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadReports()
-  }, [router, clubId, authLoading, authError, selectedSeason, seasonLoading])
-
-  if (authLoading || seasonLoading || loading) {
+  // Show message if no season exists
+  if (!selectedSeason) {
     return (
       <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">Loading reports…</p>
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle>No Season Selected</CardTitle>
+            <CardDescription>
+              Please select a season to view reports.
+            </CardDescription>
+          </CardHeader>
+        </Card>
       </div>
     )
   }
 
-  if (error || authError) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-destructive">{error}</p>
-      </div>
-    )
+  // Auth check ensures profile exists
+  if (!profile) {
+    return null
   }
 
   return (
@@ -147,11 +115,9 @@ export default function ReportsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${totalRevenue.toFixed(2)}
+              ${totals.revenue.toFixed(2)}
             </div>
-            <p className="text-xs text-muted-foreground">
-              from all programs
-            </p>
+            <p className="text-xs text-muted-foreground">from all programs</p>
           </CardContent>
         </Card>
 
@@ -162,10 +128,8 @@ export default function ReportsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalRegistrations}</div>
-            <p className="text-xs text-muted-foreground">
-              active registrations
-            </p>
+            <div className="text-2xl font-bold">{totals.registrations}</div>
+            <p className="text-xs text-muted-foreground">active registrations</p>
           </CardContent>
         </Card>
 
@@ -176,10 +140,10 @@ export default function ReportsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{programs.length}</div>
-            <p className="text-xs text-muted-foreground">
-              programs offered
-            </p>
+            <div className="text-2xl font-bold">
+              {programsWithRegistrations.length}
+            </div>
+            <p className="text-xs text-muted-foreground">programs offered</p>
           </CardContent>
         </Card>
       </div>
@@ -192,16 +156,18 @@ export default function ReportsPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
-            {programs.length > 0 ? (
-              programs.map((program) => {
+            {programsWithRegistrations.length > 0 ? (
+              programsWithRegistrations.map((program: any) => {
                 const totalEnrolled = program.registrations?.length || 0
-                const totalRevenue = program.registrations?.reduce(
-                  (sum, reg) => sum + Number(reg.amount_paid || 0),
-                  0
-                ) || 0
+                const totalRevenue =
+                  program.registrations?.reduce(
+                    (sum: number, reg: any) =>
+                      sum + Number(reg.amount_paid || 0),
+                    0
+                  ) || 0
                 const paidCount =
                   program.registrations?.filter(
-                    (reg) => reg.payment_status === 'paid'
+                    (reg: any) => reg.payment_status === 'paid'
                   ).length || 0
 
                 return (
@@ -227,8 +193,7 @@ export default function ReportsPage() {
                       <div>
                         <p className="text-muted-foreground">Enrolled</p>
                         <p className="font-medium">
-                          {totalEnrolled}/
-                          {program.max_participants || 'unlimited'}
+                          {totalEnrolled}/{program.max_participants || 'unlimited'}
                         </p>
                       </div>
                       <div>
