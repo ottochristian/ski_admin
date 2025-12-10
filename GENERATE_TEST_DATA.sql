@@ -94,6 +94,16 @@ BEGIN
   DELETE FROM households WHERE club_id NOT IN (COALESCE(gtssf_club_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(jackson_club_id, '00000000-0000-0000-0000-000000000000'::uuid));
   
   -- Delete profiles (except system admin)
+  -- But first, set system admin's club_id to NULL if it references a club we're about to delete
+  IF system_admin_id IS NOT NULL THEN
+    UPDATE profiles 
+    SET club_id = NULL 
+    WHERE id = system_admin_id 
+      AND club_id IS NOT NULL
+      AND club_id NOT IN (COALESCE(gtssf_club_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(jackson_club_id, '00000000-0000-0000-0000-000000000000'::uuid));
+  END IF;
+  
+  -- Delete profiles (except system admin)
   DELETE FROM profiles WHERE id != COALESCE(system_admin_id, '00000000-0000-0000-0000-000000000000'::uuid);
   
   -- Delete auth users (except system admin) - This uses Supabase auth admin functions
@@ -101,6 +111,7 @@ BEGIN
   -- Or use the Supabase Management API
   
   -- Delete clubs (except GTSSF and Jackson)
+  -- Now safe since all profiles (except system admin with null/valid club_id) are deleted
   DELETE FROM clubs WHERE id NOT IN (COALESCE(gtssf_club_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(jackson_club_id, '00000000-0000-0000-0000-000000000000'::uuid));
   
   RAISE NOTICE 'Data deleted (except system admin and GTSSF/Jackson clubs)';
