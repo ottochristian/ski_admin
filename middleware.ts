@@ -24,11 +24,12 @@ export async function middleware(request: NextRequest) {
   )
 
   // Allow static assets and Next.js internals
+  // CRITICAL: Skip middleware for static assets to improve performance
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon.ico') ||
     pathname.startsWith('/api/_next') ||
-    pathname.match(/\.(ico|png|jpg|jpeg|svg|gif|webp|css|js|woff|woff2)$/)
+    pathname.match(/\.(ico|png|jpg|jpeg|svg|gif|webp|css|js|woff|woff2|json)$/)
   ) {
     return NextResponse.next()
   }
@@ -63,6 +64,37 @@ export async function middleware(request: NextRequest) {
     }
   )
 
+  // Redirect legacy admin routes to club-aware routes
+  if (pathname.startsWith('/admin') && !pathname.startsWith('/clubs/')) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (user) {
+      // Get user's club slug
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('club_id')
+        .eq('id', user.id)
+        .single()
+
+      if (profile?.club_id) {
+        // Get club slug
+        const { data: club } = await supabase
+          .from('clubs')
+          .select('slug')
+          .eq('id', profile.club_id)
+          .single()
+
+        if (club?.slug) {
+          // Redirect to club-aware admin route
+          const newPath = pathname.replace('/admin', `/clubs/${club.slug}/admin`)
+          return NextResponse.redirect(new URL(newPath, request.url))
+        }
+      }
+    }
+  }
+
   // Only check auth for protected routes
   if (!isPublicRoute) {
     // Get current user
@@ -72,12 +104,13 @@ export async function middleware(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     // Define role-based route patterns
-    const adminRoutes = ['/admin']
+    const adminRoutes = ['/admin', '/clubs']
     const systemAdminRoutes = ['/system-admin']
     const coachRoutes = ['/coach']
     const parentRoutes = ['/clubs']
 
-    const isAdminRoute = adminRoutes.some((route) => pathname.startsWith(route))
+    // Check if admin route (legacy or club-aware)
+    const isAdminRoute = pathname.startsWith('/admin') || pathname.match(/^\/clubs\/[^/]+\/admin/)
     const isSystemAdminRoute = systemAdminRoutes.some((route) =>
       pathname.startsWith(route)
     )

@@ -120,3 +120,4 @@ export class RegistrationsService extends BaseService {
 }
 
 export const registrationsService = new RegistrationsService()
+

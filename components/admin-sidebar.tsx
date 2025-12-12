@@ -9,57 +9,51 @@ import { useClub } from '@/lib/club-context'
 
 interface AdminSidebarProps {
   profile: Profile
+  clubSlug?: string // Optional - if provided, use club-aware routes
 }
 
-export function AdminSidebar({ profile }: AdminSidebarProps) {
+export function AdminSidebar({ profile, clubSlug }: AdminSidebarProps) {
   const pathname = usePathname()
   const { club, loading: clubLoading } = useClub()
 
-  // Debug: Log club data to verify logo_url is loaded
-  useEffect(() => {
-    if (club && !clubLoading) {
-      console.log('AdminSidebar - Club data:', {
-        name: club.name,
-        logo_url: club.logo_url,
-        hasLogo: !!club.logo_url,
-      })
-    }
-  }, [club, clubLoading])
+
+  // Use club-aware routes if clubSlug provided, otherwise legacy routes
+  const basePath = clubSlug ? `/clubs/${clubSlug}/admin` : '/admin'
 
   const menuItems = [
     {
       label: 'Dashboard',
-      href: '/admin',
+      href: `${basePath}`,
       icon: LayoutDashboard,
     },
     {
       label: 'Programs',
-      href: '/admin/programs',
+      href: `${basePath}/programs`,
       icon: BookOpen,
     },
     {
       label: 'Registrations',
-      href: '/admin/registrations',
+      href: `${basePath}/registrations`,
       icon: FileText,
     },
     {
       label: 'Reports',
-      href: '/admin/reports',
+      href: `${basePath}/reports`,
       icon: LayoutDashboard,
     },
     {
       label: 'Athletes',
-      href: '/admin/athletes',
+      href: `${basePath}/athletes`,
       icon: Users,
     },
     {
       label: 'Coaches',
-      href: '/admin/coaches',
+      href: `${basePath}/coaches`,
       icon: Users,
     },
     {
       label: 'Settings',
-      href: '/admin/settings/seasons',
+      href: `${basePath}/settings`,
       icon: Settings,
     },
   ]
@@ -96,7 +90,8 @@ export function AdminSidebar({ profile }: AdminSidebarProps) {
       <nav className="flex-1 overflow-y-auto p-4 space-y-1">
         {menuItems.map((item) => {
           const Icon = item.icon
-          const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href))
+          // Check if pathname matches the item href or is a child route
+          const isActive = pathname === item.href || (item.href !== basePath && pathname.startsWith(item.href))
           return (
             <Link
               key={item.href}

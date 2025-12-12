@@ -9,7 +9,7 @@
 DO $$
 DECLARE
   user_rec RECORD;
-  household_id UUID;
+  new_household_id UUID;  -- Renamed to avoid ambiguity
   gtssf_club_id UUID;
   jackson_club_id UUID;
 BEGIN
@@ -36,12 +36,17 @@ BEGIN
       'WY',
       '83001'
     )
-    RETURNING id INTO household_id;
+    RETURNING id INTO new_household_id;
     
-    -- Link parent to household
-    INSERT INTO household_guardians (household_id, user_id, is_primary)
-    VALUES (household_id, user_rec.user_id, true)
-    ON CONFLICT DO NOTHING;
+    -- Link parent to household (only if not already linked)
+    IF NOT EXISTS (
+      SELECT 1 FROM household_guardians hg
+      WHERE hg.household_id = new_household_id
+        AND hg.user_id = user_rec.user_id
+    ) THEN
+      INSERT INTO household_guardians (household_id, user_id, is_primary)
+      VALUES (new_household_id, user_rec.user_id, true);
+    END IF;
     
     RAISE NOTICE 'Created household for % %', user_rec.first_name, user_rec.last_name;
   END LOOP;
@@ -122,7 +127,7 @@ BEGIN
   END LOOP;
 END $$;
 
--- Step 3: Create coaches records
+-- Step 3: Create coaches records (only if they don't already exist)
 INSERT INTO coaches (profile_id, club_id, first_name, last_name, phone, email, bio)
 SELECT 
   p.id,
@@ -134,9 +139,7 @@ SELECT
   'Test coach profile for ' || p.first_name || ' ' || p.last_name
 FROM profiles p
 WHERE p.role = 'coach'
-ON CONFLICT (profile_id) DO UPDATE
-SET first_name = EXCLUDED.first_name,
-    last_name = EXCLUDED.last_name;
+  AND NOT EXISTS (SELECT 1 FROM coaches c WHERE c.profile_id = p.id);
 
 -- Step 4: Create programs for each club/season
 DO $$
@@ -234,7 +237,6 @@ DECLARE
   group_id UUID;
   group_names TEXT[] := ARRAY['Group 1', 'Group 2'];
   group_name TEXT;
-  max_participants INTEGER := 15;
 BEGIN
   FOR sub_program_rec IN
     SELECT sp.id as sub_program_id, sp.name as sub_program_name, sp.club_id
@@ -247,17 +249,13 @@ BEGIN
         sub_program_id,
         club_id,
         name,
-        max_participants,
-        status,
-        description
+        status
       )
       VALUES (
         sub_program_rec.sub_program_id,
         sub_program_rec.club_id,
         group_name,
-        max_participants,
-        'ACTIVE',
-        group_name || ' for ' || sub_program_rec.sub_program_name
+        'ACTIVE'
       )
       RETURNING id INTO group_id;
     END LOOP;
@@ -265,10 +263,12 @@ BEGIN
 END $$;
 
 -- Step 7: Assign coaches to programs
-INSERT INTO coach_assignments (coach_id, program_id, club_id, season_id, role)
+INSERT INTO coach_assignments (coach_id, program_id, sub_program_id, group_id, club_id, season_id, role)
 SELECT 
   c.id as coach_id,
   p.id as program_id,
+  NULL as sub_program_id,  -- Explicitly NULL for program-level assignments
+  NULL as group_id,         -- Explicitly NULL for program-level assignments
   c.club_id,
   s.id as season_id,
   'head_coach'
@@ -276,9 +276,16 @@ FROM coaches c
 CROSS JOIN programs p
 JOIN seasons s ON s.id = p.season_id AND s.club_id = c.club_id
 WHERE s.is_current = true
+  AND NOT EXISTS (
+    SELECT 1 FROM coach_assignments ca
+    WHERE ca.coach_id = c.id
+      AND ca.program_id = p.id
+      AND ca.sub_program_id IS NULL
+      AND ca.group_id IS NULL
+      AND ca.season_id = s.id
+  )
 ORDER BY RANDOM() -- Random assignment
-LIMIT (SELECT COUNT(*) FROM coaches) * 2 -- Each coach gets 2 assignments
-ON CONFLICT DO NOTHING;
+LIMIT (SELECT COUNT(*) FROM coaches) * 2; -- Each coach gets 2 assignments
 
 -- ============================================================================
 -- VERIFICATION QUERIES
@@ -320,3 +327,4 @@ FROM profiles p
 JOIN clubs c ON c.id = p.club_id
 WHERE p.email != 'ottilieotto@gmail.com'
 ORDER BY c.name, p.role, p.last_name;
+

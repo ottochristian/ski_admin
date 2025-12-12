@@ -107,3 +107,4 @@ SELECT
    INNER JOIN household_guardians hg ON hg.household_id = a.household_id
    INNER JOIN profiles p ON p.id = hg.user_id
    WHERE p.role = 'parent') as linked_athletes;
+

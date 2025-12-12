@@ -281,3 +281,4 @@ ORDER BY club_name, role, email;
 -- CONTINUE TO NEXT FILE: GENERATE_TEST_DATA_PART2.sql
 -- This will create the actual data structures after users are created
 -- ============================================================================
+

@@ -21,3 +21,4 @@ export function useAdminSeason() {
     loading: seasonHook.loading || authLoading,
   }
 }
+

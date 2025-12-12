@@ -63,8 +63,20 @@ export default function AdminLayout({
           return
         }
 
-        // Don't redirect - just use club context on existing routes
-        // The club context will get the club from the profile
+        // Redirect to club-aware route instead of rendering legacy layout
+        const { data: club } = await supabase
+          .from('clubs')
+          .select('slug')
+          .eq('id', profileData.club_id)
+          .single()
+
+        if (club?.slug) {
+          router.replace(`/clubs/${club.slug}/admin`)
+          return
+        }
+
+        // Fallback if no club slug found
+        setError('Club not found. Please contact an administrator.')
         setIsLoading(false)
       } catch (err) {
         console.error('Layout auth check error:', err)

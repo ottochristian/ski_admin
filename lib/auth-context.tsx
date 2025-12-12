@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { User } from '@supabase/supabase-js'
 import { supabase } from './supabaseClient'
@@ -28,14 +28,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const initialLoadRef = useRef(true)
 
   // Load user and profile
-  const loadAuth = async () => {
+  // showLoader: set to false when refreshing token (user already authenticated)
+  const loadAuth = async (showLoader = true) => {
     try {
-      setLoading(true)
+      if (showLoader) {
+        setLoading(true)
+      }
       setError(null)
 
-      // Get current user
+      // First check if we have a session (localStorage only, no network call)
+      // This prevents "Auth session missing!" errors when user is not logged in
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        // No session - user is not logged in, this is normal for login page
+        setUser(null)
+        setProfile(null)
+        setLoading(false)
+        return
+      }
+
+      // Get current user (validates session with server)
       const {
         data: { user: currentUser },
         error: userError,
@@ -73,21 +89,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      setProfile(profileData as Profile)
+      // Only update profile if data actually changed (prevents unnecessary re-renders)
+      setProfile(prevProfile => {
+        const newProfile = profileData as Profile
+        if (prevProfile &&
+            prevProfile.id === newProfile.id &&
+            prevProfile.email === newProfile.email &&
+            prevProfile.role === newProfile.role &&
+            prevProfile.club_id === newProfile.club_id &&
+            prevProfile.first_name === newProfile.first_name &&
+            prevProfile.last_name === newProfile.last_name) {
+          return prevProfile // Return same reference if nothing changed
+        }
+        return newProfile
+      })
       setError(null)
+      
+      // Only set loading to false if we explicitly showed the loader
+      if (showLoader) {
+        setLoading(false)
+      }
     } catch (err) {
       console.error('Auth load error:', err)
       setError('An error occurred during authentication')
       setUser(null)
       setProfile(null)
-    } finally {
       setLoading(false)
     }
   }
 
   // Initial load
   useEffect(() => {
-    loadAuth()
+    loadAuth().then(() => {
+      // Mark initial load as complete after first auth load
+      initialLoadRef.current = false
+    })
 
     // Listen for auth changes
     const {
@@ -97,9 +133,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null)
         setProfile(null)
         router.push('/login')
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        // Reload auth state
-        await loadAuth()
+      } else if (event === 'SIGNED_IN') {
+        // If this is the initial load, show the loader (first time sign in)
+        // After initial load, this is a tab switch - silent refresh (no loader)
+        await loadAuth(initialLoadRef.current)
+      } else if (event === 'TOKEN_REFRESHED') {
+        // Silent refresh on token refresh (no loader, user already authenticated)
+        await loadAuth(false)
       }
     })
 
@@ -253,3 +293,4 @@ export function useRequireCoach() {
     isCoach: profile?.role === 'coach',
   }
 }
+

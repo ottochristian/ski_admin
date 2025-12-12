@@ -146,3 +146,4 @@ SELECT
 FROM pg_policies
 WHERE tablename IN ('households', 'household_guardians')
 ORDER BY tablename, policyname;
+

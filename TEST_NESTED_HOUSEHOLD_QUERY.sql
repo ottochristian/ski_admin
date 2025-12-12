@@ -92,3 +92,4 @@ LEFT JOIN households h ON h.id = hg.household_id
 WHERE p.role = 'parent'
   AND p.email = 'YOUR_EMAIL_HERE'  -- ⚠️ REPLACE WITH ACTUAL EMAIL
 LIMIT 1;
+

@@ -16,14 +16,17 @@ export function Providers({ children }: { children: ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            // Stale time: data is considered fresh for 30 seconds
-            staleTime: 30 * 1000,
-            // Cache time: unused data stays in cache for 5 minutes
-            gcTime: 5 * 60 * 1000,
+            // Stale time: data is considered fresh for 5 minutes
+            // This prevents unnecessary refetches on navigation
+            staleTime: 5 * 60 * 1000,
+            // Cache time: unused data stays in cache for 10 minutes
+            gcTime: 10 * 60 * 1000,
             // Retry failed requests once
             retry: 1,
-            // Refetch on window focus (useful for keeping data fresh)
+            // Don't refetch on window focus - reduces unnecessary requests
             refetchOnWindowFocus: false,
+            // Don't refetch on mount if data is fresh - key performance fix!
+            refetchOnMount: false,
           },
         },
       })
@@ -35,3 +38,4 @@ export function Providers({ children }: { children: ReactNode }) {
     </QueryClientProvider>
   )
 }
+

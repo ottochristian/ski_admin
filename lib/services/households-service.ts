@@ -34,3 +34,4 @@ export class HouseholdsService extends BaseService {
 }
 
 export const householdsService = new HouseholdsService()
+

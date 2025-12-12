@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from './supabaseClient'
+import { useAuth } from './auth-context'
 
 export interface Club {
   id: string
@@ -27,6 +28,14 @@ export function ClubProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
   const pathname = usePathname()
+  // Track current club slug to avoid unnecessary reloads
+  const [currentClubSlug, setCurrentClubSlug] = useState<string | null>(null)
+  // Use AuthContext's profile to avoid duplicate getUser() calls
+  const { profile, loading: authLoading } = useAuth()
+  // Track if we've already loaded the club for this user to prevent loops
+  const [hasLoadedUserClub, setHasLoadedUserClub] = useState(false)
+  // Track which user we loaded the club for (to detect user changes)
+  const [loadedForUserId, setLoadedForUserId] = useState<string | null>(null)
 
   // Extract club slug from URL: /clubs/[clubSlug]/...
   const getClubSlugFromPath = (path: string): string | null => {
@@ -48,14 +57,28 @@ export function ClubProvider({ children }: { children: ReactNode }) {
       if (clubError) {
         setError(`Club not found: ${clubSlug}`)
         setClub(null)
+        setCurrentClubSlug(null)
         return
       }
 
-      setClub(data as Club)
+      // Only update if club data actually changed to prevent unnecessary re-renders
+      setClub(prevClub => {
+        if (prevClub && 
+            prevClub.id === data.id && 
+            prevClub.name === data.name && 
+            prevClub.slug === data.slug &&
+            prevClub.logo_url === data.logo_url &&
+            prevClub.primary_color === data.primary_color) {
+          return prevClub // Return same object reference if nothing changed
+        }
+        return data as Club
+      })
+      setCurrentClubSlug(clubSlug)
     } catch (err) {
       console.error('Error loading club:', err)
       setError('Failed to load club')
       setClub(null)
+      setCurrentClubSlug(null)
     } finally {
       setLoading(false)
     }
@@ -64,31 +87,25 @@ export function ClubProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const clubSlug = getClubSlugFromPath(pathname)
 
-    if (clubSlug) {
-      // If club slug in URL, load that club
-      loadClub(clubSlug)
-    } else {
-      // If no club slug, get user's club from profile
-      // This handles legacy routes like /admin, /dashboard
-      async function getUserClub() {
-        try {
-          setLoading(true)
-          const {
-            data: { user },
-          } = await supabase.auth.getUser()
+    // Wait for auth to load
+    if (authLoading) {
+      return
+    }
 
-          if (!user) {
-            setLoading(false)
-            return
-          }
+    // Reset if user changed (detect logout/login)
+    if (profile && profile.id !== loadedForUserId) {
+      setHasLoadedUserClub(false)
+      setLoadedForUserId(profile.id)
+    }
 
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('club_id')
-            .eq('id', user.id)
-            .single()
-
-          if (profile?.club_id) {
+    // For regular admins (not system_admin), ALWAYS load their club from profile, ignore URL
+    // This prevents infinite redirects when they try to access other clubs
+    if (profile && profile.role === 'admin' && !hasLoadedUserClub) {
+      // Regular admin - load their club from profile only once
+      if (profile.club_id) {
+        const loadAdminClub = async () => {
+          try {
+            setLoading(true)
             const { data: clubData, error: clubError } = await supabase
               .from('clubs')
               .select('id, name, slug, logo_url, primary_color')
@@ -96,31 +113,97 @@ export function ClubProvider({ children }: { children: ReactNode }) {
               .single()
 
             if (clubError) {
-              console.error('Error loading club:', clubError)
+              console.error('Error loading admin club:', clubError)
               setError(`Failed to load club: ${clubError.message}`)
             } else if (clubData) {
               setClub(clubData as Club)
+              setCurrentClubSlug(clubData.slug)
+              setHasLoadedUserClub(true)
             }
-          } else {
-            console.warn('User profile has no club_id')
+          } catch (err) {
+            console.error('Error loading club from profile:', err)
+            setError('Failed to load club information')
+          } finally {
+            setLoading(false)
           }
-        } catch (err) {
-          console.error('Error getting user club:', err)
-          setError('Failed to load club information')
-        } finally {
-          setLoading(false)
         }
+        loadAdminClub()
       }
+      return
+    }
 
-      getUserClub()
+    // For system_admin or other roles, load club based on URL
+    if (clubSlug) {
+      // If club slug in URL and it's different from current, load that club
+      if (clubSlug !== currentClubSlug) {
+        loadClub(clubSlug)
+      } else if (loading) {
+        // Club slug is same as current - no need to reload, just ensure loading is false
+        // Only update if currently loading to prevent infinite re-renders
+        setLoading(false)
+      }
+    } else {
+      // No club slug in URL - this is a legacy route
+      if (!club && profile && profile.club_id) {
+        // If no club slug, get user's club from profile (already loaded in AuthContext)
+        // This handles legacy routes like /admin, /dashboard
+        const clubId = profile.club_id // Capture club_id before async function
+        async function loadClubFromProfile() {
+          try {
+            setLoading(true)
+            const { data: clubData, error: clubError } = await supabase
+              .from('clubs')
+              .select('id, name, slug, logo_url, primary_color')
+              .eq('id', clubId)
+              .single()
+
+            if (clubError) {
+              console.error('Error loading club:', clubError)
+              setError(`Failed to load club: ${clubError.message}`)
+            } else if (clubData) {
+              // Only update if club data actually changed to prevent unnecessary re-renders
+              setClub(prevClub => {
+                if (prevClub && 
+                    prevClub.id === clubData.id && 
+                    prevClub.name === clubData.name && 
+                    prevClub.slug === clubData.slug &&
+                    prevClub.logo_url === clubData.logo_url &&
+                    prevClub.primary_color === clubData.primary_color) {
+                  return prevClub // Return same object reference if nothing changed
+                }
+                return clubData as Club
+              })
+              setCurrentClubSlug(clubData.slug)
+            }
+          } catch (err) {
+            console.error('Error loading club from profile:', err)
+            setError('Failed to load club information')
+          } finally {
+            setLoading(false)
+          }
+        }
+
+        loadClubFromProfile()
+      } else if (club && loading) {
+        // Already have club loaded for legacy route - no need to fetch again
+        // Only update if currently loading to prevent infinite re-renders
+        setLoading(false)
+      } else if (!profile && loading) {
+        // No profile (user not logged in) - no club to load
+        // Only update if currently loading to prevent infinite re-renders
+        setLoading(false)
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname])
+  }, [pathname, currentClubSlug, profile?.club_id, authLoading, loading, profile?.role, hasLoadedUserClub, profile?.id, loadedForUserId])
 
   const refreshClub = async () => {
     const clubSlug = getClubSlugFromPath(pathname)
     if (clubSlug) {
       await loadClub(clubSlug)
+    } else if (club?.slug) {
+      // If on legacy route, reload current club
+      await loadClub(club.slug)
     }
   }
 

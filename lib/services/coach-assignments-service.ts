@@ -77,3 +77,4 @@ export class CoachAssignmentsService extends BaseService {
 }
 
 export const coachAssignmentsService = new CoachAssignmentsService()
+

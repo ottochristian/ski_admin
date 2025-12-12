@@ -403,3 +403,4 @@ LIMIT 10;
 --    - Email mismatch between profile and household
 --    - Database permissions/RLS issues
 -- ============================================================================
+

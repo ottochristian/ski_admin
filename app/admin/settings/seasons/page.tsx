@@ -26,6 +26,7 @@ import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 export default function SeasonsPage() {
   const router = useRouter()
   const { profile, loading: authLoading } = useRequireAdmin()
+  // Note: This page should be migrated to club-aware route but seasons don't need clubSlug in URL
   const { seasons, loading: seasonsLoading } = useSeason()
 
   const createSeason = useCreateSeason()

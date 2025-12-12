@@ -127,3 +127,4 @@ SELECT
 FROM pg_policies
 WHERE tablename = 'programs'
 ORDER BY policyname;
+

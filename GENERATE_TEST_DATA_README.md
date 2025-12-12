@@ -228,3 +228,4 @@ After generating test data, you can:
 5. Test the full registration flow
 
 Enjoy testing! 🎿
+

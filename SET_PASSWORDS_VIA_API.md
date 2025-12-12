@@ -112,3 +112,4 @@ The test users will have:
 - **Last Name**: Role + identifier (e.g., "Admin A", "Parent B", "Coach A")
 - **Email**: ottilieotto+[club]+[role]+[identifier]@gmail.com
 - **Password**: test12345
+

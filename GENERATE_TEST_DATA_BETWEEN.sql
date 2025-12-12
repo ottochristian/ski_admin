@@ -66,3 +66,4 @@ ORDER BY
   email;
 
 -- Expected output: 14 rows with correct names, roles, and club assignments
+

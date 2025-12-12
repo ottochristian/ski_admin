@@ -3,7 +3,7 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,77 +34,186 @@ export default function LoginPage() {
   // If logged in, redirect to appropriate dashboard
   useEffect(() => {
     async function checkUserAndRedirect() {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser()
-
-      if (userError || !user) {
-        // No user logged in - show login form
-        setCheckingSession(false)
-        return
-      }
-
-      // User is logged in - get profile and redirect appropriately
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('role, club_id')
-        .eq('id', user.id)
-        .single()
-
-      if (profileError || !profileData) {
-        // Profile not found - allow login (might be new account)
-        setCheckingSession(false)
-        return
-      }
-
-      // Redirect based on role
-      if (profileData.role === 'system_admin') {
-        router.push('/system-admin')
-        return
-      }
-
-      if (profileData.role === 'admin') {
-        router.push('/admin')
-        return
-      }
-
-      if (profileData.role === 'coach') {
-        router.push('/coach')
-        return
-      }
-
-      if (profileData.role === 'parent') {
-        // Parents must have a club_id
-        if (!profileData.club_id) {
-          // Show error message instead of redirecting
-          setError('Your account is missing club assignment. Please contact support.')
+      try {
+        // First, verify Supabase client is initialized
+        if (!supabase) {
+          console.error('Supabase client not initialized')
+          setError('Application configuration error. Please refresh the page.')
           setCheckingSession(false)
           return
         }
 
-        // Get club slug for redirect
-        const { data: club } = await supabase
-          .from('clubs')
-          .select('slug')
-          .eq('id', profileData.club_id)
+        // Check if environment variables are configured
+        if (!isSupabaseConfigured()) {
+          console.error('Supabase environment variables not configured')
+          setError('Application configuration error: Supabase credentials are missing. Please check your .env.local file.')
+          setCheckingSession(false)
+          return
+        }
+
+        console.log('Checking session...')
+        
+        // Try to get session from localStorage first (faster, doesn't require network)
+        // This helps avoid timeout if there's no existing session
+        try {
+          const { data: { session: localSession } } = await supabase.auth.getSession()
+          
+          // If no local session, skip getUser() call and show login form
+          if (!localSession) {
+            console.log('No local session found, showing login form')
+            setCheckingSession(false)
+            return
+          }
+        } catch (sessionError) {
+          console.log('Error checking local session, will try getUser()', sessionError)
+          // Continue to getUser() below
+        }
+        
+        // Add a timeout wrapper for the getUser call specifically
+        // Increased timeout to 10 seconds to account for network latency
+        const getUserPromise = supabase.auth.getUser()
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('getUser timeout')), 10000)
+        )
+
+        let userData
+        try {
+          userData = await Promise.race([getUserPromise, timeoutPromise]) as any
+        } catch (raceError: any) {
+          if (raceError.message === 'getUser timeout') {
+            console.error('getUser() call timed out after 10 seconds')
+            console.error('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
+            console.error('This might indicate:', 
+              '- Network connectivity issues',
+              '- Supabase service is unavailable',
+              '- Firewall or CORS blocking the request',
+              '- Invalid Supabase URL'
+            )
+            // If getUser times out, just show login form - user can still log in
+            console.log('Timeout detected, showing login form anyway')
+            setCheckingSession(false)
+            // Don't set error - just let them try to log in
+            return
+          }
+          throw raceError
+        }
+
+        const {
+          data: { user },
+          error: userError,
+        } = userData
+
+        if (userError || !user) {
+          // No user logged in - show login form
+          console.log('No user logged in')
+          setCheckingSession(false)
+          return
+        }
+
+        // User is logged in - get profile and redirect appropriately
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('role, club_id')
+          .eq('id', user.id)
           .single()
 
-        if (club?.slug) {
-          router.push(`/clubs/${club.slug}/parent/dashboard`)
-          return
-        } else {
-          setError('Club not found. Please contact support.')
+        if (profileError || !profileData) {
+          // Profile not found - allow login (might be new account)
+          console.log('Profile error or not found:', profileError)
           setCheckingSession(false)
           return
         }
-      }
 
-      // Unknown role - allow login
-      setCheckingSession(false)
+        // Redirect based on role
+        if (profileData.role === 'system_admin') {
+          router.push('/system-admin')
+          return
+        }
+
+        if (profileData.role === 'admin') {
+          // Get club slug for club-aware route
+          if (profileData.club_id) {
+            const { data: club, error: clubError } = await supabase
+              .from('clubs')
+              .select('slug')
+              .eq('id', profileData.club_id)
+              .single()
+
+            if (clubError) {
+              console.error('Club fetch error:', clubError)
+              setError('Error loading club information. Please try again.')
+              setCheckingSession(false)
+              return
+            }
+
+            if (club?.slug) {
+              router.push(`/clubs/${club.slug}/admin`)
+              return
+            }
+          }
+          // Fallback to legacy route if no club
+          router.push('/admin')
+          return
+        }
+
+        if (profileData.role === 'coach') {
+          router.push('/coach')
+          return
+        }
+
+        if (profileData.role === 'parent') {
+          // Parents must have a club_id
+          if (!profileData.club_id) {
+            // Show error message instead of redirecting
+            setError('Your account is missing club assignment. Please contact support.')
+            setCheckingSession(false)
+            return
+          }
+
+          // Get club slug for redirect
+          const { data: club, error: clubError } = await supabase
+            .from('clubs')
+            .select('slug')
+            .eq('id', profileData.club_id)
+            .single()
+
+          if (clubError) {
+            console.error('Club fetch error:', clubError)
+            setError('Error loading club information. Please try again.')
+            setCheckingSession(false)
+            return
+          }
+
+          if (club?.slug) {
+            router.push(`/clubs/${club.slug}/parent/dashboard`)
+            return
+          } else {
+            setError('Club not found. Please contact support.')
+            setCheckingSession(false)
+            return
+          }
+        }
+
+        // Unknown role - allow login
+        setCheckingSession(false)
+      } catch (error) {
+        // Catch any unexpected errors
+        console.error('Session check error:', error)
+        setCheckingSession(false)
+        setError('An error occurred. Please try refreshing the page.')
+      }
     }
 
-    checkUserAndRedirect()
+    // Add timeout to prevent infinite loading
+    const timeout = setTimeout(() => {
+      console.error('Session check timed out')
+      setCheckingSession(false)
+      setError('Connection timeout. Please check your internet connection and try again.')
+    }, 10000) // 10 second timeout
+
+    checkUserAndRedirect().finally(() => {
+      clearTimeout(timeout)
+    })
   }, [router])
 
   async function handleSubmit(e: FormEvent) {
@@ -230,6 +339,26 @@ export default function LoginPage() {
       if (profileData.role === 'system_admin') {
         router.push('/system-admin')
         return
+      } else if (profileData.role === 'admin') {
+        // Get club slug for club-aware route
+        if (profileData.club_id) {
+          const { data: club } = await supabase
+            .from('clubs')
+            .select('slug')
+            .eq('id', profileData.club_id)
+            .single()
+
+          if (club?.slug) {
+            router.push(`/clubs/${club.slug}/admin`)
+            return
+          }
+        }
+        // Fallback to legacy route if no club
+        router.push('/admin')
+        return
+      } else if (profileData.role === 'coach') {
+        router.push('/coach')
+        return
       } else if (profileData.role === 'parent') {
         // Parents MUST have a club_id - enforce this
         if (!profileData.club_id) {
@@ -253,12 +382,6 @@ export default function LoginPage() {
           setLoading(false)
           return
         }
-      } else if (profileData.role === 'admin') {
-        router.push('/admin')
-        return
-      } else if (profileData.role === 'coach') {
-        router.push('/coach')
-        return
       }
     }
 

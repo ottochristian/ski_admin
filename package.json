@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "set-passwords": "node scripts/set-test-user-passwords.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

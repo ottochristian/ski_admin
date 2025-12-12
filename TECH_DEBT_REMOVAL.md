@@ -85,3 +85,4 @@ When ready to fully remove families table support:
 ---
 
 **Status:** Deprecation complete, backward compatibility maintained ✅
+

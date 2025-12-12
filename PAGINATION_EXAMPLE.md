@@ -275,3 +275,4 @@ Update these pages following the same pattern:
     ON registrations(club_id, season_id, created_at DESC);
   ```
 
+

@@ -91,6 +91,16 @@ export function ProfileMenu({ profile }: ProfileMenuProps) {
   // Determine the profile edit route based on role
   const getProfileEditRoute = () => {
     if (profile.role === 'admin' || profile.role === 'system_admin') {
+      // For admins, check if we're on a club-aware route
+      if (typeof window !== 'undefined') {
+        const pathParts = window.location.pathname.split('/')
+        const clubSlugIndex = pathParts.indexOf('clubs')
+        if (clubSlugIndex !== -1 && pathParts[clubSlugIndex + 1]) {
+          // We're on a club-aware route, use club-aware profile route
+          return `/clubs/${pathParts[clubSlugIndex + 1]}/admin/profile`
+        }
+      }
+      // Fallback to legacy admin profile route
       return '/admin/profile'
     } else if (profile.role === 'coach') {
       return '/coach/profile'
@@ -156,3 +166,4 @@ export function ProfileMenu({ profile }: ProfileMenuProps) {
     </DropdownMenu>
   )
 }
+

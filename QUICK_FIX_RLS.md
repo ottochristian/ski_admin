@@ -1,45 +1,76 @@
-# Quick Fix for Registration RLS Error
+# Quick Fix for RLS Issue
 
-## The Problem
-Your query returned no rows, which means:
-- ❌ No `household_guardians` link exists for your user
-- OR your athletes aren't linked to a household
-- OR the joins aren't matching
+Your Supabase key is correct (using `anon` role), so the issue is likely:
+1. RLS policies need to be recreated
+2. Browser cache showing old data
 
-## Quick Fix (Run this in Supabase SQL Editor)
+## Step 1: Force Enable RLS and Recreate Policies
 
-Run migration `32_fix_missing_household_links.sql` which will:
-1. Create households for parents who don't have one
-2. Link you to your household via `household_guardians`
-3. Link athletes to households if missing
-4. Fix athlete club_id mismatches
-
-## After Running the Fix
-
-Run this query again to verify:
+Run this in Supabase SQL Editor:
 
 ```sql
-SELECT 
-  'Your Setup' as check,
-  p.email,
-  p.club_id as your_club_id,
-  a.id as athlete_id,
-  a.first_name || ' ' || a.last_name as athlete_name,
-  a.club_id as athlete_club_id,
-  a.household_id,
-  hg.household_id as your_household_id,
-  CASE 
-    WHEN a.household_id = hg.household_id THEN '✅ Match'
-    ELSE '❌ Mismatch'
-  END as household_match
-FROM profiles p
-INNER JOIN household_guardians hg ON hg.user_id = p.id
-LEFT JOIN athletes a ON a.household_id = hg.household_id
-WHERE p.id = auth.uid();
+-- Copy and paste the contents of FORCE_ENABLE_RLS.sql
 ```
 
-You should now see rows with your athletes!
+Or run the file: `FORCE_ENABLE_RLS.sql`
 
-## Then Try Checkout Again
+## Step 2: Clear Browser Cache
 
-After the fix, try the checkout flow again. The RLS policy should now allow you to create registrations.
+**Option A: Hard Refresh**
+- Mac: `Cmd + Shift + R`
+- Windows: `Ctrl + Shift + R`
+
+**Option B: Clear All Data**
+1. Open DevTools (F12)
+2. Application tab → Storage → Clear site data
+3. Refresh page
+
+## Step 3: Log Out and Log Back In
+
+1. Click profile menu → Sign Out
+2. Log back in as Jackson admin
+3. Go to Athletes page
+4. Should only see Jackson athletes now
+
+## Step 4: Verify It Worked
+
+Run this diagnostic to confirm:
+
+```sql
+-- Run VERIFY_RLS_AND_ADMIN.sql in Supabase SQL Editor
+```
+
+Look for:
+- `rls_enabled` = `true` ✅
+- Multiple policies listed ✅
+- Only Jackson athletes in "Expected Athletes" section ✅
+
+---
+
+## If It Still Doesn't Work
+
+Add this temporarily to the athletes page to debug:
+
+```typescript
+// In app/clubs/[clubSlug]/admin/athletes/page.tsx
+// Add at the top of the component
+
+useEffect(() => {
+  async function debug() {
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, club_id')
+      .eq('id', user?.id)
+      .single()
+    
+    console.log('=== DEBUG INFO ===')
+    console.log('User ID:', user?.id)
+    console.log('Profile:', profile)
+    console.log('Athletes query will filter by club_id:', profile?.club_id)
+  }
+  debug()
+}, [])
+```
+
+This will show you in the browser console what club_id is being used for filtering.

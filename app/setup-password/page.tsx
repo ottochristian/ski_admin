@@ -56,6 +56,20 @@ export default function SetupPasswordPage() {
             router.push('/system-admin')
             return
           } else if (profileData.role === 'admin') {
+            // Get club slug for club-aware route
+            if (profileData.club_id) {
+              const { data: club } = await supabase
+                .from('clubs')
+                .select('slug')
+                .eq('id', profileData.club_id)
+                .single()
+
+              if (club?.slug) {
+                router.push(`/clubs/${club.slug}/admin`)
+                return
+              }
+            }
+            // Fallback to legacy route if no club
             router.push('/admin')
             return
           } else if (profileData.role === 'coach') {
@@ -143,6 +157,20 @@ export default function SetupPasswordPage() {
         router.push('/system-admin')
         return
       } else if (profileData.role === 'admin') {
+        // Get club slug for club-aware route
+        if (profileData.club_id) {
+          const { data: club } = await supabase
+            .from('clubs')
+            .select('slug')
+            .eq('id', profileData.club_id)
+            .single()
+
+          if (club?.slug) {
+            router.push(`/clubs/${club.slug}/admin`)
+            return
+          }
+        }
+        // Fallback to legacy route if no club
         router.push('/admin')
         return
       } else if (profileData.role === 'coach') {

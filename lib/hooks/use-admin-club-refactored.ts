@@ -27,3 +27,4 @@ export function useAdminClub() {
     error: null, // useRequireAdmin handles errors via redirects
   }
 }
+

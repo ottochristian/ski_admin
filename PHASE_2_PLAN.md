@@ -69,3 +69,4 @@ Remove redundant manual club filtering and rely on RLS policies as the source of
 - Keep `withClubData()` helper for INSERT operations (still need to set club_id)
 - Admin client operations may still need manual filtering (bypasses RLS)
 - This is a security-critical phase - test thoroughly before removing filters
+

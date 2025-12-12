@@ -59,3 +59,4 @@ SELECT
 FROM information_schema.columns
 WHERE table_name = 'coach_assignments'
 ORDER BY ordinal_position;
+

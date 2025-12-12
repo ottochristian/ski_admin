@@ -169,3 +169,4 @@ WHERE id IN (
   WHERE order_id = '6bb48625-73f5-4464-bbb7-8ffb4b4efff9' 
     AND registration_id IS NOT NULL
 );
+

@@ -172,3 +172,4 @@ If this works, the issue is in the application code. If it fails, the RLS policy
 ## Next Steps
 
 If none of these fix the issue, run migration `31_fix_registrations_rls_policy.sql` which makes the policy more lenient.
+

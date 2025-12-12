@@ -107,3 +107,4 @@ export function CoachSidebar({ profile }: CoachSidebarProps) {
     </aside>
   )
 }
+

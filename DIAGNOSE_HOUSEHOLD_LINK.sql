@@ -76,3 +76,4 @@ FROM profiles p
 INNER JOIN household_guardians hg ON hg.user_id = p.id
 LEFT JOIN athletes a ON a.household_id = hg.household_id
 WHERE p.id = auth.uid();
+

@@ -48,6 +48,20 @@ export default function HomePage() {
         }
 
         if (profile.role === 'admin') {
+          // Get club slug for club-aware route
+          if (profile.club_id) {
+            const { data: club } = await supabase
+              .from('clubs')
+              .select('slug')
+              .eq('id', profile.club_id)
+              .single()
+
+            if (club?.slug) {
+              router.push(`/clubs/${club.slug}/admin`)
+              return
+            }
+          }
+          // Fallback to legacy route if no club
           router.push('/admin')
           return
         }

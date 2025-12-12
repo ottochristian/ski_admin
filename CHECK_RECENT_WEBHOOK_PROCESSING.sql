@@ -90,3 +90,4 @@ FROM recent_order ro
 JOIN order_items oi ON oi.order_id = ro.id
 JOIN registrations r ON r.id = oi.registration_id
 ORDER BY table_name;
+
