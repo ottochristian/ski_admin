@@ -18,7 +18,7 @@ import {
   TrendingUp,
 } from 'lucide-react'
 import { useRequireAdmin } from '@/lib/auth-context'
-import { useSeason } from '@/lib/hooks/use-season'
+import { useSelectedSeason } from '@/lib/contexts/season-context'
 import { useAthletesCount } from '@/lib/hooks/use-athletes'
 import { usePrograms } from '@/lib/hooks/use-programs'
 import {
@@ -33,7 +33,7 @@ export default function AdminDashboard() {
   const params = useParams()
   const clubSlug = params.clubSlug as string
   const { profile, loading: authLoading } = useRequireAdmin()
-  const { selectedSeason, loading: seasonLoading } = useSeason()
+  const selectedSeason = useSelectedSeason()
 
   // PHASE 2: RLS handles club filtering automatically - no clubQuery needed!
   // React Query handles loading, error, and caching
@@ -62,7 +62,6 @@ export default function AdminDashboard() {
 
   const isLoading =
     authLoading ||
-    seasonLoading ||
     athletesLoading ||
     programsLoading ||
     registrationsLoading ||
@@ -253,4 +252,5 @@ export default function AdminDashboard() {
     </div>
   )
 }
+
 

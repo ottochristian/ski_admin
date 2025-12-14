@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useRequireAdmin } from '@/lib/auth-context'
-import { useSeason } from '@/lib/hooks/use-season'
+import { useSelectedSeason } from '@/lib/contexts/season-context'
 import { useCoaches } from '@/lib/hooks/use-coaches'
 import { usePrograms } from '@/lib/hooks/use-programs'
 import { coachAssignmentsService } from '@/lib/services/coach-assignments-service'
@@ -70,7 +70,7 @@ export default function AssignCoachPage() {
   const coachId = params.coachId as string
 
   const { profile, loading: authLoading } = useRequireAdmin()
-  const { selectedSeason, loading: seasonLoading } = useSeason()
+  const selectedSeason = useSelectedSeason()
 
   // PHASE 2: RLS handles club filtering automatically
   const {
@@ -107,7 +107,6 @@ export default function AssignCoachPage() {
     async function loadAssignments() {
       if (
         authLoading ||
-        seasonLoading ||
         coachesLoading ||
         programsLoading ||
         !selectedSeason ||
@@ -169,7 +168,6 @@ export default function AssignCoachPage() {
     selectedSeason?.id,
     coach?.id,
     authLoading,
-    seasonLoading,
     coachesLoading,
     programsLoading,
   ])
@@ -258,7 +256,6 @@ export default function AssignCoachPage() {
 
   const isLoading =
     authLoading ||
-    seasonLoading ||
     coachesLoading ||
     programsLoading ||
     loading
@@ -525,4 +522,5 @@ export default function AssignCoachPage() {
     </div>
   )
 }
+
 

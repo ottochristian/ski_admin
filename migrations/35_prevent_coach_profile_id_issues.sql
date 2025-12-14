@@ -105,3 +105,4 @@ WHERE event_object_table = 'profiles'
   AND trigger_name LIKE '%coach%'
 ORDER BY trigger_name;
 
+

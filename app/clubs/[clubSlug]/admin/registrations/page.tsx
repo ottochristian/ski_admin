@@ -19,7 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useRequireAdmin } from '@/lib/auth-context'
-import { useSeason } from '@/lib/hooks/use-season'
+import { useSelectedSeason } from '@/lib/contexts/season-context'
 import { useRegistrations } from '@/lib/hooks/use-registrations'
 import { AdminPageHeader } from '@/components/admin-page-header'
 import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
@@ -53,7 +53,7 @@ export default function RegistrationsPage() {
   const params = useParams()
   const clubSlug = params.clubSlug as string
   const { profile, loading: authLoading } = useRequireAdmin()
-  const { selectedSeason, loading: seasonLoading } = useSeason()
+  const selectedSeason = useSelectedSeason()
   const [parentEmailMap, setParentEmailMap] = useState<Map<string, string>>(new Map())
 
   // PHASE 2: RLS handles club filtering automatically - no clubQuery needed!
@@ -166,7 +166,7 @@ export default function RegistrationsPage() {
   })
 
   // Show loading state
-  if (authLoading || seasonLoading || isLoading) {
+  if (authLoading || isLoading) {
     return <InlineLoading message="Loading registrations…" />
   }
 
@@ -265,4 +265,5 @@ export default function RegistrationsPage() {
     </div>
   )
 }
+
 

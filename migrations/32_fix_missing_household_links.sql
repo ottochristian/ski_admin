@@ -108,3 +108,4 @@ SELECT
    INNER JOIN profiles p ON p.id = hg.user_id
    WHERE p.role = 'parent') as linked_athletes;
 
+

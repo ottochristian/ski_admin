@@ -170,3 +170,4 @@ WHERE id IN (
     AND registration_id IS NOT NULL
 );
 
+

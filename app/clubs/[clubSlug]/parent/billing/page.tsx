@@ -2,7 +2,7 @@
 
 import { useSearchParams } from 'next/navigation'
 import { useParentClub } from '@/lib/use-parent-club'
-import { useSeason } from '@/lib/hooks/use-season'
+import { useCurrentSeason } from '@/lib/contexts/season-context'
 import { useOrdersByHousehold } from '@/lib/hooks/use-orders'
 import {
   Card,
@@ -36,7 +36,7 @@ export default function BillingPage() {
   const { clubId, household, loading: authLoading } = useParentClub()
 
   // PHASE 2: Use base useSeason hook - RLS handles filtering
-  const { currentSeason, loading: seasonLoading } = useSeason()
+  const currentSeason = useCurrentSeason()
 
   // PHASE 2: RLS handles club filtering automatically
   const {
@@ -46,7 +46,7 @@ export default function BillingPage() {
     refetch,
   } = useOrdersByHousehold(household?.id || null, currentSeason?.id)
 
-  const isLoading = authLoading || seasonLoading || ordersLoading
+  const isLoading = authLoading || ordersLoading
 
   // Show loading state
   if (isLoading) {

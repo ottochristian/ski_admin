@@ -390,3 +390,4 @@ setShowCheckout(true)
 5. Test thoroughly with Stripe test cards
 6. Update success/error handling
 7. Add loading states and better UX
+

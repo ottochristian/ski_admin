@@ -282,3 +282,4 @@ ORDER BY club_name, role, email;
 -- This will create the actual data structures after users are created
 -- ============================================================================
 
+

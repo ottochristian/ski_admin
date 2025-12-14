@@ -5,9 +5,10 @@ import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useRequireAdmin } from '@/lib/auth-context'
 import { AdminSidebar } from '@/components/admin-sidebar'
-import { SeasonSelector } from '@/components/season-selector'
+import { UnifiedSeasonSelector } from '@/components/unified-season-selector'
 import { ProfileMenu } from '@/components/profile-menu'
 import { useClub } from '@/lib/club-context'
+import { SeasonProvider } from '@/lib/contexts/season-context'
 import { InlineLoading } from '@/components/ui/loading-states'
 
 export default function AdminLayout({
@@ -24,22 +25,12 @@ export default function AdminLayout({
   // Verify club slug matches user's club (if club loaded)
   useEffect(() => {
     if (!authLoading && !clubLoading && club && club.slug !== clubSlug) {
-      console.log('🔄 Redirect triggered:', {
-        profileRole: profile?.role,
-        profileClubId: profile?.club_id,
-        urlClubSlug: clubSlug,
-        contextClubSlug: club.slug,
-        contextClubId: club.id,
-      })
-      
       // System admins can access any club - don't redirect
       if (profile?.role === 'system_admin') {
-        console.log('✅ System admin - allowing access to any club')
         return
       }
       
       // Club slug doesn't match - redirect to user's club
-      console.log(`⚠️ Redirecting from ${clubSlug} to ${club.slug}`)
       router.replace(`/clubs/${club.slug}/admin`)
     }
   }, [club, clubSlug, authLoading, clubLoading, router, profile])
@@ -57,20 +48,23 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="flex min-h-screen">
-      <AdminSidebar profile={profile} clubSlug={clubSlug} />
-      <main className="flex-1 ml-64 flex flex-col bg-slate-50">
-        <div className="fixed top-0 right-0 left-64 border-b border-slate-200 bg-white px-8 py-4 z-10">
-          <div className="flex items-center justify-end gap-4">
-            <SeasonSelector />
-            <ProfileMenu profile={profile} />
+    <SeasonProvider>
+      <div className="flex min-h-screen">
+        <AdminSidebar profile={profile} clubSlug={clubSlug} />
+        <main className="flex-1 ml-64 flex flex-col bg-slate-50">
+          <div className="fixed top-0 right-0 left-64 border-b border-slate-200 bg-white px-8 py-4 z-10">
+            <div className="flex items-center justify-end gap-4">
+              <UnifiedSeasonSelector />
+              <ProfileMenu profile={profile} />
+            </div>
           </div>
-        </div>
-        <div className="flex-1 overflow-auto pt-16">
-          <div className="p-8">{children}</div>
-        </div>
-      </main>
-    </div>
+          <div className="flex-1 overflow-auto pt-16">
+            <div className="p-8">{children}</div>
+          </div>
+        </main>
+      </div>
+    </SeasonProvider>
   )
 }
+
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useParentClub } from '@/lib/use-parent-club'
-import { useSeason } from '@/lib/hooks/use-season'
+import { useCurrentSeason } from '@/lib/contexts/season-context'
 import { usePrograms } from '@/lib/hooks/use-programs'
 import { useCart } from '@/lib/cart-context'
 import {
@@ -53,7 +53,7 @@ export default function ParentProgramsPage() {
   const { addItem } = useCart()
 
   // PHASE 2: Use base useSeason hook - RLS handles filtering
-  const { currentSeason, loading: seasonLoading } = useSeason()
+  const currentSeason = useCurrentSeason()
 
   // PHASE 2: RLS handles club filtering automatically
   const {
@@ -106,7 +106,7 @@ export default function ParentProgramsPage() {
     })
   }
 
-  const isLoading = authLoading || seasonLoading || programsLoading
+  const isLoading = authLoading || programsLoading
 
   // Show loading state
   if (isLoading) {

@@ -85,3 +85,4 @@ WHERE we.event_type = 'checkout.session.completed'
   AND we.created_at > NOW() - INTERVAL '7 days'
 ORDER BY we.created_at DESC;
 
+

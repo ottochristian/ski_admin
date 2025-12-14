@@ -86,3 +86,4 @@ LEFT JOIN registrations r ON r.id = oi.registration_id
 WHERE o.id = :'order_id'
 GROUP BY o.id, o.status, p.status;
 */
+

@@ -50,3 +50,4 @@ FROM coaches c
 JOIN clubs cl ON cl.id = c.club_id
 LEFT JOIN profiles p ON p.id = c.profile_id
 ORDER BY cl.name, c.first_name;
+

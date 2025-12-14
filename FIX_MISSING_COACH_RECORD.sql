@@ -85,3 +85,4 @@ FROM coaches c
 JOIN profiles p ON p.id = c.profile_id
 WHERE p.email = 'ottilieotto+alpine+testcoach@gmail.com';
 
+

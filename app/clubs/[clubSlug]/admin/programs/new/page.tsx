@@ -4,7 +4,7 @@ import { useState, FormEvent } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { useRequireAdmin } from '@/lib/auth-context'
-import { useSeason } from '@/lib/hooks/use-season'
+import { useCurrentSeason } from '@/lib/contexts/season-context'
 import { useQueryClient } from '@tanstack/react-query'
 import { programsService } from '@/lib/services/programs-service'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
@@ -20,7 +20,7 @@ export default function NewProgramPage() {
   const basePath = `/clubs/${clubSlug}/admin`
   const queryClient = useQueryClient()
   const { profile, loading: authLoading } = useRequireAdmin()
-  const { currentSeason, loading: seasonLoading } = useSeason()
+  const currentSeason = useCurrentSeason()
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -73,7 +73,7 @@ export default function NewProgramPage() {
     }
   }
 
-  const isLoading = authLoading || seasonLoading
+  const isLoading = authLoading
 
   // Show loading state
   if (isLoading) {
@@ -181,4 +181,5 @@ export default function NewProgramPage() {
     </div>
   )
 }
+
 

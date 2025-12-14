@@ -122,3 +122,4 @@ LEFT JOIN order_items oi ON oi.order_id = lo.id
 LEFT JOIN registrations r ON r.id = oi.registration_id
 GROUP BY lo.id, lo.status, lo.total_amount;
 
+

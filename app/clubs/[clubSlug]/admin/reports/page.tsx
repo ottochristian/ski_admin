@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import { useRequireAdmin } from '@/lib/auth-context'
-import { useSeason } from '@/lib/hooks/use-season'
+import { useSelectedSeason } from '@/lib/contexts/season-context'
 import { usePrograms } from '@/lib/hooks/use-programs'
 import { useRegistrations } from '@/lib/hooks/use-registrations'
 import { AdminPageHeader } from '@/components/admin-page-header'
@@ -18,7 +18,7 @@ import { ProgramStatus } from '@/lib/programStatus'
 
 export default function ReportsPage() {
   const { profile, loading: authLoading } = useRequireAdmin()
-  const { selectedSeason, loading: seasonLoading } = useSeason()
+  const selectedSeason = useSelectedSeason()
 
   // PHASE 2: RLS handles club filtering automatically
   const { data: allPrograms = [], isLoading: programsLoading } = usePrograms(
@@ -67,7 +67,6 @@ export default function ReportsPage() {
 
   const isLoading =
     authLoading ||
-    seasonLoading ||
     programsLoading ||
     registrationsLoading
 
@@ -227,4 +226,5 @@ export default function ReportsPage() {
     </div>
   )
 }
+
 

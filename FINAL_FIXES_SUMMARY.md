@@ -216,3 +216,4 @@ If issues persist:
 3. Run diagnostic SQL scripts
 4. Verify RLS policies are enabled
 5. Clear browser cache and localStorage
+

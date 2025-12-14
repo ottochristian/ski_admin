@@ -74,3 +74,4 @@ useEffect(() => {
 ```
 
 This will show you in the browser console what club_id is being used for filtering.
+

@@ -16,11 +16,26 @@ export default function HomePage() {
   useEffect(() => {
     async function checkAuthAndRedirect() {
       try {
-        // Check if user is logged in
+        // First check if we have a session (localStorage only, no network call)
+        const { data: { session } } = await supabase.auth.getSession()
+        
+        if (!session) {
+          // No session - show landing page
+          setCheckingAuth(false)
+          return
+        }
+
+        // Check if user is logged in (with timeout)
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Auth check timeout')), 5000)
+        )
+        
+        const authPromise = supabase.auth.getUser()
+        
         const {
           data: { user },
           error: userError,
-        } = await supabase.auth.getUser()
+        } = await Promise.race([authPromise, timeoutPromise]) as any
 
         if (userError || !user) {
           // No user logged in - show landing page
@@ -95,6 +110,7 @@ export default function HomePage() {
         setCheckingAuth(false)
       } catch (err) {
         console.error('Error checking auth:', err)
+        // On error (including timeout), show landing page
         setCheckingAuth(false)
       }
     }

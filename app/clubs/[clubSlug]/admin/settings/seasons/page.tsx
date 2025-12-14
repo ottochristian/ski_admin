@@ -4,8 +4,8 @@ import { useEffect, useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { useRequireAdmin } from '@/lib/auth-context'
+import { useSeason } from '@/lib/contexts/season-context'
 import {
-  useSeason,
   useCreateSeason,
   useUpdateSeason,
   useDeleteSeason,
@@ -591,4 +591,5 @@ export default function SeasonsPage() {
     </div>
   )
 }
+
 

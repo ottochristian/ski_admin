@@ -53,3 +53,4 @@ Result: 3-4 duplicate `getUser()` calls per page load!
 - ClubContext could use AuthContext's profile instead of calling getUser() again
 - This would eliminate one getUser() call per page load
 
+

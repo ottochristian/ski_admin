@@ -134,3 +134,4 @@ The athletes filtering issue is a reminder that **RLS policies are critical** fo
 1. RLS is enabled on all tables
 2. Policies correctly filter by `club_id`
 3. All records have correct `club_id` set
+

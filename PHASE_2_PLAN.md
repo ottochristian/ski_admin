@@ -70,3 +70,4 @@ Remove redundant manual club filtering and rely on RLS policies as the source of
 - Admin client operations may still need manual filtering (bypasses RLS)
 - This is a security-critical phase - test thoroughly before removing filters
 
+

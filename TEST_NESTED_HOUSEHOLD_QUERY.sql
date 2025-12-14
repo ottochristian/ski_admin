@@ -93,3 +93,4 @@ WHERE p.role = 'parent'
   AND p.email = 'YOUR_EMAIL_HERE'  -- ⚠️ REPLACE WITH ACTUAL EMAIL
 LIMIT 1;
 
+

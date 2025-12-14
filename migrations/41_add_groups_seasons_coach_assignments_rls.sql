@@ -347,3 +347,4 @@ WHERE tablename IN ('groups', 'seasons', 'coach_assignments')
 GROUP BY tablename
 ORDER BY tablename;
 
+

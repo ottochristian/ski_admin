@@ -15,7 +15,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Plus, Pencil, Trash2, Eye } from 'lucide-react'
 import { useRequireAdmin } from '@/lib/auth-context'
-import { useAdminSeason } from '@/lib/use-admin-season'
+import { useSelectedSeason } from '@/lib/contexts/season-context'
 import { usePrograms } from '@/lib/hooks/use-programs'
 import { AdminPageHeader } from '@/components/admin-page-header'
 import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
@@ -44,7 +44,7 @@ export default function ProgramsPage() {
   const params = useParams()
   const clubSlug = params.clubSlug as string
   const { profile, loading: authLoading } = useRequireAdmin()
-  const { selectedSeason, loading: seasonLoading } = useAdminSeason()
+  const selectedSeason = useSelectedSeason()
 
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deletingSubProgramId, setDeletingSubProgramId] = useState<string | null>(null)
@@ -117,7 +117,7 @@ export default function ProgramsPage() {
   }
 
   // Show loading state
-  if (authLoading || seasonLoading || isLoading) {
+  if (authLoading || isLoading) {
     return <InlineLoading message="Loading programs…" />
   }
 
@@ -304,4 +304,5 @@ export default function ProgramsPage() {
     </div>
   )
 }
+
 

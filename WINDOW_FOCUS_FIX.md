@@ -122,3 +122,4 @@ If users report session issues:
 - **Before**: ~2-3 second loading screen on tab switch
 - **After**: No visible interruption, instant page visibility
 - **Token refresh**: Still happens in background (~100-200ms)
+

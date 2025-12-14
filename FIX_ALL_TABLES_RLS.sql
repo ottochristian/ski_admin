@@ -99,3 +99,4 @@ FROM clubs c
 LEFT JOIN programs p ON p.club_id = c.id
 GROUP BY c.id, c.name
 ORDER BY c.name;
+

@@ -108,3 +108,4 @@ FROM coach_assignments;
 -- If profiles are correct but households/athletes/coaches = 0:
 --   → Run GENERATE_TEST_DATA_PART2.sql (or just the missing steps)
 
+

@@ -64,3 +64,4 @@ FROM pg_policies
 WHERE tablename = 'registrations'
   AND policyname = 'Parents can insert registrations for their athletes';
 
+

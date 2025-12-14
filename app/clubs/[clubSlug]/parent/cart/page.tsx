@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useCart } from '@/lib/cart-context'
 import { useParentClub } from '@/lib/use-parent-club'
-import { useSeason } from '@/lib/hooks/use-season'
+import { useCurrentSeason } from '@/lib/contexts/season-context'
 import { useRegistrations } from '@/lib/hooks/use-registrations'
 import { supabase } from '@/lib/supabaseClient'
 import {
@@ -26,7 +26,7 @@ export default function CartPage() {
   const { clubId, household, athletes } = useParentClub()
 
   // PHASE 2: Use base useSeason hook - RLS handles filtering
-  const { currentSeason } = useSeason()
+  const currentSeason = useCurrentSeason()
 
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)

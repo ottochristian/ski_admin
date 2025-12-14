@@ -61,3 +61,4 @@ LEFT JOIN order_items oi ON oi.registration_id = r.id
 LEFT JOIN orders o ON o.id = oi.order_id
 ORDER BY r.created_at DESC
 LIMIT 10;
+

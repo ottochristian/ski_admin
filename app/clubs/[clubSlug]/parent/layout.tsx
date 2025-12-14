@@ -7,6 +7,8 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import { useParentClub } from '@/lib/use-parent-club'
 import { CartProvider } from '@/lib/cart-context'
+import { SeasonProvider } from '@/lib/contexts/season-context'
+import { UnifiedSeasonSelector } from '@/components/unified-season-selector'
 import { Button } from '@/components/ui/button'
 import { ShoppingCart, LayoutDashboard, User, CreditCard } from 'lucide-react'
 import { useCart } from '@/lib/cart-context'
@@ -51,6 +53,7 @@ function ParentNav({
           </div>
         </div>
         <div className="flex items-center gap-4">
+          <UnifiedSeasonSelector />
           <Link href={`/clubs/${clubSlug}/parent/cart`}>
             <Button variant="outline" size="sm" className="relative">
               <ShoppingCart className="h-4 w-4 mr-2" />
@@ -97,7 +100,10 @@ function ParentLayoutContent({
             {error || 'Profile not found. Please contact support.'}
           </p>
           <Button
-            onClick={() => router.push('/login')}
+            onClick={async () => {
+              await supabase.auth.signOut()
+              router.push('/login')
+            }}
             className="mt-4"
             variant="outline"
           >
@@ -117,7 +123,10 @@ function ParentLayoutContent({
             Profile not found. Please contact support.
           </p>
           <Button
-            onClick={() => router.push('/login')}
+            onClick={async () => {
+              await supabase.auth.signOut()
+              router.push('/login')
+            }}
             className="mt-4"
             variant="outline"
           >
@@ -153,7 +162,10 @@ function ParentLayoutContent({
               Sign Out & Sign Up Again
             </Button>
             <Button
-              onClick={() => router.push('/login')}
+              onClick={async () => {
+                await supabase.auth.signOut()
+                router.push('/login')
+              }}
               variant="outline"
             >
               Go to Login
@@ -181,8 +193,10 @@ export default function ParentLayout({
   const clubSlug = params.clubSlug as string
 
   return (
-    <CartProvider>
-      <ParentLayoutContent clubSlug={clubSlug}>{children}</ParentLayoutContent>
-    </CartProvider>
+    <SeasonProvider>
+      <CartProvider>
+        <ParentLayoutContent clubSlug={clubSlug}>{children}</ParentLayoutContent>
+      </CartProvider>
+    </SeasonProvider>
   )
 }

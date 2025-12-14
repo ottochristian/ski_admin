@@ -42,3 +42,4 @@ When `useEffect` depends on objects/arrays from React Query:
 - **app/admin/reports/page.tsx** - Uses `useMemo` for calculations ✅
 - Most pages that just read data without setting state ✅
 
+

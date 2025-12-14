@@ -14,7 +14,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { ArrowLeft } from 'lucide-react'
 import { useRequireAdmin } from '@/lib/auth-context'
-import { useSeason } from '@/lib/hooks/use-season'
+import { useSelectedSeason } from '@/lib/contexts/season-context'
 import { usePrograms } from '@/lib/hooks/use-programs'
 import { subProgramsService } from '@/lib/services/sub-programs-service'
 import { useQueryClient } from '@tanstack/react-query'
@@ -37,7 +37,7 @@ export default function NewSubProgramPage() {
     Array.isArray(rawProgramId) ? rawProgramId[0] : rawProgramId
 
   const { profile, loading: authLoading } = useRequireAdmin()
-  const { selectedSeason, loading: seasonLoading } = useSeason()
+  const selectedSeason = useSelectedSeason()
 
   // Guard against invalid programId
   if (!programId || programId === 'undefined') {
@@ -115,7 +115,7 @@ export default function NewSubProgramPage() {
     }
   }
 
-  const isLoading = authLoading || seasonLoading || programsLoading
+  const isLoading = authLoading || programsLoading
 
   // Show loading state
   if (isLoading) {
@@ -294,4 +294,5 @@ export default function NewSubProgramPage() {
     </div>
   )
 }
+
 

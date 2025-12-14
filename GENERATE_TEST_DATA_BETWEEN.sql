@@ -67,3 +67,4 @@ ORDER BY
 
 -- Expected output: 14 rows with correct names, roles, and club assignments
 
+

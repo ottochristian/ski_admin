@@ -82,3 +82,4 @@ USING (bucket_id = 'profile-images');
 -- To check if bucket exists, run in Supabase Dashboard:
 -- SELECT * FROM storage.buckets WHERE name = 'profile-images';
 
+

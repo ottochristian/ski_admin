@@ -101,3 +101,4 @@ All core functionality pages are now using the `/clubs/[clubSlug]/admin/*` struc
 3. Update all internal links to use `basePath` consistently
 4. Test all routes work correctly
 
+

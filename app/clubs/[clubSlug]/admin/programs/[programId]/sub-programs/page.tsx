@@ -15,7 +15,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Pencil, Trash2, ArrowLeft } from 'lucide-react'
 import { useRequireAdmin } from '@/lib/auth-context'
-import { useSeason } from '@/lib/hooks/use-season'
+import { useSelectedSeason } from '@/lib/contexts/season-context'
 import { usePrograms } from '@/lib/hooks/use-programs'
 import { useSubProgramsByProgram } from '@/lib/hooks/use-sub-programs'
 import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
@@ -42,7 +42,7 @@ export default function SubProgramsPage() {
     Array.isArray(rawProgramId) ? rawProgramId[0] : rawProgramId
 
   const { profile, loading: authLoading } = useRequireAdmin()
-  const { selectedSeason, loading: seasonLoading } = useSeason()
+  const selectedSeason = useSelectedSeason()
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   // Guard against invalid programId
@@ -97,7 +97,7 @@ export default function SubProgramsPage() {
   }
 
   const isLoading =
-    authLoading || seasonLoading || programsLoading || subProgramsLoading
+    authLoading || programsLoading || subProgramsLoading
 
   // Show loading state
   if (isLoading) {
@@ -215,4 +215,5 @@ export default function SubProgramsPage() {
     </div>
   )
 }
+
 

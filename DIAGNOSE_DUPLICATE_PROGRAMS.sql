@@ -57,3 +57,4 @@ SELECT
   (SELECT COUNT(*) FROM sub_programs) as total_subprograms,
   (SELECT COUNT(*) FROM groups) as total_groups,
   (SELECT COUNT(*) FROM clubs) as total_clubs;
+

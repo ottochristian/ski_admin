@@ -74,3 +74,4 @@ If performance is still an issue after these fixes, check:
 **Fix**: Only call `setLoading(false)` if `loading` is actually `true`  
 **Impact**: Eliminates infinite reload loop
 
+

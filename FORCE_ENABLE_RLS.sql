@@ -180,3 +180,4 @@ SELECT
   rowsecurity as rls_enabled
 FROM pg_tables
 WHERE tablename = 'athletes';
+

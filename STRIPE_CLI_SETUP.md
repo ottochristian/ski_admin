@@ -94,3 +94,4 @@ This way, Stripe can "send" webhooks to your local machine even though it's not 
 ## For Production Later
 
 When you deploy to production, you'll configure the webhook endpoint in Stripe Dashboard with your production URL (e.g., `https://your-domain.com/api/webhooks/stripe`), but for now, Stripe CLI is the way to go for local development.
+

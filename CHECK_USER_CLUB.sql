@@ -25,3 +25,4 @@ FROM profiles p
 LEFT JOIN clubs c ON c.id = p.club_id
 WHERE p.role IN ('admin', 'system_admin')
 ORDER BY p.email;
+

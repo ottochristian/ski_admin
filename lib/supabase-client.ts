@@ -29,3 +29,4 @@ export function createBrowserSupabaseClient() {
 export const supabase = createBrowserSupabaseClient()
 
 
+

@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { User } from '@supabase/supabase-js'
 import { supabase } from './supabaseClient'
 import { Profile } from './types'
@@ -24,6 +24,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
+  const pathname = usePathname()
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
@@ -132,7 +133,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (event === 'SIGNED_OUT' || !session) {
         setUser(null)
         setProfile(null)
-        router.push('/login')
+        
+        // Only redirect to login if on a protected route
+        // Public routes like '/', '/login', '/signup' should not auto-redirect
+        const publicRoutes = ['/', '/login', '/signup', '/setup-password']
+        const isPublicRoute = publicRoutes.some(route => pathname === route || pathname.startsWith(route))
+        
+        if (!isPublicRoute) {
+          router.push('/login')
+        }
       } else if (event === 'SIGNED_IN') {
         // If this is the initial load, show the loader (first time sign in)
         // After initial load, this is a tab switch - silent refresh (no loader)
@@ -146,7 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       subscription.unsubscribe()
     }
-  }, [router])
+  }, [router, pathname])
 
   // Refresh profile (useful after profile updates)
   const refreshProfile = async () => {
@@ -293,4 +302,5 @@ export function useRequireCoach() {
     isCoach: profile?.role === 'coach',
   }
 }
+
 
