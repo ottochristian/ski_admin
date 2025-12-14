@@ -18,7 +18,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus, Archive, CheckCircle2, Calendar, Copy } from 'lucide-react'
+import { Plus, Archive, CheckCircle2, Calendar, Copy, Edit2, Lock, Unlock } from 'lucide-react'
 import { ProgramStatus } from '@/lib/programStatus'
 import { AdminPageHeader } from '@/components/admin-page-header'
 import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
@@ -37,13 +37,15 @@ export default function SeasonsPage() {
   const [cloningSeasonId, setCloningSeasonId] = useState<string | null>(null)
 
   // Form state
+  // Form state
+  const [editingSeasonId, setEditingSeasonId] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [isCurrent, setIsCurrent] = useState(false)
-  const [status, setStatus] = useState<'draft' | 'active' | 'archived'>('draft')
+  const [status, setStatus] = useState<'draft' | 'active' | 'closed' | 'archived'>('draft')
 
-  async function handleCreate(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault()
 
     if (!profile?.club_id) {
@@ -54,14 +56,29 @@ export default function SeasonsPage() {
     setError(null)
 
     try {
-      await createSeason.mutateAsync({
-        name,
-        start_date: startDate,
-        end_date: endDate,
-        is_current: isCurrent,
-        status,
-        club_id: profile.club_id,
-      })
+      if (editingSeasonId) {
+        // Update existing season
+        await updateSeason.mutateAsync({
+          seasonId: editingSeasonId,
+          updates: {
+            name,
+            start_date: startDate,
+            end_date: endDate,
+            is_current: isCurrent,
+            status,
+          },
+        })
+      } else {
+        // Create new season
+        await createSeason.mutateAsync({
+          name,
+          start_date: startDate,
+          end_date: endDate,
+          is_current: isCurrent,
+          status,
+          club_id: profile.club_id,
+        })
+      }
 
       // Reset form
       setName('')
@@ -70,10 +87,31 @@ export default function SeasonsPage() {
       setIsCurrent(false)
       setStatus('draft')
       setShowCreateForm(false)
+      setEditingSeasonId(null)
     } catch (err) {
-      console.error('Error creating season:', err)
-      setError(err instanceof Error ? err.message : 'Failed to create season')
+      console.error('Error saving season:', err)
+      setError(err instanceof Error ? err.message : 'Failed to save season')
     }
+  }
+
+  function handleEdit(season: any) {
+    setEditingSeasonId(season.id)
+    setName(season.name)
+    setStartDate(season.start_date)
+    setEndDate(season.end_date)
+    setIsCurrent(season.is_current)
+    setStatus(season.status)
+    setShowCreateForm(true)
+  }
+
+  function handleCancelEdit() {
+    setEditingSeasonId(null)
+    setName('')
+    setStartDate('')
+    setEndDate('')
+    setIsCurrent(false)
+    setStatus('draft')
+    setShowCreateForm(false)
   }
 
   async function handleSetCurrent(seasonId: string) {
@@ -103,22 +141,26 @@ export default function SeasonsPage() {
     }
   }
 
-  async function handleArchive(seasonId: string) {
-    if (!confirm('Are you sure you want to archive this season?')) {
-      return
-    }
-
+  async function handleStatusChange(seasonId: string, newStatus: string) {
     setError(null)
 
     try {
       await updateSeason.mutateAsync({
         seasonId,
-        updates: { status: 'archived' },
+        updates: { status: newStatus },
       })
     } catch (err) {
-      console.error('Error archiving season:', err)
-      setError(err instanceof Error ? err.message : 'Failed to archive season')
+      console.error('Error updating season status:', err)
+      setError(err instanceof Error ? err.message : 'Failed to update season status')
     }
+  }
+
+  async function handleArchive(seasonId: string) {
+    if (!confirm('Are you sure you want to archive this season?')) {
+      return
+    }
+
+    await handleStatusChange(seasonId, 'archived')
   }
 
   // Clone season functionality (complex - keeps existing logic for now)
@@ -367,14 +409,15 @@ export default function SeasonsPage() {
       {showCreateForm && (
         <Card>
           <CardHeader>
-            <CardTitle>Create New Season</CardTitle>
+            <CardTitle>{editingSeasonId ? 'Edit Season' : 'Create New Season'}</CardTitle>
             <CardDescription>
-              Create a new season for your club. You can set it as the current
-              season.
+              {editingSeasonId 
+                ? 'Update season details, status, and current season flag.'
+                : 'Create a new season for your club. You can set it as the current season.'}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleCreate} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Season Name
@@ -416,37 +459,50 @@ export default function SeasonsPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <input
-                    id="isCurrent"
-                    type="checkbox"
-                    checked={isCurrent}
-                    onChange={(e) => setIsCurrent(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300"
-                  />
-                  <label htmlFor="isCurrent" className="text-sm text-slate-700">
-                    Set as current season
-                  </label>
-                </div>
-
+              <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Status
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Season Flags
                   </label>
-                  <select
-                    value={status}
-                    onChange={(e) =>
-                      setStatus(
-                        e.target.value as 'draft' | 'active' | 'archived'
-                      )
-                    }
-                    className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  >
-                    <option value="draft">Draft</option>
-                    <option value="active">Active</option>
-                    <option value="archived">Archived</option>
-                  </select>
+                  <div className="bg-slate-50 border border-slate-200 rounded-md p-4 space-y-3">
+                    <div className="flex items-start gap-3">
+                      <input
+                        id="isCurrent"
+                        type="checkbox"
+                        checked={isCurrent}
+                        onChange={(e) => setIsCurrent(e.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300 mt-0.5"
+                      />
+                      <div>
+                        <label htmlFor="isCurrent" className="text-sm font-medium text-slate-900">
+                          Current Season
+                        </label>
+                        <p className="text-xs text-slate-600 mt-0.5">
+                          The season displayed by default in the UI. Only one per club.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-900 mb-1.5">
+                        Status
+                      </label>
+                      <select
+                        value={status}
+                        onChange={(e) =>
+                          setStatus(
+                            e.target.value as 'draft' | 'active' | 'closed' | 'archived'
+                          )
+                        }
+                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      >
+                        <option value="draft">Draft - Setting up, not visible to parents</option>
+                        <option value="active">Active - Open for registrations</option>
+                        <option value="closed">Closed - No new registrations</option>
+                        <option value="archived">Archived - Historical data only</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -454,12 +510,15 @@ export default function SeasonsPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setShowCreateForm(false)}
+                  onClick={handleCancelEdit}
                 >
                   Cancel
                 </Button>
                 <Button type="submit" disabled={loading}>
-                  {loading ? 'Creating…' : 'Create Season'}
+                  {loading 
+                    ? (editingSeasonId ? 'Saving…' : 'Creating…')
+                    : (editingSeasonId ? 'Save Changes' : 'Create Season')
+                  }
                 </Button>
               </div>
             </form>
@@ -503,7 +562,11 @@ export default function SeasonsPage() {
                           className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                             season.status === 'active'
                               ? 'bg-blue-100 text-blue-800'
-                              : 'bg-slate-100 text-slate-800'
+                              : season.status === 'closed'
+                              ? 'bg-orange-100 text-orange-800'
+                              : season.status === 'draft'
+                              ? 'bg-slate-100 text-slate-800'
+                              : 'bg-purple-100 text-purple-800'
                           }`}
                         >
                           {season.status}
@@ -522,10 +585,46 @@ export default function SeasonsPage() {
                         size="sm"
                         onClick={() => handleSetCurrent(season.id)}
                         disabled={loading}
+                        title="Set as the current season shown by default"
                       >
-                        Set as Current
+                        <CheckCircle2 className="h-4 w-4 mr-1" />
+                        Make Current
                       </Button>
                     )}
+                    {season.status === 'active' && !season.is_current && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleStatusChange(season.id, 'closed')}
+                        disabled={loading}
+                        title="Close registrations but keep data accessible"
+                      >
+                        <Lock className="h-4 w-4 mr-1" />
+                        Close
+                      </Button>
+                    )}
+                    {season.status === 'closed' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleStatusChange(season.id, 'active')}
+                        disabled={loading}
+                        title="Reopen for registrations"
+                      >
+                        <Unlock className="h-4 w-4 mr-1" />
+                        Reopen
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEdit(season)}
+                      disabled={loading}
+                      title="Edit season details"
+                    >
+                      <Edit2 className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
                     {season.status !== 'archived' && (
                       <Button
                         variant="outline"
@@ -538,15 +637,18 @@ export default function SeasonsPage() {
                         {cloningSeasonId === season.id ? 'Cloning…' : 'Clone'}
                       </Button>
                     )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleArchive(season.id)}
-                      disabled={loading}
-                    >
-                      <Archive className="h-4 w-4 mr-1" />
-                      Archive
-                    </Button>
+                    {!season.is_current && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleArchive(season.id)}
+                        disabled={loading}
+                        title="Archive this season (cannot be undone easily)"
+                      >
+                        <Archive className="h-4 w-4 mr-1" />
+                        Archive
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}
