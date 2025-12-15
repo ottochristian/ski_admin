@@ -265,7 +265,7 @@ export default function SeasonsPage() {
             {
               name: program.name,
               description: program.description,
-              status: ProgramStatus.INACTIVE,
+              status: ProgramStatus.ACTIVE, // Changed: Set to ACTIVE so they're immediately visible
               season_id: newSeason.id,
               club_id: profile.club_id,
             },
@@ -289,7 +289,7 @@ export default function SeasonsPage() {
                     program_id: newProgram.id,
                     name: sp.name,
                     description: sp.description,
-                    status: ProgramStatus.INACTIVE,
+                    status: ProgramStatus.ACTIVE, // Changed: Set to ACTIVE so they're immediately visible
                     registration_fee: sp.registration_fee || null,
                     max_capacity: sp.max_capacity || null,
                     season_id: newSeason.id,
@@ -313,7 +313,7 @@ export default function SeasonsPage() {
               const groupsToInsert = sp.groups.map((group: any) => ({
                 sub_program_id: newSubProgram.id,
                 name: group.name,
-                status: ProgramStatus.INACTIVE,
+                status: ProgramStatus.ACTIVE, // Changed: Set to ACTIVE so they're immediately visible
                 club_id: profile.club_id,
               }))
 
@@ -357,7 +357,7 @@ export default function SeasonsPage() {
           `- ${sourcePrograms?.length || 0} programs\n` +
           `- ${totalSubPrograms} sub-programs\n` +
           `- ${totalGroups} groups\n\n` +
-          `All items are set to INACTIVE for review.`
+          `All items are set to ACTIVE and ready for registration.`
       )
     } catch (err) {
       console.error('Error cloning season:', err)
