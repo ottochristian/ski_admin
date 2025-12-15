@@ -123,6 +123,14 @@ export default function SeasonsPage() {
     setError(null)
 
     try {
+      // Get the season to check its status
+      const season = seasons.find(s => s.id === seasonId)
+      
+      // If the season is active, ensure all programs are activated
+      if (season?.status === 'active') {
+        await handleStatusChange(seasonId, 'active')
+      }
+
       await updateSeason.mutateAsync({
         seasonId,
         updates: { is_current: true },
@@ -145,6 +153,59 @@ export default function SeasonsPage() {
     setError(null)
 
     try {
+      // If activating a season, also activate all its programs, sub-programs, and groups
+      if (newStatus === 'active') {
+        // 1. Activate all programs in this season
+        const { error: programsError } = await supabase
+          .from('programs')
+          .update({ status: 'ACTIVE' })
+          .eq('season_id', seasonId)
+          .eq('club_id', profile?.club_id)
+
+        if (programsError) {
+          console.error('Error activating programs:', programsError)
+          setError('Failed to activate programs for this season')
+          return
+        }
+
+        // 2. Activate all sub-programs in this season
+        const { error: subProgramsError } = await supabase
+          .from('sub_programs')
+          .update({ status: 'ACTIVE' })
+          .eq('season_id', seasonId)
+          .eq('club_id', profile?.club_id)
+
+        if (subProgramsError) {
+          console.error('Error activating sub-programs:', subProgramsError)
+          setError('Failed to activate sub-programs for this season')
+          return
+        }
+
+        // 3. Activate all groups in this season
+        // Note: groups don't have season_id, need to join through sub_programs
+        const { data: subPrograms } = await supabase
+          .from('sub_programs')
+          .select('id')
+          .eq('season_id', seasonId)
+          .eq('club_id', profile?.club_id)
+
+        if (subPrograms && subPrograms.length > 0) {
+          const subProgramIds = subPrograms.map(sp => sp.id)
+          const { error: groupsError } = await supabase
+            .from('groups')
+            .update({ status: 'ACTIVE' })
+            .in('sub_program_id', subProgramIds)
+            .eq('club_id', profile?.club_id)
+
+          if (groupsError) {
+            console.error('Error activating groups:', groupsError)
+            setError('Failed to activate groups for this season')
+            return
+          }
+        }
+      }
+
+      // Update the season status
       await updateSeason.mutateAsync({
         seasonId,
         updates: { status: newStatus },
