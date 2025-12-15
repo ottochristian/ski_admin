@@ -51,7 +51,7 @@ export default function EditSubProgramPage() {
   const [description, setDescription] = useState('')
   const [registrationFee, setRegistrationFee] = useState<string>('0')
   const [maxCapacity, setMaxCapacity] = useState<string>('')
-  const [isActive, setIsActive] = useState(true)
+  const [status, setStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE')
 
   useEffect(() => {
     async function init() {
@@ -91,7 +91,7 @@ export default function EditSubProgramPage() {
       setMaxCapacity(
         sp.max_capacity != null ? String(sp.max_capacity) : ''
       )
-      setIsActive(sp.is_active ?? (sp.status === 'ACTIVE'))
+      setStatus((sp.status as 'ACTIVE' | 'INACTIVE') || 'ACTIVE')
 
       // Load parent program for header
       const { data: programData, error: programError } = await supabase
@@ -133,8 +133,7 @@ export default function EditSubProgramPage() {
         description,
         registration_fee: fee,
         max_capacity: capacity,
-        is_active: isActive,
-        status: isActive ? 'ACTIVE' : 'INACTIVE',
+        status,
       })
       .eq('id', subProgramId)
 
@@ -260,17 +259,21 @@ export default function EditSubProgramPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <input
-                  id="isActive"
-                  type="checkbox"
-                  checked={isActive}
-                  onChange={e => setIsActive(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                />
-                <label htmlFor="isActive" className="text-sm text-slate-800">
-                  Sub-program is active
+              <div>
+                <label className="block text-sm font-medium text-slate-800 mb-1">
+                  Status
                 </label>
+                <select
+                  value={status}
+                  onChange={e => setStatus(e.target.value as 'ACTIVE' | 'INACTIVE')}
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="ACTIVE">Active - Visible to parents</option>
+                  <option value="INACTIVE">Inactive - Hidden from parents</option>
+                </select>
+                <p className="text-xs text-slate-600 mt-1">
+                  Active sub-programs are visible in the parent portal when the season is active.
+                </p>
               </div>
 
               <div className="flex gap-3 justify-end">

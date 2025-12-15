@@ -56,7 +56,7 @@ export default function EditProgramPage() {
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [isActive, setIsActive] = useState(true)
+  const [status, setStatus] = useState<ProgramStatus>(ProgramStatus.ACTIVE)
 
   // Initialize form when program is loaded
   // Use program ID instead of program object to avoid infinite loops
@@ -65,8 +65,8 @@ export default function EditProgramPage() {
       // Only update if values actually changed to prevent unnecessary re-renders
       setName((prev) => (prev !== (program.name ?? '') ? program.name ?? '' : prev))
       setDescription((prev) => (prev !== (program.description ?? '') ? program.description ?? '' : prev))
-      const newIsActive = program.status === ProgramStatus.ACTIVE || !program.status
-      setIsActive((prev) => (prev !== newIsActive ? newIsActive : prev))
+      const newStatus = program.status || ProgramStatus.ACTIVE
+      setStatus((prev) => (prev !== newStatus ? newStatus : prev))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [program?.id, program?.name, program?.description, program?.status])
@@ -82,13 +82,11 @@ export default function EditProgramPage() {
     setSaving(true)
     setError(null)
 
-    const newStatus = isActive ? ProgramStatus.ACTIVE : ProgramStatus.INACTIVE
-
     // PHASE 2: RLS ensures user can only update programs in their club
     const result = await programsService.updateProgram(programId, {
       name,
       description: description || null,
-      status: newStatus,
+      status,
     } as any)
 
     if (result.error) {
@@ -191,17 +189,21 @@ export default function EditProgramPage() {
               />
             </div>
 
-            <div className="flex items-center gap-2">
-              <input
-                id="isActive"
-                type="checkbox"
-                checked={isActive}
-                onChange={e => setIsActive(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-              />
-              <label htmlFor="isActive" className="text-sm text-slate-800">
-                Program is active
+            <div>
+              <label className="block text-sm font-medium text-slate-800 mb-1">
+                Status
               </label>
+              <select
+                value={status}
+                onChange={e => setStatus(e.target.value as ProgramStatus)}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value={ProgramStatus.ACTIVE}>Active - Visible to parents</option>
+                <option value={ProgramStatus.INACTIVE}>Inactive - Hidden from parents</option>
+              </select>
+              <p className="text-xs text-slate-600 mt-1">
+                Active programs are visible in the parent portal when the season is active.
+              </p>
             </div>
 
             <div className="flex gap-3 justify-end">
