@@ -8,11 +8,34 @@ export class AthletesService extends BaseService {
   /**
    * Get all athletes for the authenticated user's club
    * RLS automatically filters by club - no manual filtering needed!
+   * Includes registration data for displaying tags
    */
   async getAthletes(): Promise<QueryResult<any[]>> {
     const result = await this.supabase
       .from('athletes')
-      .select('*')
+      .select(`
+        *,
+        registrations (
+          id,
+          status,
+          payment_status,
+          season_id,
+          sub_program_id,
+          seasons (
+            id,
+            name,
+            is_current
+          ),
+          sub_programs (
+            id,
+            name,
+            programs (
+              id,
+              name
+            )
+          )
+        )
+      `)
       .order('first_name', { ascending: true })
 
     return handleSupabaseError(result)

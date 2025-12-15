@@ -40,18 +40,8 @@ BEGIN
   END IF;
 END $$;
 
--- Step 4: Create unique constraint - only ONE current season per club
--- Drop old constraint if exists
-ALTER TABLE seasons DROP CONSTRAINT IF EXISTS seasons_one_current_per_club;
-
--- Create new unique partial index (better than constraint for conditional uniqueness)
-DROP INDEX IF EXISTS idx_seasons_one_current_per_club;
-CREATE UNIQUE INDEX idx_seasons_one_current_per_club 
-ON seasons (club_id) 
-WHERE is_current = true;
-
--- Step 5: Ensure each club has AT MOST one current season
--- If multiple, keep the most recent one
+-- Step 4: FIRST - Ensure each club has AT MOST one current season
+-- If multiple, keep the most recent one (MUST happen before creating index)
 WITH ranked_current_seasons AS (
   SELECT 
     id,
@@ -68,6 +58,16 @@ SET is_current = false
 WHERE id IN (
   SELECT id FROM ranked_current_seasons WHERE rn > 1
 );
+
+-- Step 5: NOW create unique constraint - only ONE current season per club
+-- Drop old constraint if exists
+ALTER TABLE seasons DROP CONSTRAINT IF EXISTS seasons_one_current_per_club;
+
+-- Create new unique partial index (better than constraint for conditional uniqueness)
+DROP INDEX IF EXISTS idx_seasons_one_current_per_club;
+CREATE UNIQUE INDEX idx_seasons_one_current_per_club 
+ON seasons (club_id) 
+WHERE is_current = true;
 
 -- Step 6: Add helpful comment
 COMMENT ON COLUMN seasons.is_current IS 
