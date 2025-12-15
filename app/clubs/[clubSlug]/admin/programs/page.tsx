@@ -199,10 +199,11 @@ export default function ProgramsPage() {
                         </Button>
                       </Link>
                       <Button
-                        variant="destructive"
+                        variant="outline"
                         size="sm"
                         onClick={() => handleDelete(program.id)}
                         disabled={deletingId === program.id}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
                       >
                         <Trash2 className="h-4 w-4 mr-1" />
                         {deletingId === program.id ? 'Deleting…' : 'Delete'}
@@ -255,9 +256,9 @@ export default function ProgramsPage() {
                                 </Button>
                               </Link>
                               <Button
-                                variant="destructive"
+                                variant="outline"
                                 size="sm"
-                                className="h-7 text-xs"
+                                className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
                                 onClick={() =>
                                   handleDeleteSubProgram(
                                     subProgram.id,

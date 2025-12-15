@@ -113,12 +113,11 @@ export default function GroupsPage() {
 
       setProgram(programData as SimpleProgram)
 
-      // 5) Load ACTIVE groups for this sub-program
+      // 5) Load ALL groups for this sub-program (admin view)
       const { data, error: groupsError } = await supabase
         .from('groups')
         .select('id, name, status')
         .eq('sub_program_id', subProgramId)
-        .eq('status', ProgramStatus.ACTIVE)
         .order('name', { ascending: true })
 
       if (groupsError) {
@@ -220,22 +219,27 @@ export default function GroupsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Active Groups</CardTitle>
+          <CardTitle>Groups</CardTitle>
           <CardDescription>
-            All active groups for this sub-program
+            All groups for this sub-program
           </CardDescription>
         </CardHeader>
         <CardContent>
           {groups.length === 0 ? (
             <div className="py-8 text-center text-sm text-muted-foreground">
-              No active groups yet. Click &quot;Add Group&quot; to create one.
+              No groups yet. Click &quot;Add Group&quot; to create one.
             </div>
           ) : (
             <div className="space-y-4">
               {groups.map(group => (
                 <div key={group.id} className="flex items-center justify-between border-b pb-4 last:border-0">
-                  <div>
+                  <div className="flex items-center gap-2">
                     <h3 className="font-medium text-slate-900">{group.name}</h3>
+                    {group.status === ProgramStatus.INACTIVE && (
+                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-500/10">
+                        Inactive
+                      </span>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <Link href={`/admin/sub-programs/${subProgramId}/groups/${group.id}/edit`}>
