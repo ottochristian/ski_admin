@@ -314,15 +314,27 @@ export default function ProgramsPage() {
                                   <Button
                                     variant="outline"
                                     size="icon"
-                                    className="h-7 w-7"
+                                    className="h-6 w-6"
                                   >
-                                    <Pencil className="h-3.5 w-3.5" />
+                                    <Pencil className="h-3 w-3" />
+                                  </Button>
+                                </Link>
+                                <Link
+                                  href={`${basePath}/sub-programs/${subProgram.id}/groups/new`}
+                                >
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                    title="Add new group"
+                                  >
+                                    <Plus className="h-3 w-3" />
                                   </Button>
                                 </Link>
                                 <Button
                                   variant="outline"
                                   size="icon"
-                                  className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  className="h-6 w-6 text-red-600 hover:text-red-700 hover:bg-red-50"
                                   onClick={() =>
                                     handleDeleteSubProgram(
                                       subProgram.id,
@@ -333,7 +345,7 @@ export default function ProgramsPage() {
                                     deletingSubProgramId === subProgram.id
                                   }
                                 >
-                                  <Trash2 className="h-3.5 w-3.5" />
+                                  <Trash2 className="h-3 w-3" />
                                 </Button>
                               </div>
                             </div>
