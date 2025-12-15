@@ -183,30 +183,27 @@ export default function ProgramsPage() {
                         </p>
                       )}
                     </div>
-                    <div className="flex gap-2 ml-4">
+                    <div className="flex gap-1.5 ml-4">
                       <Link href={`${basePath}/programs/${program.id}/edit`}>
-                        <Button variant="outline" size="sm">
-                          <Pencil className="h-4 w-4 mr-1" />
-                          Edit Program
+                        <Button variant="outline" size="icon" className="h-8 w-8">
+                          <Pencil className="h-4 w-4" />
                         </Button>
                       </Link>
                       <Link
                         href={`${basePath}/programs/${program.id}/sub-programs/new`}
                       >
-                        <Button variant="outline" size="sm">
-                          <Plus className="h-4 w-4 mr-1" />
-                          Add Sub-program
+                        <Button variant="outline" size="icon" className="h-8 w-8">
+                          <Plus className="h-4 w-4" />
                         </Button>
                       </Link>
                       <Button
                         variant="outline"
-                        size="sm"
+                        size="icon"
+                        className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
                         onClick={() => handleDelete(program.id)}
                         disabled={deletingId === program.id}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
                       >
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        {deletingId === program.id ? 'Deleting…' : 'Delete'}
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
@@ -223,7 +220,7 @@ export default function ProgramsPage() {
                             key={subProgram.id}
                             className="border rounded-md p-3 bg-slate-50 hover:bg-slate-100 transition-colors"
                           >
-                            <div className="flex items-start justify-between gap-2 mb-2">
+                            <div className="flex items-start justify-between gap-2">
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5 mb-1">
                                   <h5 className="font-medium text-slate-900 text-sm truncate">
@@ -241,39 +238,35 @@ export default function ProgramsPage() {
                                   </p>
                                 )}
                               </div>
-                            </div>
-                            <div className="flex gap-1.5 flex-wrap">
-                              <Link
-                                href={`${basePath}/sub-programs/${subProgram.id}/edit`}
-                              >
+                              <div className="flex gap-1 flex-shrink-0">
+                                <Link
+                                  href={`${basePath}/sub-programs/${subProgram.id}/edit`}
+                                >
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </Button>
+                                </Link>
                                 <Button
                                   variant="outline"
-                                  size="sm"
-                                  className="h-7 text-xs"
+                                  size="icon"
+                                  className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={() =>
+                                    handleDeleteSubProgram(
+                                      subProgram.id,
+                                      program.id
+                                    )
+                                  }
+                                  disabled={
+                                    deletingSubProgramId === subProgram.id
+                                  }
                                 >
-                                  <Pencil className="h-3 w-3 mr-1" />
-                                  Edit
+                                  <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
-                              </Link>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
-                                onClick={() =>
-                                  handleDeleteSubProgram(
-                                    subProgram.id,
-                                    program.id
-                                  )
-                                }
-                                disabled={
-                                  deletingSubProgramId === subProgram.id
-                                }
-                              >
-                                <Trash2 className="h-3 w-3 mr-1" />
-                                {deletingSubProgramId === subProgram.id
-                                  ? '…'
-                                  : 'Del'}
-                              </Button>
+                              </div>
                             </div>
                           </div>
                         ))}
