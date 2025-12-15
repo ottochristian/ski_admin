@@ -58,15 +58,9 @@ export default function ProgramsPage() {
     refetch,
   } = usePrograms(selectedSeason?.id, true) // Include sub_programs, RLS filters by club
 
-  // Filter to active programs only (matching original behavior)
-  const programs = allPrograms
-    .filter((p) => p.status === ProgramStatus.ACTIVE || p.status === null)
-    .map((program) => ({
-      ...program,
-      sub_programs: (program.sub_programs || []).filter(
-        (sp: SubProgram) => sp.status === ProgramStatus.ACTIVE
-      ),
-    })) as ProgramWithSubPrograms[]
+  // Admin view: Show ALL programs and sub-programs regardless of status
+  // (Parent portal filters by status, but admins need to see everything to manage)
+  const programs = allPrograms as ProgramWithSubPrograms[]
 
   async function handleDelete(programId: string) {
     const confirmDelete = window.confirm(
@@ -152,15 +146,15 @@ export default function ProgramsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Active Programs</CardTitle>
+          <CardTitle>Programs</CardTitle>
           <CardDescription>
-            All active ski programs for {selectedSeason?.name || 'the selected season'} with their sub-programs
+            All ski programs for {selectedSeason?.name || 'the selected season'} with their sub-programs
           </CardDescription>
         </CardHeader>
         <CardContent>
           {programs.length === 0 ? (
             <div className="py-8 text-center text-sm text-muted-foreground">
-              No active programs yet. Click &quot;Add Program&quot; to create
+              No programs yet. Click &quot;Add Program&quot; to create
               one.
             </div>
           ) : (
@@ -173,9 +167,16 @@ export default function ProgramsPage() {
                   {/* Program Header */}
                   <div className="flex items-start justify-between border-b pb-3">
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-slate-900">
-                        {program.name}
-                      </h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-semibold text-slate-900">
+                          {program.name}
+                        </h3>
+                        {program.status === ProgramStatus.INACTIVE && (
+                          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-500/10">
+                            Inactive
+                          </span>
+                        )}
+                      </div>
                       {program.description && (
                         <p className="text-sm text-muted-foreground mt-1">
                           {program.description}
@@ -223,9 +224,16 @@ export default function ProgramsPage() {
                           >
                             <div className="flex items-start justify-between gap-2 mb-2">
                               <div className="flex-1 min-w-0">
-                                <h5 className="font-medium text-slate-900 text-sm truncate">
-                                  {subProgram.name}
-                                </h5>
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <h5 className="font-medium text-slate-900 text-sm truncate">
+                                    {subProgram.name}
+                                  </h5>
+                                  {subProgram.status === ProgramStatus.INACTIVE && (
+                                    <span className="inline-flex items-center rounded-full bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-500/10 flex-shrink-0">
+                                      Inactive
+                                    </span>
+                                  )}
+                                </div>
                                 {subProgram.description && (
                                   <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
                                     {subProgram.description}
