@@ -67,10 +67,8 @@ export default function SubProgramsPage() {
     | Program
     | undefined
 
-  // Filter to active sub-programs only
-  const activeSubPrograms = subPrograms.filter(
-    (sp: any) => sp.status === ProgramStatus.ACTIVE
-  ) as SubProgram[]
+  // Admin view: Show ALL sub-programs (active + inactive)
+  const allSubPrograms = subPrograms as SubProgram[]
 
   async function handleDelete(subProgramId: string) {
     const confirmDelete = window.confirm(
@@ -163,21 +161,28 @@ export default function SubProgramsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Active Sub-Programs</CardTitle>
+          <CardTitle>Sub-Programs</CardTitle>
           <CardDescription>
-            All active sub-programs for this program
+            All sub-programs for this program
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {activeSubPrograms.length > 0 ? (
+          {allSubPrograms.length > 0 ? (
             <div className="space-y-4">
-              {activeSubPrograms.map((subProgram) => (
+              {allSubPrograms.map((subProgram) => (
                 <div
                   key={subProgram.id}
                   className="flex items-start justify-between border-b pb-4 last:border-0"
                 >
                   <div className="flex-1">
-                    <h3 className="font-semibold">{subProgram.name}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold">{subProgram.name}</h3>
+                      {subProgram.status === ProgramStatus.INACTIVE && (
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-500/10">
+                          Inactive
+                        </span>
+                      )}
+                    </div>
                     {subProgram.description && (
                       <p className="text-sm text-muted-foreground mt-1">
                         {subProgram.description}
@@ -206,7 +211,7 @@ export default function SubProgramsPage() {
             </div>
           ) : (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              No active sub-programs yet. Click &quot;Add Sub-Program&quot; to
+              No sub-programs yet. Click &quot;Add Sub-Program&quot; to
               create one.
             </p>
           )}

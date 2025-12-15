@@ -13,7 +13,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus, Pencil, Trash2, Eye } from 'lucide-react'
+import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { useRequireAdmin } from '@/lib/auth-context'
 import { useSelectedSeason } from '@/lib/contexts/season-context'
 import { usePrograms } from '@/lib/hooks/use-programs'
@@ -252,18 +252,6 @@ export default function ProgramsPage() {
                                 >
                                   <Pencil className="h-3 w-3 mr-1" />
                                   Edit
-                                </Button>
-                              </Link>
-                              <Link
-                                href={`${basePath}/programs/${program.id}/sub-programs`}
-                              >
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 text-xs"
-                                >
-                                  <Eye className="h-3 w-3 mr-1" />
-                                  View
                                 </Button>
                               </Link>
                               <Button
