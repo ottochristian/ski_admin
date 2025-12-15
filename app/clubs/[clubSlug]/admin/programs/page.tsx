@@ -13,7 +13,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, Zap } from 'lucide-react'
 import { useRequireAdmin } from '@/lib/auth-context'
 import { useSelectedSeason } from '@/lib/contexts/season-context'
 import { usePrograms } from '@/lib/hooks/use-programs'
@@ -48,6 +48,7 @@ export default function ProgramsPage() {
 
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deletingSubProgramId, setDeletingSubProgramId] = useState<string | null>(null)
+  const [activatingId, setActivatingId] = useState<string | null>(null)
 
   // PHASE 2: RLS handles club filtering automatically - no clubQuery needed!
   // React Query handles loading, error, and caching
@@ -108,6 +109,64 @@ export default function ProgramsPage() {
     }
 
     setDeletingSubProgramId(null)
+  }
+
+  async function handleActivateAll(programId: string) {
+    const program = programs.find(p => p.id === programId)
+    if (!program) return
+
+    const confirmActivate = window.confirm(
+      `Activate all sub-programs and groups for "${program.name}"?\n\nThis will set all sub-programs and groups to ACTIVE status.`
+    )
+
+    if (!confirmActivate) return
+
+    setActivatingId(programId)
+
+    try {
+      // Get all sub-program IDs for this program
+      const subProgramIds = (program.sub_programs || []).map(sp => sp.id)
+
+      if (subProgramIds.length === 0) {
+        alert('No sub-programs found for this program.')
+        setActivatingId(null)
+        return
+      }
+
+      // 1. Activate all sub-programs
+      const { error: subProgramError } = await supabase
+        .from('sub_programs')
+        .update({ status: ProgramStatus.ACTIVE })
+        .eq('program_id', programId)
+
+      if (subProgramError) {
+        console.error('Error activating sub-programs:', subProgramError)
+        alert(`Error activating sub-programs: ${subProgramError.message}`)
+        setActivatingId(null)
+        return
+      }
+
+      // 2. Activate all groups for these sub-programs
+      const { error: groupsError } = await supabase
+        .from('groups')
+        .update({ status: ProgramStatus.ACTIVE })
+        .in('sub_program_id', subProgramIds)
+
+      if (groupsError) {
+        console.error('Error activating groups:', groupsError)
+        alert(`Error activating groups: ${groupsError.message}`)
+      } else {
+        alert(`✅ All sub-programs and groups for "${program.name}" are now ACTIVE!`)
+      }
+
+      // Refetch to update UI
+      refetch()
+    } catch (err) {
+      console.error('Error activating program contents:', err)
+      alert('An unexpected error occurred.')
+    }
+
+    setActivatingId(null)
   }
 
   // Show loading state
@@ -196,6 +255,16 @@ export default function ProgramsPage() {
                           <Plus className="h-4 w-4" />
                         </Button>
                       </Link>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                        onClick={() => handleActivateAll(program.id)}
+                        disabled={activatingId === program.id}
+                        title="Activate all sub-programs and groups"
+                      >
+                        <Zap className="h-4 w-4" />
+                      </Button>
                       <Button
                         variant="outline"
                         size="icon"
