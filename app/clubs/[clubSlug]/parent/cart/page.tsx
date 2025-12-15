@@ -86,6 +86,7 @@ export default function CartPage() {
           athlete_id: item.athlete_id,
           sub_program_id: item.sub_program_id,
           season_id: currentSeason.id,
+          season: currentSeason.name, // Text column for backward compatibility
           status: 'pending', // Will be confirmed after payment
           club_id: clubId,
         }))
