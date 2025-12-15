@@ -205,6 +205,57 @@ export default function SeasonsPage() {
         }
       }
 
+      // If setting to draft, deactivate all programs (hide from parents)
+      if (newStatus === 'draft') {
+        // 1. Deactivate all programs in this season
+        const { error: programsError } = await supabase
+          .from('programs')
+          .update({ status: 'INACTIVE' })
+          .eq('season_id', seasonId)
+          .eq('club_id', profile?.club_id)
+
+        if (programsError) {
+          console.error('Error deactivating programs:', programsError)
+          setError('Failed to deactivate programs for this season')
+          return
+        }
+
+        // 2. Deactivate all sub-programs in this season
+        const { error: subProgramsError } = await supabase
+          .from('sub_programs')
+          .update({ status: 'INACTIVE' })
+          .eq('season_id', seasonId)
+          .eq('club_id', profile?.club_id)
+
+        if (subProgramsError) {
+          console.error('Error deactivating sub-programs:', subProgramsError)
+          setError('Failed to deactivate sub-programs for this season')
+          return
+        }
+
+        // 3. Deactivate all groups in this season
+        const { data: subPrograms } = await supabase
+          .from('sub_programs')
+          .select('id')
+          .eq('season_id', seasonId)
+          .eq('club_id', profile?.club_id)
+
+        if (subPrograms && subPrograms.length > 0) {
+          const subProgramIds = subPrograms.map(sp => sp.id)
+          const { error: groupsError } = await supabase
+            .from('groups')
+            .update({ status: 'INACTIVE' })
+            .in('sub_program_id', subProgramIds)
+            .eq('club_id', profile?.club_id)
+
+          if (groupsError) {
+            console.error('Error deactivating groups:', groupsError)
+            setError('Failed to deactivate groups for this season')
+            return
+          }
+        }
+      }
+
       // Update the season status
       await updateSeason.mutateAsync({
         seasonId,

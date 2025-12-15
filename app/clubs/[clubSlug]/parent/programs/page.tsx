@@ -139,6 +139,11 @@ export default function ParentProgramsPage() {
     )
   }
 
+  // Check if current season is accepting registrations
+  const isSeasonOpen = currentSeason.status === 'active'
+  const isSeasonClosed = currentSeason.status === 'closed'
+  const isSeasonDraft = currentSeason.status === 'draft'
+
   if (!household || !athletes || athletes.length === 0) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -148,6 +153,22 @@ export default function ParentProgramsPage() {
             <CardDescription>
               Please set up your household and add athletes before viewing
               programs.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    )
+  }
+
+  // Don't show programs if season is in draft mode
+  if (isSeasonDraft) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle>Season Not Available</CardTitle>
+            <CardDescription>
+              The current season is being set up. Programs will be available soon.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -242,11 +263,12 @@ export default function ParentProgramsPage() {
                             onClick={() =>
                               handleAddToCart(subProgram, program, selectedAthleteId)
                             }
-                            disabled={!selectedAthleteId}
+                            disabled={!selectedAthleteId || isSeasonClosed}
                             size="sm"
+                            title={isSeasonClosed ? 'Registration closed for this season' : ''}
                           >
                             <Plus className="h-4 w-4 mr-2" />
-                            Add to Cart
+                            {isSeasonClosed ? 'Registration Closed' : 'Add to Cart'}
                           </Button>
                         </div>
                       ))}
