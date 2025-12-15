@@ -32,7 +32,7 @@ type SubProgram = {
   description?: string | null
   registration_fee?: number | null
   max_capacity?: number | null
-  is_active: boolean
+  status: ProgramStatus
   program_id: string
 }
 
@@ -126,12 +126,14 @@ export default function ParentProgramsPage() {
   // Show message if no current season
   if (!currentSeason) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle>No Season Available</CardTitle>
-            <CardDescription>
-              No current season found. Please contact support.
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card className="max-w-lg text-center">
+          <CardHeader className="space-y-3 pb-6">
+            <CardTitle className="text-2xl">No Season Available</CardTitle>
+            <CardDescription className="text-base leading-relaxed">
+              No current season found.
+              <br />
+              Please contact support for assistance.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -163,12 +165,14 @@ export default function ParentProgramsPage() {
   // Don't show programs if season is in draft mode
   if (isSeasonDraft) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle>Season Not Available</CardTitle>
-            <CardDescription>
-              The current season is being set up. Programs will be available soon.
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card className="max-w-lg text-center">
+          <CardHeader className="space-y-3 pb-6">
+            <CardTitle className="text-2xl">Season Not Available</CardTitle>
+            <CardDescription className="text-base leading-relaxed">
+              The current season is being set up.
+              <br />
+              Programs will be available soon.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -233,7 +237,7 @@ export default function ParentProgramsPage() {
                 program.sub_programs.length > 0 ? (
                   <div className="space-y-4">
                     {program.sub_programs
-                      .filter((sp) => sp.is_active)
+                      .filter((sp) => sp.status === ProgramStatus.ACTIVE)
                       .map((subProgram) => (
                         <div
                           key={subProgram.id}
