@@ -34,6 +34,7 @@ type SubProgram = {
   max_capacity?: number | null
   status: ProgramStatus
   program_id: string
+  registrations?: { count: number }[]
 }
 
 type ProgramWithSubPrograms = Program & {
@@ -251,16 +252,20 @@ export default function ParentProgramsPage() {
                               </p>
                             )}
                             <div className="mt-2 flex gap-4 text-sm">
-                              {subProgram.registration_fee != null && (
-                                <span className="font-medium">
-                                  ${(subProgram.registration_fee ?? 0).toFixed(2)}
+                              {subProgram.registration_fee !== null && subProgram.registration_fee !== undefined && (
+                                <span className="font-medium text-lg">
+                                  ${(subProgram.registration_fee).toFixed(2)}
                                 </span>
                               )}
-                              {subProgram.max_capacity !== null && (
-                                <span className="text-muted-foreground">
-                                  Max: {subProgram.max_capacity}
-                                </span>
-                              )}
+                              {subProgram.max_capacity !== null && subProgram.max_capacity !== undefined && (() => {
+                                const registrationCount = subProgram.registrations?.[0]?.count || 0
+                                const spotsLeft = subProgram.max_capacity - registrationCount
+                                return (
+                                  <span className={`text-sm ${spotsLeft <= 5 && spotsLeft > 0 ? 'text-orange-600 font-medium' : spotsLeft === 0 ? 'text-red-600 font-medium' : 'text-muted-foreground'}`}>
+                                    {spotsLeft > 0 ? `${spotsLeft} spots left` : 'Full'}
+                                  </span>
+                                )
+                              })()}
                             </div>
                           </div>
                           <Button

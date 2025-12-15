@@ -49,7 +49,10 @@ export class ProgramsService extends BaseService {
             name,
             description,
             status,
-            program_id
+            program_id,
+            registration_fee,
+            max_capacity,
+            registrations (count)
           )
         `)
     } else {
