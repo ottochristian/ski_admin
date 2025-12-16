@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams, useParams } from 'next/navigation'
 import { useParentClub } from '@/lib/use-parent-club'
 import { useCurrentSeason } from '@/lib/contexts/season-context'
@@ -82,6 +82,44 @@ export default function BillingPage() {
   }
 
   const success = searchParams.get('success')
+  const orderId = searchParams.get('order')
+
+  // Verify payment after successful checkout (fallback for webhook issues)
+  useEffect(() => {
+    async function verifyPayment() {
+      if (success === 'true' && orderId) {
+        try {
+          // Wait a moment for webhook to process first
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          
+          // Get session token
+          const { data: { session } } = await supabase.auth.getSession()
+          if (!session?.access_token) return
+          
+          // Call verify endpoint
+          const response = await fetch(`/api/orders/${orderId}/verify-payment`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+            credentials: 'include',
+          })
+          
+          if (response.ok) {
+            const result = await response.json()
+            if (result.status === 'paid') {
+              // Refresh orders to show updated status
+              refetch()
+            }
+          }
+        } catch (error) {
+          console.error('Error verifying payment:', error)
+        }
+      }
+    }
+    
+    verifyPayment()
+  }, [success, orderId, refetch])
 
   async function handlePayNow(order: Order) {
     setPayingOrderId(order.id)

@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
         },
       ],
       mode: 'payment',
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/clubs/${clubSlug}/parent/billing?success=true`,
+      success_url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/clubs/${clubSlug}/parent/billing?success=true&order=${orderId}`,
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/clubs/${clubSlug}/parent/cart?canceled=true`,
       metadata: {
         order_id: orderId,
