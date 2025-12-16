@@ -1,9 +1,11 @@
 'use client'
 
-import { useSearchParams } from 'next/navigation'
+import { useState } from 'react'
+import { useSearchParams, useParams } from 'next/navigation'
 import { useParentClub } from '@/lib/use-parent-club'
 import { useCurrentSeason } from '@/lib/contexts/season-context'
 import { useOrdersByHousehold } from '@/lib/hooks/use-orders'
+import { supabase } from '@/lib/supabaseClient'
 import {
   Card,
   CardContent,
@@ -11,7 +13,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { CheckCircle2, Clock, XCircle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { CheckCircle2, Clock, XCircle, CreditCard } from 'lucide-react'
 import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 
 type Order = {
@@ -33,7 +36,10 @@ type Order = {
 
 export default function BillingPage() {
   const searchParams = useSearchParams()
+  const params = useParams()
+  const clubSlug = params.clubSlug as string
   const { clubId, household, loading: authLoading } = useParentClub()
+  const [payingOrderId, setPayingOrderId] = useState<string | null>(null)
 
   // PHASE 2: Use base useSeason hook - RLS handles filtering
   const currentSeason = useCurrentSeason()
@@ -76,6 +82,54 @@ export default function BillingPage() {
   }
 
   const success = searchParams.get('success')
+
+  async function handlePayNow(order: Order) {
+    setPayingOrderId(order.id)
+    
+    try {
+      // Get session token
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError || !session?.access_token) {
+        alert('Authentication error. Please refresh and try again.')
+        setPayingOrderId(null)
+        return
+      }
+
+      // Call checkout API
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          orderId: order.id,
+          amount: order.total_amount,
+          clubSlug,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to initiate checkout')
+      }
+
+      const { checkoutUrl } = await response.json()
+      
+      if (checkoutUrl) {
+        // Redirect to Stripe checkout
+        window.location.href = checkoutUrl
+      } else {
+        throw new Error('No checkout URL received')
+      }
+    } catch (error) {
+      console.error('Error initiating checkout:', error)
+      alert(error instanceof Error ? error.message : 'Failed to start payment process')
+      setPayingOrderId(null)
+    }
+  }
 
   // Filter and group orders
   const now = new Date()
@@ -168,12 +222,36 @@ export default function BillingPage() {
                 </span>
               </div>
               {order.payments.length > 0 && (
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between text-sm mb-3">
                   <span>Amount Paid</span>
                   <span className="font-semibold">
                     ${totalPaid.toFixed(2)}
                   </span>
                 </div>
+              )}
+              
+              {/* Show Pay Now button for unpaid orders */}
+              {!isPaid && !isPartial && (
+                <Button 
+                  className="w-full mt-3"
+                  onClick={() => handlePayNow(order)}
+                  disabled={payingOrderId === order.id}
+                >
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  {payingOrderId === order.id ? 'Redirecting...' : 'Pay Now'}
+                </Button>
+              )}
+              
+              {/* Show Pay Remaining for partial payments */}
+              {isPartial && totalPaid < Number(order.total_amount) && (
+                <Button 
+                  className="w-full mt-3"
+                  onClick={() => handlePayNow(order)}
+                  disabled={payingOrderId === order.id}
+                >
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  {payingOrderId === order.id ? 'Redirecting...' : `Pay Remaining $${(Number(order.total_amount) - totalPaid).toFixed(2)}`}
+                </Button>
               )}
             </div>
 
