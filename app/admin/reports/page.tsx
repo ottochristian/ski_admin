@@ -76,8 +76,7 @@ export default function ReportsPage() {
     return <InlineLoading message="Loading reports…" />
   }
 
-  // Show error state
-  // (React Query handles errors, but we can add error handling if needed)
+  // Don't block page render for data loading
 
   // Show message if no season exists
   if (!selectedSeason) {

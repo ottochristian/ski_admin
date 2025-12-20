@@ -70,17 +70,13 @@ export default function AdminDashboard() {
     recentRegsLoading
 
   // Show loading state
-  if (isLoading) {
-    return <InlineLoading message="Loading dashboard…" />
-  }
-
-  // Auth check ensures profile exists
-  if (!profile) {
+  // Auth check ensures profile exists (only after auth is done)
+  if (!authLoading && !profile) {
     return null
   }
 
-  // Show message if no season exists
-  if (!selectedSeason) {
+  // Show message if no season exists (only after data loads)
+  if (!authLoading && !selectedSeason) {
     return (
       <div className="flex items-center justify-center py-12">
         <Card className="max-w-md">

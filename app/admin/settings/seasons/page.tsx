@@ -329,12 +329,8 @@ export default function SeasonsPage() {
   const isLoading = authLoading || seasonsLoading
 
   // Show loading state
-  if (isLoading) {
-    return <InlineLoading message="Loading seasons…" />
-  }
-
-  // Auth check ensures profile exists
-  if (!profile) {
+  // Auth check ensures profile exists (only after auth is done)
+  if (!authLoading && !profile) {
     return null
   }
 
