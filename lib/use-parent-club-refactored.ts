@@ -106,6 +106,13 @@ export function useParentClub() {
 
   const error = householdError ? householdError.message : null
 
+  // #region agent log
+  const { useEffect } = require('react');
+  useEffect(() => {
+    fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'use-parent-club-refactored.ts:composed-state',message:'Combined hook states',data:{authLoading,clubLoading,householdLoading,athletesLoading,combinedLoading:loading,hasProfile:!!profile,hasClub:!!club,hasHousehold:!!householdData,householdId,athletesCount:athletes.length,error},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2,H3'})}).catch(()=>{});
+  }, [authLoading, clubLoading, householdLoading, athletesLoading, loading, profile, club, householdData, householdId, athletes, error])
+  // #endregion
+
   return {
     profile,
     clubId,

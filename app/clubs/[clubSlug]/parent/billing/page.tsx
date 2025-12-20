@@ -57,6 +57,17 @@ export default function BillingPage() {
   const orderId = searchParams.get('order')
   const [verifying, setVerifying] = useState(false)
 
+  // #region agent log
+  useEffect(() => {
+    const logState = () => {
+      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'billing/page.tsx:state-check',message:'Component state',data:{authLoading,ordersLoading,isLoading,hasHousehold:!!household,householdId:household?.id,hasCurrentSeason:!!currentSeason,seasonId:currentSeason?.id,ordersCount:orders.length,hasError:!!ordersError,errorMsg:ordersError?.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H2,H3'})}).catch(()=>{});
+    };
+    logState();
+    const interval = setInterval(logState, 1000);
+    return () => clearInterval(interval);
+  }, [authLoading, ordersLoading, isLoading, household, currentSeason, orders, ordersError])
+  // #endregion
+
   // Verify payment after successful checkout (fallback for webhook issues)
   // IMPORTANT: Must be before any conditional returns (React Rules of Hooks)
   // Use ref to prevent duplicate calls in React Strict Mode
@@ -124,18 +135,8 @@ export default function BillingPage() {
     verifyPayment()
   }, [success, orderId, refetch])
 
-  // Show loading state (but not if we're just verifying payment)
-  if (isLoading && !verifying) {
-    return <InlineLoading message="Loading billing history…" />
-  }
-
-  // Show error state
-  if (ordersError) {
-    return <ErrorState error={ordersError} onRetry={() => refetch()} />
-  }
-
-  // Show message if no household or season
-  if (!household || !currentSeason) {
+  // Show message if no household or season (only after auth is loaded)
+  if (!authLoading && (!household || !currentSeason)) {
     return (
       <div className="flex items-center justify-center py-12">
         <Card className="max-w-md">
@@ -199,16 +200,16 @@ export default function BillingPage() {
     }
   }
 
-  // Filter and group orders
+  // Filter and group orders (only after data is loaded)
   const now = new Date()
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
 
-  const paidOrders = orders.filter(
+  const paidOrders = !ordersLoading ? orders.filter(
     (order: Order) =>
       order.status === 'paid' || order.status === 'partially_paid'
-  )
+  ) : []
 
-  const recentUnpaidOrders = orders.filter((order: Order) => {
+  const recentUnpaidOrders = !ordersLoading ? orders.filter((order: Order) => {
     if (order.status === 'paid' || order.status === 'partially_paid') {
       return false
     }
@@ -219,7 +220,7 @@ export default function BillingPage() {
     )
 
     return orderDate > oneHourAgo || hasSuccessfulPayment
-  })
+  }) : []
 
   function renderOrder(order: Order) {
     const totalPaid = order.payments
@@ -387,7 +388,32 @@ export default function BillingPage() {
         </div>
       )}
 
-      {orders.length === 0 ? (
+      {ordersLoading ? (
+        <div className="space-y-4">
+          <Card>
+            <CardContent className="py-8">
+              <div className="flex items-center justify-center">
+                <div className="animate-pulse text-muted-foreground">
+                  Loading orders...
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : ordersError ? (
+        <Card>
+          <CardContent className="py-12">
+            <div className="text-center">
+              <p className="text-red-600 mb-4">
+                {ordersError.message || 'Failed to load orders'}
+              </p>
+              <Button onClick={() => refetch()} variant="outline">
+                Retry
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : orders.length === 0 ? (
         <Card>
           <CardContent className="py-12">
             <div className="text-center">
