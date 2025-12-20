@@ -68,18 +68,13 @@ export default function AdminDashboard() {
     revenueLoading ||
     recentRegsLoading
 
-  // Show loading state
-  if (isLoading) {
-    return <InlineLoading message="Loading dashboard…" />
-  }
-
-  // Auth check ensures profile exists
-  if (!profile) {
+  // Auth check ensures profile exists (only after auth is done)
+  if (!authLoading && !profile) {
     return null
   }
 
-  // Show message if no season exists
-  if (!selectedSeason) {
+  // Show message if no season exists (only after data loads)
+  if (!authLoading && !selectedSeason) {
     return (
       <div className="flex items-center justify-center py-12">
         <Card className="max-w-md">
@@ -114,7 +109,11 @@ export default function AdminDashboard() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalAthletes}</div>
+            {athletesLoading ? (
+              <div className="h-8 w-16 animate-pulse rounded bg-gray-200" />
+            ) : (
+              <div className="text-2xl font-bold">{totalAthletes}</div>
+            )}
           </CardContent>
         </Card>
 
@@ -126,7 +125,11 @@ export default function AdminDashboard() {
             <BookOpen className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{programsCount}</div>
+            {programsLoading ? (
+              <div className="h-8 w-12 animate-pulse rounded bg-gray-200" />
+            ) : (
+              <div className="text-2xl font-bold">{programsCount}</div>
+            )}
           </CardContent>
         </Card>
 
@@ -138,9 +141,11 @@ export default function AdminDashboard() {
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {totalRegistrations}
-            </div>
+            {registrationsLoading ? (
+              <div className="h-8 w-16 animate-pulse rounded bg-gray-200" />
+            ) : (
+              <div className="text-2xl font-bold">{totalRegistrations}</div>
+            )}
           </CardContent>
         </Card>
 
@@ -152,9 +157,11 @@ export default function AdminDashboard() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              ${totalRevenue.toFixed(2)}
-            </div>
+            {revenueLoading ? (
+              <div className="h-8 w-20 animate-pulse rounded bg-gray-200" />
+            ) : (
+              <div className="text-2xl font-bold">${totalRevenue.toFixed(2)}</div>
+            )}
           </CardContent>
         </Card>
       </div>

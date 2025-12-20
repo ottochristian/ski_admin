@@ -109,23 +109,8 @@ export default function ParentProgramsPage() {
 
   const isLoading = authLoading || programsLoading
 
-  // Show loading state
-  if (isLoading) {
-    return <InlineLoading message="Loading programs…" />
-  }
-
-  // Show error state
-  if (authError || programsError) {
-    return (
-      <ErrorState
-        error={authError || programsError}
-        onRetry={() => window.location.reload()}
-      />
-    )
-  }
-
-  // Show message if no current season
-  if (!currentSeason) {
+  // Show message if no current season (only after auth is loaded)
+  if (!authLoading && !currentSeason) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Card className="max-w-lg text-center">
@@ -215,7 +200,38 @@ export default function ParentProgramsPage() {
       </Card>
 
       {/* Programs List */}
-      {programs.length === 0 ? (
+      {programsLoading ? (
+        <div className="space-y-6">
+          {[1, 2].map((i) => (
+            <Card key={i}>
+              <CardContent className="p-6">
+                <div className="animate-pulse space-y-4">
+                  <div className="h-6 w-48 rounded bg-gray-200" />
+                  <div className="h-4 w-full rounded bg-gray-200" />
+                  <div className="h-4 w-3/4 rounded bg-gray-200" />
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <div className="h-32 rounded bg-gray-200" />
+                    <div className="h-32 rounded bg-gray-200" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : programsError ? (
+        <Card>
+          <CardContent className="py-12">
+            <div className="text-center">
+              <p className="text-red-600 mb-4">
+                {programsError.message || 'Failed to load programs'}
+              </p>
+              <Button onClick={() => window.location.reload()} variant="outline">
+                Retry
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : programs.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center">
             <p className="text-muted-foreground">
