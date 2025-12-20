@@ -57,17 +57,6 @@ export default function BillingPage() {
   const orderId = searchParams.get('order')
   const [verifying, setVerifying] = useState(false)
 
-  // #region agent log
-  useEffect(() => {
-    const logState = () => {
-      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'billing/page.tsx:state-check',message:'Component state',data:{authLoading,ordersLoading,isLoading,hasHousehold:!!household,householdId:household?.id,hasCurrentSeason:!!currentSeason,seasonId:currentSeason?.id,ordersCount:orders.length,hasError:!!ordersError,errorMsg:ordersError?.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H2,H3'})}).catch(()=>{});
-    };
-    logState();
-    const interval = setInterval(logState, 1000);
-    return () => clearInterval(interval);
-  }, [authLoading, ordersLoading, isLoading, household, currentSeason, orders, ordersError])
-  // #endregion
-
   // Verify payment after successful checkout (fallback for webhook issues)
   // IMPORTANT: Must be before any conditional returns (React Rules of Hooks)
   // Use ref to prevent duplicate calls in React Strict Mode

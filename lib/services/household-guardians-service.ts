@@ -46,19 +46,11 @@ export class HouseholdGuardiansService extends BaseService {
    * Handles both households table and legacy families table fallback
    */
   async getHouseholdForCurrentUser(): Promise<QueryResult<any>> {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'household-guardians-service.ts:start',message:'getHouseholdForCurrentUser called',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
-    // #endregion
-
     // Get current user
     const {
       data: { user },
       error: userError,
     } = await supabase.auth.getUser()
-
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'household-guardians-service.ts:after-getUser',message:'Got user',data:{hasUser:!!user,userId:user?.id,error:userError?.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
-    // #endregion
 
     if (userError || !user) {
       return {
@@ -74,10 +66,6 @@ export class HouseholdGuardiansService extends BaseService {
       .eq('user_id', user.id)
       .maybeSingle()
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'household-guardians-service.ts:after-hg-query',message:'Got household_guardians',data:{hasHouseholdId:!!hgResult.data?.household_id,householdId:hgResult.data?.household_id,error:hgResult.error?.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
-    // #endregion
-
     if (hgResult.data?.household_id) {
       // Fetch household
       const householdResult = await this.supabase
@@ -85,10 +73,6 @@ export class HouseholdGuardiansService extends BaseService {
         .select('*')
         .eq('id', hgResult.data.household_id)
         .maybeSingle()
-
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'household-guardians-service.ts:after-households-query',message:'Got household',data:{hasHousehold:!!householdResult.data,householdId:householdResult.data?.id,error:householdResult.error?.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
-      // #endregion
 
       if (householdResult.error) {
         return handleSupabaseError(householdResult)
