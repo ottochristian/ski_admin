@@ -25,11 +25,6 @@ export async function POST(
     const { orderId } = await params
     log.info('[Verify Payment] Starting verification', { orderId })
 
-    // #region agent log
-    const fs = require('fs');
-    fs.appendFileSync('/Users/otti/Documents/Coding_Shit/ski_admin/.cursor/debug.log', JSON.stringify({location:'verify-payment/route.ts:entry',message:'API called',data:{orderId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H2'}) + '\n');
-    // #endregion
-
     // Require authentication
     const authResult = await requireAuth(request)
     if (authResult instanceof NextResponse) {
@@ -89,10 +84,6 @@ export async function POST(
       found: !!payment,
       error: paymentError?.message 
     })
-
-    // #region agent log
-    fs.appendFileSync('/Users/otti/Documents/Coding_Shit/ski_admin/.cursor/debug.log', JSON.stringify({location:'verify-payment/route.ts:payment-check',message:'Checked existing payments',data:{orderId,paymentExists:!!payment,paymentId:payment?.id,paymentAmount:payment?.amount},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2,H5'}) + '\n');
-    // #endregion
 
     if (payment) {
       // Payment exists but order not updated - fix it

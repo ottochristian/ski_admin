@@ -16,12 +16,6 @@ const getStripe = () => {
 
 export async function POST(request: NextRequest) {
   try {
-    // #region agent log
-    const fs = require('fs');
-    const callId = 'checkout-' + Date.now();
-    fs.appendFileSync('/Users/otti/Documents/Coding_Shit/ski_admin/.cursor/debug.log', JSON.stringify({location:'checkout/route.ts:entry',message:'Checkout API called',data:{callId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3,H5'}) + '\n');
-    // #endregion
-
     // Require authentication
     const authResult = await requireAuth(request)
     if (authResult instanceof NextResponse) {
@@ -31,10 +25,6 @@ export async function POST(request: NextRequest) {
     const { user, supabase: userSupabase } = authResult
 
     const { orderId, amount, clubSlug } = await request.json()
-
-    // #region agent log
-    fs.appendFileSync('/Users/otti/Documents/Coding_Shit/ski_admin/.cursor/debug.log', JSON.stringify({location:'checkout/route.ts:params',message:'Checkout params',data:{callId,orderId,amount,clubSlug},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3,H5'}) + '\n');
-    // #endregion
 
     if (!orderId || !amount || amount <= 0 || !clubSlug) {
       log.warn('Invalid checkout request', { orderId, amount, clubSlug })
@@ -116,10 +106,6 @@ export async function POST(request: NextRequest) {
       sessionId: session.id,
       userId: user.id,
     })
-
-    // #region agent log
-    fs.appendFileSync('/Users/otti/Documents/Coding_Shit/ski_admin/.cursor/debug.log', JSON.stringify({location:'checkout/route.ts:session-created',message:'Stripe session created',data:{callId,orderId,sessionId:session.id,amount,checkoutUrl:session.url},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3,H5'}) + '\n');
-    // #endregion
 
     return NextResponse.json({ checkoutUrl: session.url })
   } catch (error) {

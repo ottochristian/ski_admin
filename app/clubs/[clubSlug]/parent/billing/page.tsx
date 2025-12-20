@@ -154,10 +154,6 @@ export default function BillingPage() {
   async function handlePayNow(order: Order) {
     setPayingOrderId(order.id)
     
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'billing/page.tsx:handlePayNow',message:'Pay Now clicked',data:{orderId:order.id,amount:order.total_amount},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
-    // #endregion
-    
     try {
       // Get session token
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
