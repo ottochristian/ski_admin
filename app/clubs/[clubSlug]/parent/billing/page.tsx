@@ -53,6 +53,59 @@ export default function BillingPage() {
   } = useOrdersByHousehold(household?.id || null, currentSeason?.id)
 
   const isLoading = authLoading || ordersLoading
+  const success = searchParams.get('success')
+  const orderId = searchParams.get('order')
+
+  // Verify payment after successful checkout (fallback for webhook issues)
+  // IMPORTANT: Must be before any conditional returns (React Rules of Hooks)
+  useEffect(() => {
+    async function verifyPayment() {
+      if (success === 'true' && orderId) {
+        console.log('[Billing] Verifying payment for order:', orderId)
+        try {
+          // Wait a moment for webhook to process first
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          
+          // Get session token
+          const { data: { session } } = await supabase.auth.getSession()
+          if (!session?.access_token) {
+            console.error('[Billing] No session token available')
+            return
+          }
+          
+          console.log('[Billing] Calling verify-payment endpoint')
+          
+          // Call verify endpoint
+          const response = await fetch(`/api/orders/${orderId}/verify-payment`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+            credentials: 'include',
+          })
+          
+          console.log('[Billing] Verify response status:', response.status)
+          
+          if (response.ok) {
+            const result = await response.json()
+            console.log('[Billing] Verify result:', result)
+            if (result.status === 'paid') {
+              // Refresh orders to show updated status
+              console.log('[Billing] Payment verified, refreshing orders')
+              refetch()
+            }
+          } else {
+            const errorText = await response.text()
+            console.error('[Billing] Verify failed:', response.status, errorText)
+          }
+        } catch (error) {
+          console.error('[Billing] Error verifying payment:', error)
+        }
+      }
+    }
+    
+    verifyPayment()
+  }, [success, orderId, refetch])
 
   // Show loading state
   if (isLoading) {
@@ -80,46 +133,6 @@ export default function BillingPage() {
       </div>
     )
   }
-
-  const success = searchParams.get('success')
-  const orderId = searchParams.get('order')
-
-  // Verify payment after successful checkout (fallback for webhook issues)
-  useEffect(() => {
-    async function verifyPayment() {
-      if (success === 'true' && orderId) {
-        try {
-          // Wait a moment for webhook to process first
-          await new Promise(resolve => setTimeout(resolve, 2000))
-          
-          // Get session token
-          const { data: { session } } = await supabase.auth.getSession()
-          if (!session?.access_token) return
-          
-          // Call verify endpoint
-          const response = await fetch(`/api/orders/${orderId}/verify-payment`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${session.access_token}`,
-            },
-            credentials: 'include',
-          })
-          
-          if (response.ok) {
-            const result = await response.json()
-            if (result.status === 'paid') {
-              // Refresh orders to show updated status
-              refetch()
-            }
-          }
-        } catch (error) {
-          console.error('Error verifying payment:', error)
-        }
-      }
-    }
-    
-    verifyPayment()
-  }, [success, orderId, refetch])
 
   async function handlePayNow(order: Order) {
     setPayingOrderId(order.id)

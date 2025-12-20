@@ -23,14 +23,18 @@ export async function POST(
 ) {
   try {
     const { orderId } = await params
+    log.info('[Verify Payment] Starting verification', { orderId })
 
     // Require authentication
     const authResult = await requireAuth(request)
     if (authResult instanceof NextResponse) {
+      log.warn('[Verify Payment] Auth failed', { orderId })
       return authResult
     }
 
     const { user } = authResult
+    log.info('[Verify Payment] User authenticated', { orderId, userId: user.id })
+    
     const supabase = createSupabaseAdminClient()
 
     // Get order
@@ -57,6 +61,7 @@ export async function POST(
 
     // If already paid, return success
     if (order.status === 'paid') {
+      log.info('[Verify Payment] Order already paid', { orderId })
       return NextResponse.json({ 
         success: true, 
         status: 'paid',
@@ -64,17 +69,25 @@ export async function POST(
       })
     }
 
+    log.info('[Verify Payment] Order status:', { orderId, status: order.status })
+
     // Check if there's a payment record
-    const { data: payment } = await supabase
+    const { data: payment, error: paymentError } = await supabase
       .from('payments')
       .select('*')
       .eq('order_id', orderId)
       .eq('status', 'succeeded')
       .single()
 
+    log.info('[Verify Payment] Payment record check', { 
+      orderId, 
+      found: !!payment,
+      error: paymentError?.message 
+    })
+
     if (payment) {
       // Payment exists but order not updated - fix it
-      log.info('Found successful payment, updating order status', { orderId })
+      log.info('[Verify Payment] Found successful payment, updating order status', { orderId })
       
       await supabase
         .from('orders')
@@ -110,6 +123,8 @@ export async function POST(
 
     // No payment record - check Stripe directly
     // Look for recent successful checkout sessions for this order
+    log.info('[Verify Payment] Checking Stripe for checkout session', { orderId })
+    
     const stripe = getStripe()
     
     // We need to search for checkout sessions with this order_id in metadata
@@ -118,12 +133,23 @@ export async function POST(
       limit: 10,
     })
 
+    log.info('[Verify Payment] Retrieved sessions from Stripe', { 
+      orderId,
+      sessionCount: sessions.data.length 
+    })
+
     const matchingSession = sessions.data.find(
       (session) => session.metadata?.order_id === orderId && session.payment_status === 'paid'
     )
 
+    log.info('[Verify Payment] Session search result', { 
+      orderId,
+      found: !!matchingSession,
+      matchingSessionId: matchingSession?.id 
+    })
+
     if (matchingSession) {
-      log.info('Found paid session in Stripe, processing manually', {
+      log.info('[Verify Payment] Found paid session in Stripe, processing manually', {
         orderId,
         sessionId: matchingSession.id,
       })
@@ -175,6 +201,7 @@ export async function POST(
     }
 
     // No payment found anywhere
+    log.warn('[Verify Payment] No payment found', { orderId })
     return NextResponse.json({ 
       success: false, 
       status: order.status,
@@ -182,7 +209,7 @@ export async function POST(
     })
 
   } catch (error) {
-    log.error('Error verifying payment', error)
+    log.error('[Verify Payment] Error verifying payment', error)
     return NextResponse.json(
       { error: 'Failed to verify payment' },
       { status: 500 }
