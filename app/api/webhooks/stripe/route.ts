@@ -82,6 +82,11 @@ export async function POST(request: NextRequest) {
     const session = event.data.object as Stripe.Checkout.Session
     const orderId = session.metadata?.order_id
 
+    // #region agent log
+    const fs = require('fs');
+    fs.appendFileSync('/Users/otti/Documents/Coding_Shit/ski_admin/.cursor/debug.log', JSON.stringify({location:'webhooks/stripe/route.ts:checkout-completed',message:'Webhook processing checkout',data:{orderId,sessionId:session.id,eventId:event.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2,H3'}) + '\n');
+    // #endregion
+
     if (!orderId) {
       log.warn('No order_id in session metadata', {
         sessionId: session.id,
@@ -129,6 +134,11 @@ export async function POST(request: NextRequest) {
       // Skip if already paid (idempotency at order level)
       if (order.status === 'paid') {
         log.info('Order already paid', { orderId })
+        
+        // #region agent log
+        fs.appendFileSync('/Users/otti/Documents/Coding_Shit/ski_admin/.cursor/debug.log', JSON.stringify({location:'webhooks/stripe/route.ts:already-paid',message:'Order already paid, skipping',data:{orderId,orderStatus:order.status},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2,H3'}) + '\n');
+        // #endregion
+        
         if (eventRecord) {
           await supabase
             .from('webhook_events')
@@ -172,6 +182,10 @@ export async function POST(request: NextRequest) {
         .eq('stripe_checkout_session_id', session.id)
         .single()
 
+      // #region agent log
+      fs.appendFileSync('/Users/otti/Documents/Coding_Shit/ski_admin/.cursor/debug.log', JSON.stringify({location:'webhooks/stripe/route.ts:payment-check',message:'Checked for existing payment',data:{orderId,sessionId:session.id,existingPaymentId:existingPayment?.id,willInsert:!existingPayment},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2,H5'}) + '\n');
+      // #endregion
+
       if (!existingPayment) {
         const { error: paymentError } = await supabase.from('payments').insert([
           {
@@ -184,6 +198,10 @@ export async function POST(request: NextRequest) {
             processed_at: new Date().toISOString(),
           },
         ])
+
+        // #region agent log
+        fs.appendFileSync('/Users/otti/Documents/Coding_Shit/ski_admin/.cursor/debug.log', JSON.stringify({location:'webhooks/stripe/route.ts:payment-inserted',message:'Payment insert result',data:{orderId,sessionId:session.id,success:!paymentError,error:paymentError?.message,amount:order.total_amount},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2,H5'}) + '\n');
+        // #endregion
 
         if (paymentError) {
           log.error('Error creating payment record', paymentError, {

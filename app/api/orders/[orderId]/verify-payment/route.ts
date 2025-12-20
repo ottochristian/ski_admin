@@ -25,6 +25,11 @@ export async function POST(
     const { orderId } = await params
     log.info('[Verify Payment] Starting verification', { orderId })
 
+    // #region agent log
+    const fs = require('fs');
+    fs.appendFileSync('/Users/otti/Documents/Coding_Shit/ski_admin/.cursor/debug.log', JSON.stringify({location:'verify-payment/route.ts:entry',message:'API called',data:{orderId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H2'}) + '\n');
+    // #endregion
+
     // Require authentication
     const authResult = await requireAuth(request)
     if (authResult instanceof NextResponse) {
@@ -84,6 +89,10 @@ export async function POST(
       found: !!payment,
       error: paymentError?.message 
     })
+
+    // #region agent log
+    fs.appendFileSync('/Users/otti/Documents/Coding_Shit/ski_admin/.cursor/debug.log', JSON.stringify({location:'verify-payment/route.ts:payment-check',message:'Checked existing payments',data:{orderId,paymentExists:!!payment,paymentId:payment?.id,paymentAmount:payment?.amount},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2,H5'}) + '\n');
+    // #endregion
 
     if (payment) {
       // Payment exists but order not updated - fix it
@@ -154,6 +163,34 @@ export async function POST(
         sessionId: matchingSession.id,
       })
 
+      // CRITICAL: Check one more time for payment by session ID to prevent race condition
+      const { data: existingBySession } = await supabase
+        .from('payments')
+        .select('id')
+        .eq('stripe_checkout_session_id', matchingSession.id)
+        .maybeSingle()
+
+      if (existingBySession) {
+        log.info('[Verify Payment] Payment already exists for this session (race condition avoided)', {
+          orderId,
+          sessionId: matchingSession.id,
+          existingPaymentId: existingBySession.id,
+        })
+        
+        // Still update order status if needed
+        await supabase
+          .from('orders')
+          .update({ status: 'paid', updated_at: new Date().toISOString() })
+          .eq('id', orderId)
+          .eq('status', 'unpaid')
+
+        return NextResponse.json({ 
+          success: true, 
+          status: 'paid',
+          message: 'Payment already recorded'
+        })
+      }
+
       // Process it like the webhook would
       await supabase
         .from('orders')
@@ -161,7 +198,7 @@ export async function POST(
         .eq('id', orderId)
 
       // Create payment record
-      await supabase.from('payments').insert([
+      const { data: insertedPayment, error: insertError } = await supabase.from('payments').insert([
         {
           order_id: orderId,
           amount: order.total_amount,
@@ -171,7 +208,23 @@ export async function POST(
           stripe_payment_intent_id: matchingSession.payment_intent as string,
           processed_at: new Date().toISOString(),
         },
-      ])
+      ]).select()
+
+      if (insertError) {
+        // If insert fails due to unique constraint (race condition), that's OK
+        if (insertError.code === '23505') {
+          log.info('[Verify Payment] Payment insert failed due to unique constraint (race condition prevented)', {
+            orderId,
+            sessionId: matchingSession.id,
+          })
+          return NextResponse.json({ 
+            success: true, 
+            status: 'paid',
+            message: 'Payment already recorded by concurrent request'
+          })
+        }
+        log.error('[Verify Payment] Payment insert error', insertError, { orderId })
+      }
 
       // Update registrations
       const { data: orderItems } = await supabase

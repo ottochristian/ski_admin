@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useParams } from 'next/navigation'
 import { useParentClub } from '@/lib/use-parent-club'
 import { useCurrentSeason } from '@/lib/contexts/season-context'
@@ -55,12 +55,25 @@ export default function BillingPage() {
   const isLoading = authLoading || ordersLoading
   const success = searchParams.get('success')
   const orderId = searchParams.get('order')
+  const [verifying, setVerifying] = useState(false)
 
   // Verify payment after successful checkout (fallback for webhook issues)
   // IMPORTANT: Must be before any conditional returns (React Rules of Hooks)
+  // Use ref to prevent duplicate calls in React Strict Mode
+  const verificationStartedRef = useRef(false)
+
   useEffect(() => {
     async function verifyPayment() {
       if (success === 'true' && orderId) {
+        // Prevent duplicate verification in React Strict Mode
+        if (verificationStartedRef.current) {
+          console.log('[Billing] Verification already started, skipping duplicate call')
+          return
+        }
+        
+        verificationStartedRef.current = true
+        setVerifying(true)
+        
         console.log('[Billing] Verifying payment for order:', orderId)
         try {
           // Wait a moment for webhook to process first
@@ -70,6 +83,7 @@ export default function BillingPage() {
           const { data: { session } } = await supabase.auth.getSession()
           if (!session?.access_token) {
             console.error('[Billing] No session token available')
+            setVerifying(false)
             return
           }
           
@@ -89,6 +103,7 @@ export default function BillingPage() {
           if (response.ok) {
             const result = await response.json()
             console.log('[Billing] Verify result:', result)
+            
             if (result.status === 'paid') {
               // Refresh orders to show updated status
               console.log('[Billing] Payment verified, refreshing orders')
@@ -100,6 +115,8 @@ export default function BillingPage() {
           }
         } catch (error) {
           console.error('[Billing] Error verifying payment:', error)
+        } finally {
+          setVerifying(false)
         }
       }
     }
@@ -107,8 +124,8 @@ export default function BillingPage() {
     verifyPayment()
   }, [success, orderId, refetch])
 
-  // Show loading state
-  if (isLoading) {
+  // Show loading state (but not if we're just verifying payment)
+  if (isLoading && !verifying) {
     return <InlineLoading message="Loading billing history…" />
   }
 
@@ -136,6 +153,10 @@ export default function BillingPage() {
 
   async function handlePayNow(order: Order) {
     setPayingOrderId(order.id)
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'billing/page.tsx:handlePayNow',message:'Pay Now clicked',data:{orderId:order.id,amount:order.total_amount},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
     
     try {
       // Get session token
