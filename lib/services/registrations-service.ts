@@ -20,7 +20,7 @@ export class RegistrationsService extends BaseService {
       created_at,
       season_id,
       athletes(id, first_name, last_name, date_of_birth, household_id, family_id),
-      sub_programs(name, programs(name))
+      sub_programs(name, program_id, programs(id, name))
     `)
 
     if (seasonId) {
@@ -46,7 +46,7 @@ export class RegistrationsService extends BaseService {
         id,
         status,
         athletes(first_name, last_name),
-        sub_programs(name, programs(name))
+        sub_programs(name, program_id, programs(id, name))
       `)
       .eq('season_id', seasonId)
       .order('created_at', { ascending: false })

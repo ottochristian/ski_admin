@@ -98,12 +98,8 @@ export default function SubProgramsPage() {
     authLoading || seasonLoading || programsLoading || subProgramsLoading
 
   // Show loading state
-  if (isLoading) {
-    return <InlineLoading message="Loading sub-programs…" />
-  }
-
-  // Show error state
-  if (subProgramsError) {
+  // Show error state (but don't block entire page)
+  if (!authLoading && subProgramsError) {
     return (
       <ErrorState error={subProgramsError} onRetry={() => refetchSubPrograms()} />
     )

@@ -70,6 +70,13 @@ export default function ReportsPage() {
     programsLoading ||
     registrationsLoading
 
+  // #region agent log
+  const { useEffect } = require('react');
+  useEffect(() => {
+    fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reports/page.tsx:data-check',message:'Reports data loaded',data:{seasonId:selectedSeason?.id,seasonName:selectedSeason?.name,allProgramsCount:allPrograms.length,programsCount:programs.length,allRegistrationsCount:allRegistrations.length,sampleProgram:programs[0],sampleRegistration:allRegistrations[0],programsWithRegsCount:programsWithRegistrations.length,totals},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H2,H3,H4,H5'})}).catch(()=>{});
+  }, [selectedSeason, allPrograms, programs, allRegistrations, programsWithRegistrations, totals])
+  // #endregion
+
   // Show loading state
   // Don't block page render for data loading
 
