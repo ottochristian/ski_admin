@@ -70,16 +70,6 @@ export default function ReportsPage() {
     programsLoading ||
     registrationsLoading
 
-  // #region agent log
-  const { useEffect } = require('react');
-  useEffect(() => {
-    fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'reports/page.tsx:data-check',message:'Reports data loaded',data:{seasonId:selectedSeason?.id,seasonName:selectedSeason?.name,allProgramsCount:allPrograms.length,programsCount:programs.length,allRegistrationsCount:allRegistrations.length,sampleProgram:programs[0],sampleRegistration:allRegistrations[0],programsWithRegsCount:programsWithRegistrations.length,totals},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H2,H3,H4,H5'})}).catch(()=>{});
-  }, [selectedSeason, allPrograms, programs, allRegistrations, programsWithRegistrations, totals])
-  // #endregion
-
-  // Show loading state
-  // Don't block page render for data loading
-
   // Show message if no season exists
   if (!selectedSeason) {
     return (
@@ -115,9 +105,13 @@ export default function ReportsPage() {
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              ${totals.revenue.toFixed(2)}
-            </div>
+            {isLoading ? (
+              <div className="h-8 w-24 animate-pulse rounded bg-gray-200" />
+            ) : (
+              <div className="text-2xl font-bold">
+                ${totals.revenue.toFixed(2)}
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">from all programs</p>
           </CardContent>
         </Card>
@@ -129,7 +123,11 @@ export default function ReportsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totals.registrations}</div>
+            {isLoading ? (
+              <div className="h-8 w-16 animate-pulse rounded bg-gray-200" />
+            ) : (
+              <div className="text-2xl font-bold">{totals.registrations}</div>
+            )}
             <p className="text-xs text-muted-foreground">active registrations</p>
           </CardContent>
         </Card>
@@ -141,9 +139,13 @@ export default function ReportsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {programsWithRegistrations.length}
-            </div>
+            {isLoading ? (
+              <div className="h-8 w-12 animate-pulse rounded bg-gray-200" />
+            ) : (
+              <div className="text-2xl font-bold">
+                {programsWithRegistrations.length}
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">programs offered</p>
           </CardContent>
         </Card>
@@ -157,7 +159,26 @@ export default function ReportsPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
-            {programsWithRegistrations.length > 0 ? (
+            {isLoading ? (
+              // Loading skeleton
+              [1, 2, 3].map((i) => (
+                <div key={i} className="border-b pb-4 last:border-0">
+                  <div className="animate-pulse space-y-3">
+                    <div className="flex justify-between">
+                      <div className="h-5 w-32 rounded bg-gray-200" />
+                      <div className="h-5 w-20 rounded bg-gray-200" />
+                    </div>
+                    <div className="h-4 w-64 rounded bg-gray-200" />
+                    <div className="grid grid-cols-4 gap-4">
+                      <div className="h-10 rounded bg-gray-200" />
+                      <div className="h-10 rounded bg-gray-200" />
+                      <div className="h-10 rounded bg-gray-200" />
+                      <div className="h-10 rounded bg-gray-200" />
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : programsWithRegistrations.length > 0 ? (
               programsWithRegistrations.map((program: any) => {
                 const totalEnrolled = program.registrations?.length || 0
                 const totalRevenue =
