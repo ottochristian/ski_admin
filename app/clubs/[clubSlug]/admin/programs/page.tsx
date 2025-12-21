@@ -79,14 +79,6 @@ export default function ProgramsPage() {
     error,
   } = usePrograms(selectedSeason?.id, true) // Include sub_programs, RLS filters by club
 
-  // #region agent log
-  useEffect(() => {
-    if (selectedSeason && !isLoading) {
-      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'programs/page:PROGRAMS_RENDER',message:'Programs list rendered',data:{seasonId:selectedSeason.id,programCount:allPrograms.length,programNames:allPrograms.map((p:any)=>p.name)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'CACHE'})}).catch(()=>{});
-    }
-  }, [allPrograms, selectedSeason, isLoading])
-  // #endregion
-
   // Admin view: Show ALL programs and sub-programs regardless of status
   // (Parent portal filters by status, but admins need to see everything to manage)
   const programs = allPrograms as ProgramWithSubPrograms[]

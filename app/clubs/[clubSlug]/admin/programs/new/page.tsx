@@ -61,17 +61,9 @@ export default function NewProgramPage() {
         return
       }
 
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'programs/new:BEFORE_REFETCH',message:'Before refetch',data:{programCreated:result.data?.name,currentSeasonId:currentSeason.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'CACHE'})}).catch(()=>{});
-      // #endregion
-
       // Force immediate refetch of ALL programs queries and wait for completion
       // This ensures the cache is updated before we redirect
-      const refetchResult = await queryClient.refetchQueries({ queryKey: ['programs'] })
-
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'programs/new:AFTER_REFETCH',message:'After refetch',data:{refetchCount:refetchResult.length,refetchResults:refetchResult.map((r:any)=>({status:r.status,dataLength:r.data?.length}))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'CACHE'})}).catch(()=>{});
-      // #endregion
+      await queryClient.refetchQueries({ queryKey: ['programs'] })
       
       // Go back to programs list (club-aware route)
       router.push(`${basePath}/programs`)
