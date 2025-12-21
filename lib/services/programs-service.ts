@@ -44,7 +44,7 @@ export class ProgramsService extends BaseService {
           status,
           club_id,
           season_id,
-          sub_programs (
+          sub_programs!inner (
             id,
             name,
             description,
@@ -55,6 +55,8 @@ export class ProgramsService extends BaseService {
             registrations (count)
           )
         `)
+        // CRITICAL: Filter out soft-deleted sub-programs in the nested query
+        .is('sub_programs.deleted_at', null)
     } else {
       selectQuery = this.supabase.from('programs').select('*')
     }
