@@ -16,8 +16,8 @@ function SetupPasswordContent() {
   const searchParams = useSearchParams()
   const emailFromUrl = searchParams.get('email')
   
-  // Handle URL decoding issues: spaces should be + signs in emails
-  const cleanEmail = emailFromUrl ? emailFromUrl.replace(/\s+/g, '+') : ''
+  // Handle URL decoding issues: spaces should be + signs in emails, lowercase for consistency
+  const cleanEmail = emailFromUrl ? emailFromUrl.replace(/\s+/g, '+').toLowerCase() : ''
 
   const [step, setStep] = useState<'verify' | 'password'>('verify')
   const [email, setEmail] = useState(cleanEmail || '')
@@ -32,8 +32,8 @@ function SetupPasswordContent() {
 
   useEffect(() => {
     if (emailFromUrl) {
-      // Clean email: replace spaces with + (URL encoding issue)
-      const cleaned = emailFromUrl.replace(/\s+/g, '+')
+      // Clean email: replace spaces with +, lowercase for consistency
+      const cleaned = emailFromUrl.replace(/\s+/g, '+').toLowerCase()
       console.log('[Setup Password] Email from URL:', emailFromUrl)
       console.log('[Setup Password] Cleaned email:', cleaned)
       setEmail(cleaned)
