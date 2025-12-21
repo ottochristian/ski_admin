@@ -1,281 +1,392 @@
 'use client'
-export const dynamic = 'force-dynamic'
 
-import { useState, useEffect, FormEvent } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
+import { OTPInput } from '@/components/ui/otp-input'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2 } from 'lucide-react'
+import { AlertCircle, CheckCircle, Key, Mail } from 'lucide-react'
 
-export default function SetupPasswordPage() {
+function SetupPasswordContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const emailFromUrl = searchParams.get('email')
+
+  const [step, setStep] = useState<'verify' | 'password'>('verify')
+  const [email, setEmail] = useState(emailFromUrl || '')
+  const [otp, setOtp] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [checkingSession, setCheckingSession] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
-  const [needsPassword, setNeedsPassword] = useState(false)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
+  const [attemptsRemaining, setAttemptsRemaining] = useState<number | null>(null)
 
   useEffect(() => {
-    async function checkUser() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
+    if (emailFromUrl) {
+      setEmail(emailFromUrl)
+    }
+  }, [emailFromUrl])
 
-      if (!session) {
-        // No session - redirect to login
-        router.push('/login?message=Please log in to set your password')
-        return
-      }
-
-      // User is logged in (likely via invite link)
-      // Check if they already have a password by checking if they can sign in with password
-      // For invited users, they typically don't have a password set initially
-      // We'll show the password setup form - if they already have a password, 
-      // they can just set a new one or we can redirect them
-      
-      // Check user metadata to see if password was already set
-      const user = session.user
-      const hasPasswordSet = user.user_metadata?.password_set === true
-
-      if (hasPasswordSet) {
-        // Password already set - redirect to appropriate dashboard
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('role, club_id')
-          .eq('id', user.id)
-          .single()
-
-        if (profileData) {
-          if (profileData.role === 'system_admin') {
-            router.push('/system-admin')
-            return
-          } else if (profileData.role === 'admin') {
-            // Get club slug for club-aware route
-            if (profileData.club_id) {
-              const { data: club } = await supabase
-                .from('clubs')
-                .select('slug')
-                .eq('id', profileData.club_id)
-                .single()
-
-              if (club?.slug) {
-                router.push(`/clubs/${club.slug}/admin`)
-                return
-              }
-            }
-            // Fallback to legacy route if no club
-            router.push('/admin')
-            return
-          } else if (profileData.role === 'coach') {
-            router.push('/coach')
-            return
-          } else if (profileData.role === 'parent' && profileData.club_id) {
-            const { data: club } = await supabase
-              .from('clubs')
-              .select('slug')
-              .eq('id', profileData.club_id)
-              .single()
-
-            if (club?.slug) {
-              router.push(`/clubs/${club.slug}/parent/dashboard`)
-              return
-            }
-          }
-        }
-        // Fallback - redirect to login
-        router.push('/login')
-        return
-      }
-
-      // User needs to set password
-      setNeedsPassword(true)
-      setMessage('Please set a password for your account')
-      setCheckingSession(false)
+  async function handleVerifyOTP() {
+    if (!email || !otp || otp.length !== 6) {
+      setError('Please enter a valid 6-digit code')
+      return
     }
 
-    checkUser()
-  }, [router])
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
     setLoading(true)
     setError(null)
 
-    // Validate passwords match
-    if (password !== confirmPassword) {
-      setError('Passwords do not match')
-      setLoading(false)
-      return
-    }
-
-    // Validate password strength
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters long')
-      setLoading(false)
-      return
-    }
-
-    // Update password
-    const { error: updateError } = await supabase.auth.updateUser({
-      password: password,
-      data: {
-        password_set: true, // Mark that password has been set
-      },
-    })
-
-    if (updateError) {
-      setError(updateError.message)
-      setLoading(false)
-      return
-    }
-
-    // Success - get user and redirect based on role
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      setError('Failed to get user information')
-      setLoading(false)
-      return
-    }
-
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('role, club_id')
-      .eq('id', user.id)
-      .single()
-
-    if (profileData) {
-      if (profileData.role === 'system_admin') {
-        router.push('/system-admin')
+    try {
+      // Get user by email from profiles table
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .single()
+      
+      if (profileError || !profile) {
+        setError('No invitation found for this email address.')
+        setLoading(false)
         return
-      } else if (profileData.role === 'admin') {
-        // Get club slug for club-aware route
-        if (profileData.club_id) {
-          const { data: club } = await supabase
-            .from('clubs')
-            .select('slug')
-            .eq('id', profileData.club_id)
-            .single()
-
-          if (club?.slug) {
-            router.push(`/clubs/${club.slug}/admin`)
-            return
-          }
-        }
-        // Fallback to legacy route if no club
-        router.push('/admin')
-        return
-      } else if (profileData.role === 'coach') {
-        router.push('/coach')
-        return
-      } else if (profileData.role === 'parent') {
-        if (profileData.club_id) {
-          const { data: club } = await supabase
-            .from('clubs')
-            .select('slug')
-            .eq('id', profileData.club_id)
-            .single()
-
-          if (club?.slug) {
-            router.push(`/clubs/${club.slug}/parent/dashboard`)
-            return
-          }
-        }
       }
-    }
 
-    // Fallback - redirect to login
-    router.push('/login?message=Password set successfully. Please log in.')
+      const user = { id: profile.id }
+
+      // Verify OTP via API
+      const response = await fetch('/api/otp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          code: otp,
+          type: 'admin_invitation',
+          contact: email
+        })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        setError(data.error || 'Invalid or expired code')
+        setAttemptsRemaining(data.attemptsRemaining)
+        setLoading(false)
+        return
+      }
+
+      // OTP verified! Move to password step
+      setUserId(user.id)
+      setSuccess('Code verified! Now set your password.')
+      setTimeout(() => {
+        setStep('password')
+        setSuccess(null)
+      }, 1500)
+    } catch (err) {
+      console.error('Verification error:', err)
+      setError('An error occurred. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  if (checkingSession) {
+  async function handleSetPassword(e: React.FormEvent) {
+    e.preventDefault()
+
+    if (!userId) {
+      setError('Session expired. Please request a new invitation.')
+      return
+    }
+
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters')
+      return
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match')
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      // Set password via API route
+      const response = await fetch('/api/auth/setup-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          password
+        })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        setError(data.error || 'Failed to set password. Please try again.')
+        setLoading(false)
+        return
+      }
+
+      setSuccess('Password set successfully! Redirecting to login...')
+      
+      setTimeout(() => {
+        router.push('/login?message=Account setup complete! Please log in.')
+      }, 2000)
+    } catch (err) {
+      console.error('Password setup error:', err)
+      setError('An error occurred. Please try again.')
+      setLoading(false)
+    }
+  }
+
+  async function handleResendCode() {
+    if (!email || !userId) {
+      setError('Please enter your email address')
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      // Get club info for the email
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('first_name, club_id, clubs(name)')
+        .eq('id', userId)
+        .single()
+
+      const response = await fetch('/api/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          type: 'admin_invitation',
+          contact: email,
+          metadata: {
+            firstName: profile?.first_name,
+            clubName: (profile?.clubs as any)?.name || 'Ski Admin',
+            setupLink: `${window.location.origin}/setup-password?email=${encodeURIComponent(email)}`
+          }
+        })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        setError(data.error || 'Failed to resend code')
+        setLoading(false)
+        return
+      }
+
+      setSuccess('New code sent! Check your email.')
+      setOtp('')
+      setTimeout(() => setSuccess(null), 3000)
+    } catch (err) {
+      console.error('Resend error:', err)
+      setError('Failed to resend code. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (step === 'password') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <p>Checking your session...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="space-y-1">
+            <div className="flex items-center justify-center mb-4">
+              <div className="p-3 bg-blue-100 rounded-full">
+                <Key className="h-8 w-8 text-blue-600" />
+              </div>
+            </div>
+            <CardTitle className="text-2xl text-center">Set Your Password</CardTitle>
+            <CardDescription className="text-center">
+              Create a secure password for your account
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSetPassword} className="space-y-4">
+              {error && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+
+              {success && (
+                <Alert>
+                  <CheckCircle className="h-4 w-4" />
+                  <AlertDescription>{success}</AlertDescription>
+                </Alert>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="email-display">Email</Label>
+                <Input
+                  id="email-display"
+                  type="email"
+                  value={email}
+                  disabled
+                  className="bg-gray-50"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">Password *</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter password (min 8 characters)"
+                  required
+                  minLength={8}
+                  disabled={loading}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">Confirm Password *</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter password"
+                  required
+                  minLength={8}
+                  disabled={loading}
+                />
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={loading || password.length < 8 || password !== confirmPassword}
+              >
+                {loading ? 'Setting Password...' : 'Set Password & Complete Setup'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
-  if (!needsPassword) {
-    return null
-  }
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Set Your Password</CardTitle>
-          <CardDescription>
-            Please set a password for your account to continue
+        <CardHeader className="space-y-1">
+          <div className="flex items-center justify-center mb-4">
+            <div className="p-3 bg-blue-100 rounded-full">
+              <Mail className="h-8 w-8 text-blue-600" />
+            </div>
+          </div>
+          <CardTitle className="text-2xl text-center">Verify Your Invitation</CardTitle>
+          <CardDescription className="text-center">
+            Enter the 6-digit code sent to your email
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          {message && (
-            <Alert className="mb-4">
-              <AlertDescription>{message}</AlertDescription>
+        <CardContent className="space-y-6">
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                {error}
+                {attemptsRemaining !== null && attemptsRemaining > 0 && (
+                  <span className="block mt-1 text-sm">
+                    {attemptsRemaining} attempt(s) remaining
+                  </span>
+                )}
+              </AlertDescription>
             </Alert>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          {success && (
+            <Alert>
+              <CheckCircle className="h-4 w-4" />
+              <AlertDescription>{success}</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={8}
-                placeholder="Enter your password"
-              />
+              <Label htmlFor="email">Email Address</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="admin@example.com"
+                  disabled={loading || !!emailFromUrl}
+                  className={emailFromUrl ? 'bg-gray-50' : ''}
+                />
+              </div>
               <p className="text-xs text-muted-foreground">
-                Must be at least 8 characters long
+                The email address you were invited to
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                minLength={8}
-                placeholder="Confirm your password"
+              <Label>Verification Code</Label>
+              <OTPInput
+                length={6}
+                value={otp}
+                onChange={setOtp}
+                onComplete={handleVerifyOTP}
+                disabled={loading}
+                error={!!error}
               />
+              <p className="text-xs text-muted-foreground text-center">
+                Enter the 6-digit code from your email
+              </p>
             </div>
 
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            <Button type="submit" disabled={loading} className="w-full">
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Setting password...
-                </>
-              ) : (
-                'Set Password'
-              )}
+            <Button
+              onClick={handleVerifyOTP}
+              className="w-full"
+              disabled={loading || otp.length !== 6 || !email}
+            >
+              {loading ? 'Verifying...' : 'Verify Code'}
             </Button>
-          </form>
+
+            <div className="text-center space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Didn't receive the code?
+              </p>
+              <Button
+                variant="link"
+                onClick={handleResendCode}
+                disabled={loading || !email}
+                className="text-sm"
+              >
+                Resend Code
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function SetupPasswordPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    }>
+      <SetupPasswordContent />
+    </Suspense>
   )
 }

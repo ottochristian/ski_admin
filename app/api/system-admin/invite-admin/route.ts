@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { otpService } from '@/lib/services/otp-service'
+import { notificationService } from '@/lib/services/notification-service'
 
 // This route requires service role key for admin operations
 function getSupabaseAdmin() {
@@ -10,7 +12,12 @@ function getSupabaseAdmin() {
     throw new Error('Missing Supabase configuration. Check NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables.')
   }
 
-  return createClient(supabaseUrl, serviceRoleKey)
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  })
 }
 
 export async function POST(request: NextRequest) {
@@ -73,95 +80,122 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Build redirect URL - must be a valid absolute URL
-    // Redirect to password setup page so invited users can set their password
-    // For localhost, use http://localhost:3000
-    // For production, use your actual domain
-    let redirectTo: string
-    if (process.env.NEXT_PUBLIC_APP_URL) {
-      redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/setup-password`
-    } else {
-      // Default to localhost for development
-      redirectTo = 'http://localhost:3000/setup-password'
-    }
+    // Check if user already exists
+    const { data: existingUser } = await supabaseAdmin.auth.admin.listUsers()
+    const userExists = existingUser?.users?.find(u => u.email === email)
 
-    console.log('Inviting user:', { email, redirectTo })
-
-    // Invite user by email
-    // Note: redirectTo must be added to allowed redirect URLs in Supabase dashboard
-    // Go to: Authentication → URL Configuration → Redirect URLs
-    // If you get "string did not match pattern" error, try:
-    // 1. Add the redirectTo URL to allowed redirect URLs in Supabase dashboard
-    // 2. Or remove redirectTo parameter (user will be redirected to default)
-    let inviteOptions: { redirectTo?: string } = {}
-    
-    // Only include redirectTo if we have a valid URL
-    if (redirectTo && redirectTo.startsWith('http')) {
-      inviteOptions.redirectTo = redirectTo
-    }
-
-    const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-      email,
-      inviteOptions
-    )
-
-    if (inviteError) {
-      console.error('Invite error details:', {
-        message: inviteError.message,
-        status: inviteError.status,
-        name: inviteError.name,
-        fullError: JSON.stringify(inviteError, null, 2),
-      })
+    if (userExists) {
       return NextResponse.json(
-        { 
-          error: inviteError.message || 'Failed to send invitation',
-          details: inviteError,
-          hint: inviteError.message?.includes('pattern') 
-            ? 'Check that redirectTo URL is valid and added to allowed redirect URLs in Supabase dashboard'
-            : undefined
-        },
+        { error: 'A user with this email already exists' },
         { status: 400 }
       )
     }
 
-    // Create profile for invited user and update user metadata
-    if (inviteData.user) {
-      // Update user metadata with admin info
-      const { error: metadataError } = await supabaseAdmin.auth.admin.updateUserById(
-        inviteData.user.id,
-        {
-          user_metadata: {
-            first_name: firstName || null,
-            last_name: lastName || null,
-            role: 'admin',
-            club_id: clubId,
-          },
-        }
+    console.log('Creating admin invitation for:', email)
+
+    // Step 1: Create user in auth.users (without password - they'll set it later)
+    const { data: newUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      email_confirm: true,  // Mark email as confirmed (they'll verify with OTP)
+      user_metadata: {
+        first_name: firstName || null,
+        last_name: lastName || null,
+        role: 'admin',
+        club_id: clubId,
+        invitation_pending: true  // Flag to track invitation status
+      }
+    })
+
+    if (createUserError || !newUser.user) {
+      console.error('Error creating user:', createUserError)
+      return NextResponse.json(
+        { error: createUserError?.message || 'Failed to create user' },
+        { status: 500 }
       )
-
-      if (metadataError) {
-        console.error('Error updating user metadata:', metadataError)
-      }
-
-      // Create profile
-      const { error: profileError } = await supabaseAdmin.rpc('create_user_profile', {
-        p_user_id: inviteData.user.id,
-        p_email: email,
-        p_first_name: firstName || null,
-        p_last_name: lastName || null,
-        p_role: 'admin',
-        p_club_id: clubId,
-      })
-
-      if (profileError) {
-        console.error('Error creating profile:', profileError)
-        // Don't fail the request - profile might be created by trigger
-      }
     }
 
+    const userId = newUser.user.id
+
+    // Step 2: Create profile
+    const { error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .insert({
+        id: userId,
+        email,
+        first_name: firstName || null,
+        last_name: lastName || null,
+        role: 'admin',
+        club_id: clubId,
+        email_verified_at: null  // Will be set when they verify OTP
+      })
+
+    if (profileError) {
+      console.error('Error creating profile:', profileError)
+      // Clean up auth user if profile creation fails
+      await supabaseAdmin.auth.admin.deleteUser(userId)
+      return NextResponse.json(
+        { error: 'Failed to create admin profile' },
+        { status: 500 }
+      )
+    }
+
+    // Step 3: Get club name for email
+    const { data: clubData } = await supabaseAdmin
+      .from('clubs')
+      .select('name')
+      .eq('id', clubId)
+      .single()
+
+    const clubName = clubData?.name || 'Ski Admin'
+
+    // Step 4: Generate OTP code
+    const otpResult = await otpService.generate(
+      userId,
+      'admin_invitation',
+      email
+    )
+
+    if (!otpResult.success || !otpResult.code) {
+      console.error('Error generating OTP:', otpResult.error)
+      // Clean up
+      await supabaseAdmin.auth.admin.deleteUser(userId)
+      await supabaseAdmin.from('profiles').delete().eq('id', userId)
+      return NextResponse.json(
+        { error: 'Failed to generate verification code' },
+        { status: 500 }
+      )
+    }
+
+    // Step 5: Build setup link
+    const setupLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/setup-password?email=${encodeURIComponent(email)}`
+
+    // Step 6: Send OTP via email
+    const notificationResult = await notificationService.sendAdminInvitationOTP(
+      email,
+      otpResult.code,
+      {
+        firstName,
+        clubName,
+        setupLink
+      }
+    )
+
+    if (!notificationResult.success) {
+      console.error('Error sending invitation email:', notificationResult.error)
+      // Don't fail the request - OTP is stored, they can try again
+      return NextResponse.json({
+        success: true,
+        message: `Admin created but email failed to send. OTP code: ${otpResult.code} (save this!)`,
+        warning: 'Email delivery failed',
+        code: process.env.NODE_ENV === 'development' ? otpResult.code : undefined
+      })
+    }
+
+    // Success!
     return NextResponse.json({
       success: true,
       message: `Invitation sent to ${email}`,
+      code: process.env.NODE_ENV === 'development' ? otpResult.code : undefined  // Only in dev
     })
   } catch (error) {
     console.error('Error inviting admin:', error)
