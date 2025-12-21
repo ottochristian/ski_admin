@@ -90,8 +90,8 @@ export default function NewAthletePage() {
         return
       }
 
-      // Invalidate athletes query
-      queryClient.invalidateQueries({ queryKey: ['athletes'] })
+      // Force refetch to ensure cache is updated before redirect
+      await queryClient.refetchQueries({ queryKey: ['athletes'] })
 
       // Redirect to athletes list (club-aware route)
       router.push(`${basePath}/athletes`)

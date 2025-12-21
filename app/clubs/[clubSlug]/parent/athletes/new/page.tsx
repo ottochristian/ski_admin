@@ -124,8 +124,8 @@ export default function NewAthletePage() {
         return
       }
 
-      // Invalidate athletes query (if we had one) and refresh
-      queryClient.invalidateQueries({ queryKey: ['athletes'] })
+      // Force refetch to ensure cache is updated before redirect
+      await queryClient.refetchQueries({ queryKey: ['athletes'] })
       router.push(`/clubs/${clubSlug}/parent/athletes`)
     } catch (err) {
       console.error('Error creating athlete:', err)

@@ -94,8 +94,8 @@ export default function EditProgramPage() {
       setError(result.error.message)
       setSaving(false)
     } else {
-      // Invalidate queries to refresh the programs list
-      queryClient.invalidateQueries({ queryKey: ['programs'] })
+      // Force refetch to ensure cache is updated before redirect
+      await queryClient.refetchQueries({ queryKey: ['programs'] })
       router.push('/admin/programs')
     }
   }
