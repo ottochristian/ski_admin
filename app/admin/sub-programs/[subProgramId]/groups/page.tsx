@@ -135,8 +135,11 @@ export default function GroupsPage() {
   }, [router, subProgramId])
 
   async function handleDelete(groupId: string) {
+    const group = groups.find(g => g.id === groupId)
+    if (!group) return
+
     const confirmDelete = window.confirm(
-      'Are you sure you want to delete this group? You cannot undo this from the UI.'
+      `Are you sure you want to delete group "${group.name}"?\n\nThis action will soft-delete the group. It will remain in the database for audit purposes but will be hidden from the UI.`
     )
 
     if (!confirmDelete) return
@@ -152,7 +155,17 @@ export default function GroupsPage() {
       console.error('Error soft deleting group:', error)
       setError(error.message)
     } else {
-      setGroups(prev => prev.filter(g => g.id !== groupId))
+      // Refetch groups to show updated list
+      const { data, error: refetchError } = await supabase
+        .from('groups')
+        .select('id, name, status')
+        .eq('sub_program_id', subProgramId)
+        .is('deleted_at', null)
+        .order('name', { ascending: true })
+
+      if (!refetchError && data) {
+        setGroups(data)
+      }
     }
 
     setDeletingId(null)
