@@ -68,10 +68,6 @@ export default function SignupPage() {
     setLoading(true)
     setError(null)
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'signup/page.tsx:66',message:'Signup handleSubmit start',data:{email:email,clubId:selectedClubId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
-
     try {
       // 1. Sign up the user (try without metadata first to isolate the issue)
       let authData, signUpError
@@ -194,10 +190,6 @@ export default function SignupPage() {
 
       // Check if email confirmation is required
       if (!authData.session) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'signup/page.tsx:193',message:'Email confirmation required - sending OTP',data:{hasSession:false,email:email,userId:authData.user?.id,sendingOtp:true},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
-        
         // Email confirmation is required - Generate and send OTP
         try {
           const otpResponse = await fetch('/api/otp/send', {
@@ -215,10 +207,6 @@ export default function SignupPage() {
           })
 
           const otpData = await otpResponse.json()
-          
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'signup/page.tsx:212',message:'OTP send response',data:{success:otpData.success,error:otpData.error,hasCode:!!otpData.code},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
-          // #endregion
 
           if (!otpResponse.ok || !otpData.success) {
             console.error('Failed to send verification email:', otpData.error)
