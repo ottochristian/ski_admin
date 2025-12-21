@@ -73,7 +73,8 @@ export default function SignupPage() {
       let authData, signUpError
       
       try {
-        const result = await supabase.auth.signUp({
+        // Add timeout wrapper for signUp call
+        const signUpPromise = supabase.auth.signUp({
           email,
           password,
           options: {
@@ -86,11 +87,21 @@ export default function SignupPage() {
             // },
           },
         })
+        
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Signup timeout')), 10000)
+        )
+        
+        const result = await Promise.race([signUpPromise, timeoutPromise]) as any
         authData = result.data
         signUpError = result.error
-      } catch (err) {
+      } catch (err: any) {
         console.error('Signup exception:', err)
-        setError(`Signup failed: ${err instanceof Error ? err.message : 'Unknown error'}`)
+        if (err.message === 'Signup timeout') {
+          setError('Signup is taking longer than expected. Please check your internet connection and try again.')
+        } else {
+          setError(`Signup failed: ${err instanceof Error ? err.message : 'Unknown error'}`)
+        }
         setLoading(false)
         return
       }
