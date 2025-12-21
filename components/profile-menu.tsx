@@ -87,13 +87,30 @@ export function ProfileMenu({ profile }: ProfileMenuProps) {
     e.stopPropagation()
     
     if (isSigningOut) return // Prevent double-click
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'profile-menu:HANDLE_SIGNOUT_START',message:'Handle sign out clicked',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'SIGNOUT'})}).catch(()=>{});
+    // #endregion
     
     setIsSigningOut(true)
     
     try {
       // Use AuthContext's signOut which clears React Query cache
       await signOut()
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'profile-menu:SIGNOUT_SUCCESS',message:'Sign out successful',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'SIGNOUT'})}).catch(()=>{});
+      // #endregion
+
+      // Failsafe: Reset state after 1 second if navigation hasn't happened
+      // This prevents being stuck on "Signing out..." if redirect is delayed
+      setTimeout(() => {
+        setIsSigningOut(false)
+      }, 1000)
     } catch (err) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'profile-menu:SIGNOUT_ERROR',message:'Sign out error in handler',data:{error:err instanceof Error ? err.message : String(err)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'SIGNOUT'})}).catch(()=>{});
+      // #endregion
       console.error('Sign out error:', err)
       setIsSigningOut(false)
     }

@@ -1,0 +1,14 @@
+{"location":"profile-menu:HANDLE_SIGNOUT_START","message":"Handle sign out clicked","data":{},"timestamp":1766304652029,"sessionId":"debug-session","hypothesisId":"SIGNOUT"}
+{"location":"auth-context:SIGNOUT_START","message":"Sign out started","data":{},"timestamp":1766304652031,"sessionId":"debug-session","hypothesisId":"SIGNOUT"}
+{"location":"auth-context:CACHE_CLEARED","message":"Cache cleared","data":{},"timestamp":1766304652031,"sessionId":"debug-session","hypothesisId":"SIGNOUT"}
+{"location":"auth-context:AUTH_SIGNOUT_DONE","message":"Supabase signOut complete","data":{},"timestamp":1766304652263,"sessionId":"debug-session","hypothesisId":"SIGNOUT"}
+{"location":"auth-context:STATE_CLEARED","message":"State cleared, about to redirect","data":{},"timestamp":1766304652264,"sessionId":"debug-session","hypothesisId":"SIGNOUT"}
+{"location":"auth-context:REDIRECT_CALLED","message":"Router.push called","data":{},"timestamp":1766304652271,"sessionId":"debug-session","hypothesisId":"SIGNOUT"}
+{"location":"profile-menu:SIGNOUT_SUCCESS","message":"Sign out successful","data":{},"timestamp":1766304652277,"sessionId":"debug-session","hypothesisId":"SIGNOUT"}
+{"location":"profile-menu:HANDLE_SIGNOUT_START","message":"Handle sign out clicked","data":{},"timestamp":1766304846071,"sessionId":"debug-session","hypothesisId":"SIGNOUT"}
+{"location":"auth-context:SIGNOUT_START","message":"Sign out started","data":{},"timestamp":1766304846073,"sessionId":"debug-session","hypothesisId":"SIGNOUT"}
+{"location":"auth-context:CACHE_CLEARED","message":"Cache cleared","data":{},"timestamp":1766304846074,"sessionId":"debug-session","hypothesisId":"SIGNOUT"}
+{"location":"auth-context:AUTH_SIGNOUT_DONE","message":"Supabase signOut complete","data":{},"timestamp":1766304846294,"sessionId":"debug-session","hypothesisId":"SIGNOUT"}
+{"location":"auth-context:STATE_CLEARED","message":"State cleared, about to redirect","data":{},"timestamp":1766304846295,"sessionId":"debug-session","hypothesisId":"SIGNOUT"}
+{"location":"auth-context:REDIRECT_CALLED","message":"Router.push called","data":{},"timestamp":1766304846298,"sessionId":"debug-session","hypothesisId":"SIGNOUT"}
+{"location":"profile-menu:SIGNOUT_SUCCESS","message":"Sign out successful","data":{},"timestamp":1766304846306,"sessionId":"debug-session","hypothesisId":"SIGNOUT"}
