@@ -192,15 +192,10 @@ function SetupPasswordContent() {
       const fetchedUserId = userData.userId
       console.log('[Resend Code] Found user ID:', fetchedUserId)
 
-      // Get club info for the email
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('first_name, club_id, clubs(name)')
-        .eq('id', fetchedUserId)
-        .single()
-
       console.log('[Resend Code] Sending OTP to:', email)
       
+      // Skip club info fetching (RLS blocks unauthenticated users)
+      // The OTP email template will use defaults
       const response = await fetch('/api/otp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -209,8 +204,8 @@ function SetupPasswordContent() {
           type: 'admin_invitation',
           contact: email,
           metadata: {
-            firstName: profile?.first_name,
-            clubName: (profile?.clubs as any)?.name || 'Ski Admin',
+            firstName: null, // Use defaults in email template
+            clubName: 'Ski Admin',
             setupLink: `${window.location.origin}/setup-password?email=${encodeURIComponent(email)}`
           }
         })
