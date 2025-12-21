@@ -56,7 +56,14 @@ export default function LoginPage() {
         // Try to get session from localStorage first (faster, doesn't require network)
         // This helps avoid timeout if there's no existing session
         try {
-          const { data: { session: localSession } } = await supabase.auth.getSession()
+          // Add timeout wrapper for getSession too
+          const sessionPromise = supabase.auth.getSession()
+          const sessionTimeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('getSession timeout')), 5000)
+          )
+          
+          const sessionData = await Promise.race([sessionPromise, sessionTimeoutPromise]) as any
+          const { data: { session: localSession } } = sessionData
           
           // If no local session, skip getUser() call and show login form
           if (!localSession) {
@@ -64,7 +71,12 @@ export default function LoginPage() {
             setCheckingSession(false)
             return
           }
-        } catch (sessionError) {
+        } catch (sessionError: any) {
+          if (sessionError.message === 'getSession timeout') {
+            console.log('getSession timed out - showing login form')
+            setCheckingSession(false)
+            return
+          }
           console.log('Error checking local session, will try getUser()', sessionError)
           // Continue to getUser() below
         }
@@ -206,10 +218,11 @@ export default function LoginPage() {
 
     // Add timeout to prevent infinite loading
     const timeout = setTimeout(() => {
-      console.error('Session check timed out')
+      console.error('Session check timed out - allowing login anyway')
       setCheckingSession(false)
-      setError('Connection timeout. Please check your internet connection and try again.')
-    }, 10000) // 10 second timeout
+      // Don't set error - just let them log in normally
+      // This is common when redirected from password setup
+    }, 8000) // 8 second timeout
 
     checkUserAndRedirect().finally(() => {
       clearTimeout(timeout)
