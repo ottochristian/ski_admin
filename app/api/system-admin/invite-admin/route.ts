@@ -80,11 +80,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if user already exists in profiles (more reliable than auth.users)
+    // Check if user already exists in profiles (case-insensitive)
     const { data: existingProfile } = await supabaseAdmin
       .from('profiles')
       .select('id, email')
-      .eq('email', email)
+      .ilike('email', email)
       .single()
 
     if (existingProfile) {
@@ -97,8 +97,9 @@ export async function POST(request: NextRequest) {
     console.log('Creating admin invitation for:', email)
 
     // Step 1: Create user in auth.users (without password - they'll set it later)
+    // Note: Supabase auth automatically lowercases emails
     const { data: newUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
-      email,
+      email: email.toLowerCase(),  // Explicitly lowercase to match auth.users behavior
       email_confirm: true,  // Mark email as confirmed (they'll verify with OTP)
       user_metadata: {
         first_name: firstName || null,
@@ -119,12 +120,12 @@ export async function POST(request: NextRequest) {
 
     const userId = newUser.user.id
 
-    // Step 2: Create profile (or update if exists - shouldn't happen due to check above)
+    // Step 2: Create profile (lowercase email to match auth.users)
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .upsert({
         id: userId,
-        email,
+        email: email.toLowerCase(),  // Match auth.users lowercase format
         first_name: firstName || null,
         last_name: lastName || null,
         role: 'admin',

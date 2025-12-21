@@ -28,11 +28,11 @@ export async function POST(request: NextRequest) {
 
     const supabaseAdmin = getSupabaseAdmin()
 
-    // Get user by email from profiles
+    // Get user by email from profiles (case-insensitive)
     const { data: profile, error } = await supabaseAdmin
       .from('profiles')
       .select('id, email')
-      .eq('email', email)
+      .ilike('email', email)
       .single()
 
     if (error || !profile) {
