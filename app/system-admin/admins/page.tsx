@@ -98,10 +98,6 @@ export default function AdminsPage() {
             // Get the current session token
             const { data: { session } } = await supabase.auth.getSession()
             
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admins:BEFORE_API',message:'Before API call',data:{adminId:admin.id,hasSession:!!session,hasToken:!!session?.access_token},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'LASTsignin'})}).catch(()=>{});
-            // #endregion
-            
             if (session?.access_token) {
               // Call API route with auth token
               const response = await fetch(`/api/admin/users/${admin.id}/last-sign-in`, {
@@ -110,30 +106,13 @@ export default function AdminsPage() {
                 }
               })
               
-              // #region agent log
-              fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admins:API_RESPONSE',message:'API response',data:{adminId:admin.id,status:response.status,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'LASTsignin'})}).catch(()=>{});
-              // #endregion
-              
               if (response.ok) {
                 const data = await response.json()
                 lastSignIn = data.last_sign_in_at || null
-
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admins:API_DATA',message:'API data received',data:{adminId:admin.id,lastSignIn:data.last_sign_in_at},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'LASTsignin'})}).catch(()=>{});
-                // #endregion
-              } else {
-                const errorText = await response.text()
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admins:API_ERROR',message:'API error',data:{adminId:admin.id,status:response.status,error:errorText},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'LASTsignin'})}).catch(()=>{});
-                // #endregion
               }
             }
           } catch (err) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admins:CATCH_ERROR',message:'Catch block error',data:{adminId:admin.id,error:err instanceof Error ? err.message : String(err)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'LASTsignin'})}).catch(()=>{});
-            // #endregion
-            // Skip if API call fails
-            console.error('Error fetching last sign-in for admin:', admin.id, err)
+            // Skip if API call fails silently
           }
 
           return {
