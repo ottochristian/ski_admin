@@ -17,25 +17,54 @@ export default function HomePage() {
     async function checkAuthAndRedirect() {
       try {
         // First check if we have a session (localStorage only, no network call)
-        const { data: { session } } = await supabase.auth.getSession()
-        
-        if (!session) {
-          // No session - show landing page
-          setCheckingAuth(false)
-          return
+        // Add timeout wrapper for getSession
+        try {
+          const sessionPromise = supabase.auth.getSession()
+          const sessionTimeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('getSession timeout')), 3000)
+          )
+          
+          const sessionData = await Promise.race([sessionPromise, sessionTimeoutPromise]) as any
+          const { data: { session } } = sessionData
+          
+          if (!session) {
+            // No session - show landing page
+            setCheckingAuth(false)
+            return
+          }
+        } catch (sessionError: any) {
+          if (sessionError.message === 'getSession timeout') {
+            console.log('getSession timed out - showing landing page')
+            setCheckingAuth(false)
+            return
+          }
+          // Other errors - continue to try getUser
+          console.log('Session check error:', sessionError)
         }
 
         // Check if user is logged in (with timeout)
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Auth check timeout')), 5000)
+          setTimeout(() => reject(new Error('Auth check timeout')), 3000)
         )
         
         const authPromise = supabase.auth.getUser()
         
+        let userData
+        try {
+          userData = await Promise.race([authPromise, timeoutPromise]) as any
+        } catch (raceError: any) {
+          if (raceError.message === 'Auth check timeout') {
+            console.log('getUser timed out - showing landing page')
+            setCheckingAuth(false)
+            return
+          }
+          throw raceError
+        }
+
         const {
           data: { user },
           error: userError,
-        } = await Promise.race([authPromise, timeoutPromise]) as any
+        } = userData
 
         if (userError || !user) {
           // No user logged in - show landing page
