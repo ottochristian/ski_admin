@@ -101,11 +101,8 @@ export default function NewSubProgramPage() {
         setError(result.error.message)
         setSaving(false)
       } else {
-        // Invalidate queries to refresh the sub-programs list
-        queryClient.invalidateQueries({
-          queryKey: ['sub-programs', programId],
-        })
-        queryClient.invalidateQueries({ queryKey: ['programs'] })
+        // Force immediate refetch to ensure cache is updated before redirect
+        await queryClient.refetchQueries({ queryKey: ['programs'] })
         router.push(`${basePath}/programs`)
       }
     } catch (err) {
