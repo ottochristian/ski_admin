@@ -73,10 +73,6 @@ export class ProgramsService extends BaseService {
 
     const result = await query.order('name', { ascending: true })
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'programs-service.ts:BEFORE_FILTER',message:'Before sub-program filter',data:{includeSubPrograms,programCount:result.data?.length,sampleProgram:result.data?.[0]?{name:result.data[0].name,subProgramsCount:result.data[0].sub_programs?.length,subPrograms:result.data[0].sub_programs?.map((sp:any)=>({name:sp.name,deleted_at:sp.deleted_at}))}:null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'FILTER'})}).catch(()=>{});
-    // #endregion
-
     // Filter out soft-deleted sub-programs in application layer
     // (Can't use database filter with LEFT join without excluding programs without sub-programs)
     if (includeSubPrograms && result.data) {
@@ -85,10 +81,6 @@ export class ProgramsService extends BaseService {
         sub_programs: program.sub_programs?.filter((sp: any) => sp.deleted_at === null) || []
       }))
     }
-
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'programs-service.ts:AFTER_FILTER',message:'After sub-program filter',data:{programCount:result.data?.length,sampleProgram:result.data?.[0]?{name:result.data[0].name,subProgramsCount:result.data[0].sub_programs?.length}:null},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'FILTER'})}).catch(()=>{});
-    // #endregion
 
     return handleSupabaseError(result)
   }
