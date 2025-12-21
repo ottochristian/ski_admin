@@ -65,28 +65,10 @@ export class ProgramsService extends BaseService {
       query = query.eq('season_id', seasonId)
     }
 
-    // #region agent log
-    if (typeof fetch !== 'undefined') {
-      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'programs-service.ts:beforeDeletedAtFilter',message:'About to add deleted_at filter',data:{seasonId,includeSubPrograms},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'F'})}).catch(()=>{});
-    }
-    // #endregion
-
     // Filter out soft-deleted programs
     query = query.is('deleted_at', null)
 
-    // #region agent log
-    if (typeof fetch !== 'undefined') {
-      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'programs-service.ts:beforeQuery',message:'About to execute query',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'F'})}).catch(()=>{});
-    }
-    // #endregion
-
     const result = await query.order('name', { ascending: true })
-
-    // #region agent log
-    if (typeof fetch !== 'undefined') {
-      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'programs-service.ts:afterQuery',message:'Query completed',data:{error:result.error?.message||null,count:result.data?.length||0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'F'})}).catch(()=>{});
-    }
-    // #endregion
 
     return handleSupabaseError(result)
   }

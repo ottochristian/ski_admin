@@ -22,14 +22,6 @@ export default function AdminLayout({
   const { profile, loading: authLoading } = useRequireAdmin()
   const { club, loading: clubLoading } = useClub()
 
-  // #region agent log
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin/layout.tsx:render',message:'Admin layout rendering',data:{authLoading,clubLoading,profileExists:!!profile,clubExists:!!club,clubSlug},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'G'})}).catch(()=>{});
-    }
-  }, [authLoading, clubLoading, profile, club, clubSlug])
-  // #endregion
-
   // Verify club slug matches user's club (if club loaded)
   useEffect(() => {
     if (!authLoading && !clubLoading && club && club.slug !== clubSlug) {
