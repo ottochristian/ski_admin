@@ -34,6 +34,8 @@ function SetupPasswordContent() {
     if (emailFromUrl) {
       // Clean email: replace spaces with + (URL encoding issue)
       const cleaned = emailFromUrl.replace(/\s+/g, '+')
+      console.log('[Setup Password] Email from URL:', emailFromUrl)
+      console.log('[Setup Password] Cleaned email:', cleaned)
       setEmail(cleaned)
     }
   }, [emailFromUrl])
@@ -159,6 +161,8 @@ function SetupPasswordContent() {
   }
 
   async function handleResendCode() {
+    console.log('[Resend Code] Email state:', email)
+    
     if (!email) {
       setError('Please enter your email address')
       return
@@ -168,6 +172,8 @@ function SetupPasswordContent() {
     setError(null)
 
     try {
+      console.log('[Resend Code] Fetching user by email:', email)
+      
       // Get user ID by email (same as verification flow)
       const userResponse = await fetch('/api/auth/get-user-by-email', {
         method: 'POST',
@@ -184,6 +190,7 @@ function SetupPasswordContent() {
       }
 
       const fetchedUserId = userData.userId
+      console.log('[Resend Code] Found user ID:', fetchedUserId)
 
       // Get club info for the email
       const { data: profile } = await supabase
@@ -192,6 +199,8 @@ function SetupPasswordContent() {
         .eq('id', fetchedUserId)
         .single()
 
+      console.log('[Resend Code] Sending OTP to:', email)
+      
       const response = await fetch('/api/otp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -208,6 +217,7 @@ function SetupPasswordContent() {
       })
 
       const data = await response.json()
+      console.log('[Resend Code] Response:', data)
 
       if (!response.ok || !data.success) {
         setError(data.error || 'Failed to resend code')
@@ -215,6 +225,8 @@ function SetupPasswordContent() {
         return
       }
 
+      console.log('[Resend Code] SUCCESS! New OTP:', data.code || '(not in dev mode)')
+      
       setSuccess('New code sent! Check your email.')
       setOtp('')
       setTimeout(() => setSuccess(null), 3000)
