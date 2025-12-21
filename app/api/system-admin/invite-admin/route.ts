@@ -80,13 +80,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if user already exists
-    const { data: existingUser } = await supabaseAdmin.auth.admin.listUsers()
-    const userExists = existingUser?.users?.find(u => u.email === email)
+    // Check if user already exists in profiles (more reliable than auth.users)
+    const { data: existingProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('id, email')
+      .eq('email', email)
+      .single()
 
-    if (userExists) {
+    if (existingProfile) {
       return NextResponse.json(
-        { error: 'A user with this email already exists' },
+        { error: 'A user with this email already exists. Please use a different email or delete the existing user first.' },
         { status: 400 }
       )
     }
@@ -116,10 +119,10 @@ export async function POST(request: NextRequest) {
 
     const userId = newUser.user.id
 
-    // Step 2: Create profile
+    // Step 2: Create profile (or update if exists - shouldn't happen due to check above)
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
-      .insert({
+      .upsert({
         id: userId,
         email,
         first_name: firstName || null,
@@ -127,6 +130,8 @@ export async function POST(request: NextRequest) {
         role: 'admin',
         club_id: clubId,
         email_verified_at: null  // Will be set when they verify OTP
+      }, {
+        onConflict: 'id'
       })
 
     if (profileError) {
@@ -134,7 +139,10 @@ export async function POST(request: NextRequest) {
       // Clean up auth user if profile creation fails
       await supabaseAdmin.auth.admin.deleteUser(userId)
       return NextResponse.json(
-        { error: 'Failed to create admin profile' },
+        { 
+          error: 'Failed to create admin profile',
+          details: profileError.message
+        },
         { status: 500 }
       )
     }
@@ -200,10 +208,12 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error inviting admin:', error)
     const errorMessage = error instanceof Error ? error.message : 'Internal server error'
+    
     return NextResponse.json(
       { 
+        success: false,
         error: errorMessage,
-        details: error instanceof Error ? error.stack : String(error)
+        details: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.stack : String(error)) : undefined
       },
       { status: 500 }
     )
