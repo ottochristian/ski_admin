@@ -159,7 +159,7 @@ function SetupPasswordContent() {
   }
 
   async function handleResendCode() {
-    if (!email || !userId) {
+    if (!email) {
       setError('Please enter your email address')
       return
     }
@@ -168,11 +168,28 @@ function SetupPasswordContent() {
     setError(null)
 
     try {
+      // Get user ID by email (same as verification flow)
+      const userResponse = await fetch('/api/auth/get-user-by-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      })
+
+      const userData = await userResponse.json()
+
+      if (!userResponse.ok || !userData.success) {
+        setError('No invitation found for this email address.')
+        setLoading(false)
+        return
+      }
+
+      const fetchedUserId = userData.userId
+
       // Get club info for the email
       const { data: profile } = await supabase
         .from('profiles')
         .select('first_name, club_id, clubs(name)')
-        .eq('id', userId)
+        .eq('id', fetchedUserId)
         .single()
 
       const response = await fetch('/api/otp/send', {
