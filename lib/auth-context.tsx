@@ -184,39 +184,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Sign out
   const signOut = async () => {
     try {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth-context:SIGNOUT_START',message:'Sign out started',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'SIGNOUT'})}).catch(()=>{});
-      // #endregion
-
       // Clear ALL React Query cache on sign out to prevent stale data across sessions
       queryClient.clear()
       
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth-context:CACHE_CLEARED',message:'Cache cleared',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'SIGNOUT'})}).catch(()=>{});
-      // #endregion
-      
       await supabase.auth.signOut()
-
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth-context:AUTH_SIGNOUT_DONE',message:'Supabase signOut complete',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'SIGNOUT'})}).catch(()=>{});
-      // #endregion
-
       setUser(null)
       setProfile(null)
       
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth-context:STATE_CLEARED',message:'State cleared, about to redirect',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'SIGNOUT'})}).catch(()=>{});
-      // #endregion
-
       router.push('/login')
-
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth-context:REDIRECT_CALLED',message:'Router.push called',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'SIGNOUT'})}).catch(()=>{});
-      // #endregion
     } catch (err) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth-context:SIGNOUT_ERROR',message:'Sign out error',data:{error:err instanceof Error ? err.message : String(err)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'SIGNOUT'})}).catch(()=>{});
-      // #endregion
       console.error('Sign out error:', err)
       throw err
     }
