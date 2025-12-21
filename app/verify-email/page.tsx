@@ -98,10 +98,100 @@ function VerifyEmailContent() {
         console.error('Error updating profile:', updateError)
       }
 
-      setSuccess('Email verified! Redirecting to login...')
-      setTimeout(() => {
-        router.push('/login?message=Email verified! You can now log in.')
-      }, 2000)
+      // Create session for auto-login
+      const sessionResponse = await fetch('/api/auth/create-session-after-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id })
+      })
+
+      const sessionData = await sessionResponse.json()
+
+      if (!sessionResponse.ok || !sessionData.success) {
+        console.error('Failed to create session:', sessionData.error)
+        setSuccess('Email verified! Redirecting to login...')
+        setTimeout(() => {
+          router.push('/login?message=Email verified! You can now log in.')
+        }, 2000)
+        return
+      }
+
+      // Use the token to verify and create a session
+      const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
+        token_hash: sessionData.token,
+        type: 'email'
+      })
+
+      if (verifyError) {
+        console.error('Error verifying session token:', verifyError)
+        setSuccess('Email verified! Redirecting to login...')
+        setTimeout(() => {
+          router.push('/login?message=Email verified! You can now log in.')
+        }, 2000)
+        return
+      }
+
+      // Get user's profile to determine role and redirect
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role, club_id')
+        .eq('id', user.id)
+        .single()
+
+      if (profileError || !profile) {
+        console.error('Error fetching profile:', profileError)
+        setSuccess('Email verified! Redirecting...')
+        setTimeout(() => {
+          router.push('/')
+        }, 1500)
+        return
+      }
+
+      setSuccess('Email verified! Redirecting to your portal...')
+      
+      // Small delay for UX, then redirect based on role
+      setTimeout(async () => {
+        if (profile.role === 'system_admin') {
+          router.push('/system-admin')
+        } else if (profile.role === 'admin') {
+          if (profile.club_id) {
+            const { data: club } = await supabase
+              .from('clubs')
+              .select('slug')
+              .eq('id', profile.club_id)
+              .single()
+            
+            if (club?.slug) {
+              router.push(`/clubs/${club.slug}/admin`)
+            } else {
+              router.push('/admin')
+            }
+          } else {
+            router.push('/admin')
+          }
+        } else if (profile.role === 'coach') {
+          router.push('/coach')
+        } else if (profile.role === 'parent') {
+          if (profile.club_id) {
+            const { data: club } = await supabase
+              .from('clubs')
+              .select('slug')
+              .eq('id', profile.club_id)
+              .single()
+            
+            if (club?.slug) {
+              router.push(`/clubs/${club.slug}/parent/dashboard`)
+            } else {
+              router.push('/')
+            }
+          } else {
+            router.push('/')
+          }
+        } else {
+          // Unknown role, redirect to home
+          router.push('/')
+        }
+      }, 1500)
     } catch (err) {
       console.error('Verification error:', err)
       setError('An error occurred. Please try again.')
