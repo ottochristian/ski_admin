@@ -117,52 +117,6 @@ export default function NewSubProgramPage() {
 
   const isLoading = authLoading || programsLoading
 
-  // Show loading state
-  if (isLoading) {
-    return <InlineLoading message="Loading program…" />
-  }
-
-  // Show error state
-  if (error && !saving) {
-    return (
-      <ErrorState
-        error={error}
-        onRetry={() => {
-          setError(null)
-          router.refresh()
-        }}
-      />
-    )
-  }
-
-  // Show message if program not found
-  if (!program) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle>Program Not Found</CardTitle>
-            <CardDescription>
-              The program you're looking for doesn't exist or you don't have
-              access to it.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="outline" onClick={() => router.push(`${basePath}/programs`)}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Programs
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
-  // Auth check ensures profile exists
-  if (!profile) {
-    return null
-  }
-
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -174,22 +128,40 @@ export default function NewSubProgramPage() {
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Programs
         </Button>
-        <h1 className="text-3xl font-bold">Add Sub-Program to {program.name}</h1>
-        <p className="text-muted-foreground">Create a new sub-program</p>
+        {isLoading ? (
+          <div>
+            <h1 className="text-3xl font-bold">Add Sub-Program</h1>
+            <InlineLoading message="Loading program…" />
+          </div>
+        ) : !program ? (
+          <div className="space-y-2">
+            <h1 className="text-3xl font-bold">Program Not Found</h1>
+            <ErrorState
+              error="The program you're looking for doesn't exist or you don't have access to it."
+              onRetry={() => router.push(`${basePath}/programs`)}
+            />
+          </div>
+        ) : (
+          <div>
+            <h1 className="text-3xl font-bold">Add Sub-Program to {program.name}</h1>
+            <p className="text-muted-foreground">Create a new sub-program</p>
+          </div>
+        )}
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Sub-Program Details</CardTitle>
-          <CardDescription>Enter the sub-program information</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSave} className="space-y-4">
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-md p-4">
-                <p className="text-sm text-red-800">{error}</p>
-              </div>
-            )}
+      {!isLoading && program && profile && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Sub-Program Details</CardTitle>
+            <CardDescription>Enter the sub-program information</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSave} className="space-y-4">
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                  <p className="text-sm text-red-800">{error}</p>
+                </div>
+              )}
 
             <div>
               <label
@@ -288,9 +260,10 @@ export default function NewSubProgramPage() {
                 Cancel
               </Button>
             </div>
-          </form>
-        </CardContent>
-      </Card>
+            </form>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
