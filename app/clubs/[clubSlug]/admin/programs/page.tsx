@@ -104,8 +104,8 @@ export default function ProgramsPage() {
       console.error('Error soft deleting sub-program:', error)
       alert(`Error deleting sub-program: ${error.message}`)
     } else {
-      // Refetch programs list - React Query will update automatically
-      refetch()
+      // Refetch programs list immediately to show updated data
+      await refetch()
     }
 
     setDeletingSubProgramId(null)
@@ -172,7 +172,7 @@ export default function ProgramsPage() {
         alert(`✅ "${program.name}" and all its sub-programs and groups are now ACTIVE!`)
       }
 
-      // Refetch to update UI with new status
+      // Refetch programs list immediately to show updated status
       await refetch()
     } catch (err) {
       console.error('Error activating program contents:', err)

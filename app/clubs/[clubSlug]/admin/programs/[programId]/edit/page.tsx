@@ -94,10 +94,8 @@ export default function EditProgramPage() {
       setError(result.error.message)
       setSaving(false)
     } else {
-      // Invalidate queries to refresh the programs list
-      await queryClient.invalidateQueries({ queryKey: ['programs'] })
-      // Force Next.js to refetch the page data
-      router.refresh()
+      // Force immediate refetch of ALL programs queries and wait for completion
+      await queryClient.refetchQueries({ queryKey: ['programs'] })
       router.push(`${basePath}/programs`)
     }
   }

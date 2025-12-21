@@ -61,9 +61,10 @@ export default function NewProgramPage() {
         return
       }
 
-      // Invalidate programs query
-      queryClient.invalidateQueries({ queryKey: ['programs'] })
-
+      // Force immediate refetch of ALL programs queries and wait for completion
+      // This ensures the cache is updated before we redirect
+      await queryClient.refetchQueries({ queryKey: ['programs'] })
+      
       // Go back to programs list (club-aware route)
       router.push(`${basePath}/programs`)
     } catch (err) {

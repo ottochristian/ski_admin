@@ -62,9 +62,10 @@ export function useCreateProgram() {
       return result.data!
     },
     onSuccess: (_, variables) => {
-      // Invalidate programs list for this season (RLS handles club filtering)
+      // Invalidate ALL programs queries (all seasons, with/without sub-programs)
+      // This ensures cache consistency across all program-related queries
       queryClient.invalidateQueries({
-        queryKey: ['programs', variables.season_id],
+        queryKey: ['programs'],
       })
     },
   })

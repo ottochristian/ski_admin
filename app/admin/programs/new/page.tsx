@@ -58,8 +58,8 @@ export default function NewProgramPage() {
         return
       }
 
-      // Invalidate programs query
-      queryClient.invalidateQueries({ queryKey: ['programs'] })
+      // Force immediate refetch of ALL programs queries and wait for completion
+      await queryClient.refetchQueries({ queryKey: ['programs'] })
 
       // Go back to programs list
       router.push('/admin/programs')
