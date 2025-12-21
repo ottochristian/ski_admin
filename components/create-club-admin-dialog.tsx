@@ -186,10 +186,24 @@ export function CreateClubAdminDialog({ clubs, onSuccess }: CreateClubAdminDialo
         return
       }
 
+      // Show success message with OTP code in dev mode
+      let description = data.message || `Invitation sent to ${inviteEmail}`
+      if (data.code) {
+        description += `\n\nDev Mode - OTP Code: ${data.code}\nSetup link: ${window.location.origin}/setup-password?email=${encodeURIComponent(inviteEmail)}`
+      }
+
       showToast({
         title: 'Success',
-        description: data.message || `Invitation sent to ${inviteEmail}`,
+        description,
       })
+
+      // Log setup link in console for easy access
+      if (data.code) {
+        console.log('🔐 Admin Invitation Details:')
+        console.log('Email:', inviteEmail)
+        console.log('OTP Code:', data.code)
+        console.log('Setup Link:', `${window.location.origin}/setup-password?email=${encodeURIComponent(inviteEmail)}`)
+      }
 
       // Reset form
       setInviteEmail('')
