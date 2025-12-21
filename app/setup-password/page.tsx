@@ -15,9 +15,12 @@ function SetupPasswordContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const emailFromUrl = searchParams.get('email')
+  
+  // Handle URL decoding issues: spaces should be + signs in emails
+  const cleanEmail = emailFromUrl ? emailFromUrl.replace(/\s+/g, '+') : ''
 
   const [step, setStep] = useState<'verify' | 'password'>('verify')
-  const [email, setEmail] = useState(emailFromUrl || '')
+  const [email, setEmail] = useState(cleanEmail || '')
   const [otp, setOtp] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -29,7 +32,9 @@ function SetupPasswordContent() {
 
   useEffect(() => {
     if (emailFromUrl) {
-      setEmail(emailFromUrl)
+      // Clean email: replace spaces with + (URL encoding issue)
+      const cleaned = emailFromUrl.replace(/\s+/g, '+')
+      setEmail(cleaned)
     }
   }, [emailFromUrl])
 
