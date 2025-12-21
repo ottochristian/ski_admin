@@ -65,8 +65,9 @@ export class ProgramsService extends BaseService {
       query = query.eq('season_id', seasonId)
     }
 
-    // Filter out soft-deleted programs
-    query = query.is('deleted_at', null)
+    // TODO: Add soft delete support
+    // Once deleted_at column is added to programs table, uncomment:
+    // query = query.is('deleted_at', null)
 
     const result = await query.order('name', { ascending: true })
 
