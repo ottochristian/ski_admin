@@ -13,7 +13,15 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus, Pencil, Trash2, Zap } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Plus, Pencil, Trash2, Zap, AlertTriangle } from 'lucide-react'
 import { useRequireAdmin } from '@/lib/auth-context'
 import { useSelectedSeason } from '@/lib/contexts/season-context'
 import { usePrograms } from '@/lib/hooks/use-programs'
@@ -49,6 +57,18 @@ export default function ProgramsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deletingSubProgramId, setDeletingSubProgramId] = useState<string | null>(null)
   const [activatingId, setActivatingId] = useState<string | null>(null)
+  
+  // Delete confirmation dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [programToDelete, setProgramToDelete] = useState<{ id: string; name: string } | null>(null)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deleteCounts, setDeleteCounts] = useState<{
+    athletes: number
+    coaches: number
+    subPrograms: number
+    groups: number
+  } | null>(null)
+  const [loadingCounts, setLoadingCounts] = useState(false)
 
   // PHASE 2: RLS handles club filtering automatically - no clubQuery needed!
   // React Query handles loading, error, and caching
@@ -63,28 +83,84 @@ export default function ProgramsPage() {
   // (Parent portal filters by status, but admins need to see everything to manage)
   const programs = allPrograms as ProgramWithSubPrograms[]
 
-  async function handleDelete(programId: string) {
-    const confirmDelete = window.confirm(
-      'Are you sure you want to delete this program? This will also soft-delete all its sub-programs and groups.'
-    )
+  async function handleDeleteClick(programId: string) {
+    const program = programs.find(p => p.id === programId)
+    if (!program) return
 
-    if (!confirmDelete) return
+    setProgramToDelete({ id: programId, name: program.name })
+    setDeleteConfirmText('')
+    setLoadingCounts(true)
+    setDeleteDialogOpen(true)
 
-    setDeletingId(programId)
+    // Fetch counts of athletes, coaches, sub-programs, and groups
+    try {
+      const [athletesResult, coachesResult, subProgramsResult, groupsResult] = await Promise.all([
+        // Count athletes with registrations for this program's sub-programs
+        supabase
+          .from('registrations')
+          .select('athlete_id', { count: 'exact', head: true })
+          .in('sub_program_id', program.sub_programs?.map(sp => sp.id) || [])
+          .eq('season_id', selectedSeason?.id || '')
+          .is('deleted_at', null),
+        
+        // Count coaches assigned to this program's sub-programs
+        supabase
+          .from('coach_assignments')
+          .select('coach_id', { count: 'exact', head: true })
+          .in('sub_program_id', program.sub_programs?.map(sp => sp.id) || [])
+          .eq('season_id', selectedSeason?.id || ''),
+        
+        // Count sub-programs
+        supabase
+          .from('sub_programs')
+          .select('id', { count: 'exact', head: true })
+          .eq('program_id', programId)
+          .is('deleted_at', null),
+        
+        // Count groups
+        supabase
+          .from('groups')
+          .select('id', { count: 'exact', head: true })
+          .in('sub_program_id', program.sub_programs?.map(sp => sp.id) || [])
+          .is('deleted_at', null),
+      ])
+
+      setDeleteCounts({
+        athletes: athletesResult.count || 0,
+        coaches: coachesResult.count || 0,
+        subPrograms: subProgramsResult.count || 0,
+        groups: groupsResult.count || 0,
+      })
+    } catch (error) {
+      console.error('Error fetching delete counts:', error)
+      setDeleteCounts({ athletes: 0, coaches: 0, subPrograms: 0, groups: 0 })
+    } finally {
+      setLoadingCounts(false)
+    }
+  }
+
+  async function handleDeleteConfirm() {
+    if (!programToDelete || deleteConfirmText !== 'DELETE') return
+
+    setDeletingId(programToDelete.id)
+    setDeleteDialogOpen(false)
 
     const { error } = await supabase.rpc('soft_delete_program', {
-      program_id: programId,
+      program_id: programToDelete.id,
     })
 
     if (error) {
       console.error('Error soft deleting program:', error)
       alert(`Error deleting program: ${error.message}`)
     } else {
-      // Refetch programs list - React Query will update automatically
-      refetch()
+      // Refetch programs list immediately to show updated data
+      await refetch()
     }
 
     setDeletingId(null)
+    setProgramToDelete(null)
+    setDeleteConfirmText('')
+    setDeleteCounts(null)
   }
 
   async function handleDeleteSubProgram(subProgramId: string, programId: string) {
@@ -282,7 +358,7 @@ export default function ProgramsPage() {
                         variant="outline"
                         size="icon"
                         className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                        onClick={() => handleDelete(program.id)}
+                        onClick={() => handleDeleteClick(program.id)}
                         disabled={deletingId === program.id}
                       >
                         <Trash2 className="h-4 w-4" />
