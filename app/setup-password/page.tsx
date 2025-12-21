@@ -39,6 +39,11 @@ function SetupPasswordContent() {
       return
     }
 
+    // Prevent duplicate calls
+    if (loading) {
+      return
+    }
+
     setLoading(true)
     setError(null)
 
@@ -344,12 +349,11 @@ function SetupPasswordContent() {
                 length={6}
                 value={otp}
                 onChange={setOtp}
-                onComplete={handleVerifyOTP}
                 disabled={loading}
                 error={!!error}
               />
               <p className="text-xs text-muted-foreground text-center">
-                Enter the 6-digit code from your email
+                Enter the 6-digit code and click "Verify Code"
               </p>
             </div>
 
