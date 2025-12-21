@@ -111,6 +111,9 @@ export function CreateClubAdminDialog({ clubs, onSuccess }: CreateClubAdminDialo
 
     setLoading(true)
     try {
+      // Lowercase email for consistency (emails are case-insensitive)
+      const normalizedEmail = inviteEmail.toLowerCase().trim()
+
       // Get auth token for API route
       const {
         data: { session },
@@ -134,7 +137,7 @@ export function CreateClubAdminDialog({ clubs, onSuccess }: CreateClubAdminDialo
           Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          email: inviteEmail,
+          email: normalizedEmail,
           firstName: inviteFirstName || null,
           lastName: inviteLastName || null,
           clubId: inviteClubId,
