@@ -43,20 +43,22 @@ function SetupPasswordContent() {
     setError(null)
 
     try {
-      // Get user by email from profiles table
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', email)
-        .single()
-      
-      if (profileError || !profile) {
+      // Get user ID by email via API (avoids RLS issues)
+      const userResponse = await fetch('/api/auth/get-user-by-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      })
+
+      const userData = await userResponse.json()
+
+      if (!userResponse.ok || !userData.success) {
         setError('No invitation found for this email address.')
         setLoading(false)
         return
       }
 
-      const user = { id: profile.id }
+      const user = { id: userData.userId }
 
       // Verify OTP via API
       const response = await fetch('/api/otp/verify', {
