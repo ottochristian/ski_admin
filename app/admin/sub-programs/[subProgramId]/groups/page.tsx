@@ -118,6 +118,7 @@ export default function GroupsPage() {
         .from('groups')
         .select('id, name, status')
         .eq('sub_program_id', subProgramId)
+        .is('deleted_at', null) // Filter out soft-deleted groups
         .order('name', { ascending: true })
 
       if (groupsError) {

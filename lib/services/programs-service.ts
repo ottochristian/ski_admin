@@ -32,9 +32,15 @@ export class ProgramsService extends BaseService {
     seasonId?: string,
     includeSubPrograms = false
   ): Promise<QueryResult<any[]>> {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'programs-service.ts:GET_PROGRAMS_START',message:'Starting getProgramsByClub query',data:{seasonId,includeSubPrograms},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,D'})}).catch(()=>{});
+    // #endregion
+
     // Build select query with optional nested sub_programs
     let selectQuery: any
     if (includeSubPrograms) {
+      // NOTE: Use LEFT join (default) NOT !inner join
+      // !inner would filter out programs without sub-programs, which breaks new program creation
       selectQuery = this.supabase
         .from('programs')
         .select(`
@@ -44,7 +50,7 @@ export class ProgramsService extends BaseService {
           status,
           club_id,
           season_id,
-          sub_programs!inner (
+          sub_programs (
             id,
             name,
             description,
@@ -55,11 +61,6 @@ export class ProgramsService extends BaseService {
             registrations (count)
           )
         `)
-        // CRITICAL: Filter out soft-deleted sub-programs in the nested query
-        .is('sub_programs.deleted_at', null)
-    } else {
-      selectQuery = this.supabase.from('programs').select('*')
-    }
 
     // Only filter by season if provided - RLS handles club filtering automatically
     let query = selectQuery
@@ -71,6 +72,19 @@ export class ProgramsService extends BaseService {
     query = query.is('deleted_at', null)
 
     const result = await query.order('name', { ascending: true })
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'programs-service.ts:GET_PROGRAMS_RESULT',message:'Query result',data:{success:!result.error,error:result.error?.message,count:result.data?.length,programNames:result.data?.map((p:any)=>p.name),hasDeletedAt:result.data?.map((p:any)=>({name:p.name,deleted_at:p.deleted_at}))},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,B,D'})}).catch(()=>{});
+    // #endregion
+
+    // Filter out soft-deleted sub-programs in application layer
+    // (Can't use database filter with LEFT join without excluding programs without sub-programs)
+    if (includeSubPrograms && result.data) {
+      result.data = result.data.map((program: any) => ({
+        ...program,
+        sub_programs: program.sub_programs?.filter((sp: any) => sp.deleted_at === null) || []
+      }))
+    }
 
     return handleSupabaseError(result)
   }

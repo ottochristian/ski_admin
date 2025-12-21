@@ -55,6 +55,10 @@ export default function NewProgramPage() {
         season_id: currentSeason.id,
       })
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'programs/new/page.tsx:CREATE_RESULT',message:'Program creation result',data:{success:!result.error,error:result.error?.message,programData:result.data,seasonId:currentSeason.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,C'})}).catch(()=>{});
+      // #endregion
+
       if (result.error) {
         setError(result.error.message)
         setSaving(false)
@@ -64,6 +68,10 @@ export default function NewProgramPage() {
       // Force immediate refetch of ALL programs queries and wait for completion
       // This ensures the cache is updated before we redirect
       await queryClient.refetchQueries({ queryKey: ['programs'] })
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'programs/new/page.tsx:AFTER_REFETCH',message:'After refetch, about to redirect',data:{programCreated:result.data?.name,redirectingTo:`${basePath}/programs`},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
       
       // Go back to programs list (club-aware route)
       router.push(`${basePath}/programs`)

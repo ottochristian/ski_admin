@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
@@ -82,6 +82,14 @@ export default function ProgramsPage() {
   // Admin view: Show ALL programs and sub-programs regardless of status
   // (Parent portal filters by status, but admins need to see everything to manage)
   const programs = allPrograms as ProgramWithSubPrograms[]
+
+  // #region agent log
+  useEffect(() => {
+    if (selectedSeason) {
+      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'programs/page.tsx:PROGRAMS_LOADED',message:'Programs list rendered',data:{seasonId:selectedSeason.id,seasonName:selectedSeason.name,programCount:programs.length,programNames:programs.map(p=>p.name),isLoading},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,E'})}).catch(()=>{});
+    }
+  }, [programs, selectedSeason, isLoading])
+  // #endregion
 
   async function handleDeleteClick(programId: string) {
     const program = programs.find(p => p.id === programId)
