@@ -461,6 +461,88 @@ export default function ProgramsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="h-5 w-5" />
+              Delete Program
+            </DialogTitle>
+            <DialogDescription>
+              You are about to delete <strong>{programToDelete?.name}</strong>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {loadingCounts ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin h-6 w-6 border-2 border-slate-300 border-t-slate-600 rounded-full" />
+              </div>
+            ) : deleteCounts && (
+              <>
+                <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4">
+                  <p className="text-sm font-semibold text-yellow-900 mb-2">
+                    ⚠️ This action will affect:
+                  </p>
+                  <ul className="text-sm text-yellow-800 space-y-1">
+                    <li>• {deleteCounts.subPrograms} sub-program(s)</li>
+                    <li>• {deleteCounts.groups} group(s)</li>
+                    <li>• {deleteCounts.athletes} athlete registration(s)</li>
+                    <li>• {deleteCounts.coaches} coach assignment(s)</li>
+                  </ul>
+                </div>
+
+                <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                  <p className="text-sm font-semibold text-red-900 mb-2">
+                    🚨 Warning: This action cannot be undone from the UI
+                  </p>
+                  <p className="text-sm text-red-800">
+                    All relationships between athletes, coaches, sub-programs, and groups will be soft-deleted. 
+                    This data will remain in the database but will no longer be visible in the admin portal.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    Type <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded">DELETE</span> to confirm:
+                  </label>
+                  <input
+                    type="text"
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                    placeholder="Type DELETE"
+                    autoFocus
+                  />
+                </div>
+              </>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteDialogOpen(false)
+                setProgramToDelete(null)
+                setDeleteConfirmText('')
+                setDeleteCounts(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+              disabled={deleteConfirmText !== 'DELETE' || loadingCounts}
+            >
+              Delete Program
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
