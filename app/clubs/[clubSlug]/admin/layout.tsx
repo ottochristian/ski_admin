@@ -22,6 +22,14 @@ export default function AdminLayout({
   const { profile, loading: authLoading } = useRequireAdmin()
   const { club, loading: clubLoading } = useClub()
 
+  // #region agent log
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin/layout.tsx:render',message:'Admin layout rendering',data:{authLoading,clubLoading,profileExists:!!profile,clubExists:!!club,clubSlug},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'G'})}).catch(()=>{});
+    }
+  }, [authLoading, clubLoading, profile, club, clubSlug])
+  // #endregion
+
   // Verify club slug matches user's club (if club loaded)
   useEffect(() => {
     if (!authLoading && !clubLoading && club && club.slug !== clubSlug) {
@@ -35,11 +43,9 @@ export default function AdminLayout({
     }
   }, [club, clubSlug, authLoading, clubLoading, router, profile])
 
-  if (authLoading || clubLoading) {
-    return <InlineLoading />
-  }
-
-  if (!profile) {
+  // Non-blocking approach: Show layout structure immediately with conditional content
+  // This prevents the entire app from being stuck on a loading screen
+  if (!authLoading && !profile) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-destructive">Access denied</p>
@@ -50,16 +56,28 @@ export default function AdminLayout({
   return (
     <SeasonProvider>
       <div className="flex min-h-screen">
-        <AdminSidebar profile={profile} clubSlug={clubSlug} />
-        <main className="flex-1 ml-64 flex flex-col bg-slate-50">
-          <div className="fixed top-0 right-0 left-64 border-b border-slate-200 bg-white px-8 py-4 z-10">
+        {profile && <AdminSidebar profile={profile} clubSlug={clubSlug} />}
+        <main className={`flex-1 ${profile ? 'ml-64' : ''} flex flex-col bg-slate-50`}>
+          <div className={`fixed top-0 right-0 ${profile ? 'left-64' : 'left-0'} border-b border-slate-200 bg-white px-8 py-4 z-10`}>
             <div className="flex items-center justify-end gap-4">
-              <UnifiedSeasonSelector />
-              <ProfileMenu profile={profile} />
+              {(authLoading || clubLoading) ? (
+                <div className="h-10 w-48 bg-slate-200 animate-pulse rounded" />
+              ) : (
+                <>
+                  <UnifiedSeasonSelector />
+                  {profile && <ProfileMenu profile={profile} />}
+                </>
+              )}
             </div>
           </div>
           <div className="flex-1 overflow-auto pt-16">
-            <div className="p-8">{children}</div>
+            <div className="p-8">
+              {(authLoading || clubLoading) ? (
+                <InlineLoading message="Loading..." />
+              ) : (
+                children
+              )}
+            </div>
           </div>
         </main>
       </div>
