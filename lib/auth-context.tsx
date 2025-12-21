@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { User } from '@supabase/supabase-js'
 import { supabase } from './supabaseClient'
 import { Profile } from './types'
+import { useQueryClient } from '@tanstack/react-query'
 
 interface AuthContextType {
   user: User | null
@@ -25,6 +26,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
+  const queryClient = useQueryClient()
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
@@ -182,9 +184,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Sign out
   const signOut = async () => {
     try {
+      // Clear ALL React Query cache on sign out to prevent stale data across sessions
+      queryClient.clear()
+      
       await supabase.auth.signOut()
       setUser(null)
       setProfile(null)
+      
       router.push('/login')
     } catch (err) {
       console.error('Sign out error:', err)

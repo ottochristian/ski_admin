@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
+import { useAuth } from '@/lib/auth-context'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,8 +23,10 @@ interface ProfileMenuProps {
 
 export function ProfileMenu({ profile }: ProfileMenuProps) {
   const router = useRouter()
+  const { signOut } = useAuth()
   const [avatarUrl, setAvatarUrl] = useState<string | null>(profile.avatar_url || null)
   const [initials, setInitials] = useState('')
+  const [isSigningOut, setIsSigningOut] = useState(false)
 
   useEffect(() => {
     // Set initial avatar URL from profile prop
@@ -78,9 +81,22 @@ export function ProfileMenu({ profile }: ProfileMenuProps) {
     loadAvatar()
   }, [profile])
 
-  async function handleSignOut() {
-    await supabase.auth.signOut()
-    router.replace('/login')
+  async function handleSignOut(e: React.MouseEvent) {
+    // Prevent dropdown from closing immediately
+    e.preventDefault()
+    e.stopPropagation()
+    
+    if (isSigningOut) return // Prevent double-click
+    
+    setIsSigningOut(true)
+    
+    try {
+      // Use AuthContext's signOut which clears React Query cache
+      await signOut()
+    } catch (err) {
+      console.error('Sign out error:', err)
+      setIsSigningOut(false)
+    }
   }
 
   const displayName =
@@ -157,10 +173,11 @@ export function ProfileMenu({ profile }: ProfileMenuProps) {
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={handleSignOut}
+          disabled={isSigningOut}
           className="text-red-600 hover:text-red-700 hover:bg-red-50 cursor-pointer"
         >
           <LogOut className="h-4 w-4 text-red-600" />
-          Sign Out
+          {isSigningOut ? 'Signing out...' : 'Sign Out'}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

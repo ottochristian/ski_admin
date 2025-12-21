@@ -1,20 +1,28 @@
+// DEPRECATED: This component is unused (only referenced in .bak files)
+// Use ProfileMenu component instead for sign out functionality
+// Keeping file for reference but marked for deletion
+
 "use client";
 
-import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { LogOut } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useState } from "react";
 
 export function LogoutButton() {
-  const router = useRouter();
+  const { signOut } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
   const handleLogout = async () => {
+    if (isLoading) return;
     setIsLoading(true);
-    await supabase.auth.signOut();
-    router.push("/");
-    router.refresh();
+    
+    try {
+      await signOut();
+    } catch (err) {
+      console.error('Logout error:', err);
+      setIsLoading(false);
+    }
   };
 
   return (
