@@ -1,4 +1,5 @@
 import twilio from 'twilio'
+import sgMail from '@sendgrid/mail'
 
 // Notification types
 export type NotificationMethod = 'email' | 'sms' | 'both'
@@ -24,8 +25,25 @@ export interface NotificationResult {
 class NotificationService {
   private twilioClient?: ReturnType<typeof twilio>
   private smsEnabled: boolean
+  private emailEnabled: boolean
 
   constructor() {
+    // Initialize SendGrid for email
+    const sendgridApiKey = process.env.SENDGRID_API_KEY
+    if (sendgridApiKey) {
+      try {
+        sgMail.setApiKey(sendgridApiKey)
+        this.emailEnabled = true
+        console.log('✅ SendGrid email service initialized')
+      } catch (error) {
+        console.error('❌ SendGrid initialization failed:', error)
+        this.emailEnabled = false
+      }
+    } else {
+      this.emailEnabled = false
+      console.log('⚠️ SendGrid not configured - Email logging to console only')
+    }
+
     // Initialize Twilio only if credentials are provided
     const accountSid = process.env.TWILIO_ACCOUNT_SID
     const authToken = process.env.TWILIO_AUTH_TOKEN
@@ -165,25 +183,58 @@ class NotificationService {
   }
 
   /**
-   * Send email (via Supabase for now, can switch to Resend later)
+   * Send email via SendGrid (Twilio's email service)
    */
   private async sendEmail(options: NotificationOptions): Promise<void> {
-    // For Phase 1, we'll log to console
-    // In Phase 2, we'll implement actual email sending via Resend
+    const isDev = process.env.NODE_ENV === 'development'
     
-    console.log('📧 Email would be sent to:', options.recipient)
-    console.log('📧 Subject:', options.subject)
-    console.log('📧 Message:', options.message)
-    
-    // TODO Phase 2: Implement Resend email sending
-    // const { Resend } = await import('resend')
-    // const resend = new Resend(process.env.RESEND_API_KEY)
-    // await resend.emails.send({
-    //   from: process.env.RESEND_FROM_EMAIL!,
-    //   to: options.recipient,
-    //   subject: options.subject || 'Notification',
-    //   html: this.buildEmailHTML(options)
-    // })
+    // Always log in development
+    if (isDev) {
+      console.log('📧 Email details:')
+      console.log('  To:', options.recipient)
+      console.log('  Subject:', options.subject)
+      console.log('  Message:', options.message)
+      if (options.code) {
+        console.log('  OTP Code:', options.code)
+      }
+      if (options.link) {
+        console.log('  Link:', options.link)
+      }
+    }
+
+    // If SendGrid is not configured, only log (dev mode)
+    if (!this.emailEnabled) {
+      if (isDev) {
+        console.log('⚠️ SendGrid not configured - email logged above')
+      }
+      return
+    }
+
+    // Send email via SendGrid
+    try {
+      const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@skiclub.com'
+      const fromName = process.env.SENDGRID_FROM_NAME || 'Ski Club Admin'
+
+      const msg = {
+        to: options.recipient,
+        from: {
+          email: fromEmail,
+          name: fromName
+        },
+        subject: options.subject || 'Notification',
+        text: options.message,
+        html: this.buildEmailHTML(options)
+      }
+
+      await sgMail.send(msg)
+      console.log(`✅ Email sent successfully to ${options.recipient}`)
+    } catch (error: any) {
+      console.error('❌ SendGrid email error:', error)
+      if (error.response) {
+        console.error('SendGrid error details:', error.response.body)
+      }
+      throw new Error(`Failed to send email: ${error.message}`)
+    }
   }
 
   /**
