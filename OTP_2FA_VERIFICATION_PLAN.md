@@ -603,41 +603,51 @@ Create `security_logs` table for audit trail
 
 ---
 
-## Decision Points
+## Decision Points ✅ CONFIRMED
 
-Before implementing, we need to decide:
+**Client decisions (confirmed):**
 
 1. **2FA Enforcement:**
-   - [ ] Optional for all users
-   - [ ] Required for admins only
-   - [ ] Required for everyone (too strict?)
+   - [x] **Required for admins, optional for parents** ✅
+   - Admins will be required to enable 2FA within 7 days of account creation
+   - Parents can opt-in anytime
 
 2. **Email Verification:**
-   - [x] Required for all new signups (recommended)
-   - [ ] Optional/skippable
-   - [ ] Required for certain actions only
+   - [x] **Required for all new signups** ✅
+   - Existing users grandfathered in (marked as verified)
+   - Must verify email before accessing core features
 
 3. **Phone Verification:**
-   - [x] Optional (user choice)
-   - [ ] Required for SMS 2FA users
-   - [ ] Required for all users
+   - [x] **Required during signup** ✅
+   - Phone number is mandatory field
+   - Must verify phone via SMS OTP during signup process
+   - Reason: Future SMS communication (coaches ↔ parents, admins ↔ coaches)
 
 4. **Default 2FA Method:**
-   - [x] Email (most accessible)
-   - [ ] SMS (more secure but costs money)
-   - [ ] User chooses at enrollment
+   - [x] **SMS preferred (since phone is required)** ✅
+   - Fallback to email if SMS fails
+   - User can choose "Both" for maximum security
 
 5. **Backup Codes:**
-   - [x] 10 codes (standard)
-   - [ ] 20 codes (more redundancy)
-   - [ ] Regenerate anytime
+   - [x] **10 codes (standard)** ✅
+   - Generated at 2FA enrollment
+   - Can regenerate anytime (invalidates old codes)
 
-**Recommendations:**
-- ✅ Email verification: **Required** for new signups
-- ✅ Phone verification: **Optional**
-- ✅ 2FA: **Optional** for parents, **Encouraged** for admins
-- ✅ Default 2FA method: **Email** (fallback to SMS if user adds phone)
-- ✅ Backup codes: **10 codes**, regenerate anytime
+**Implementation Scope:**
+- [x] **Option B - Phased Approach** ✅
+  - **Phase 1 (Current):** Email verification + OTP admin invitations
+  - **Phase 2 (Next):** Phone verification + SMS support
+  - **Phase 3 (Final):** 2FA enrollment + backup codes
+
+**Budget:**
+- [x] **$5-10/month** approved for SMS costs ✅
+- Scaling budget as needed for future communication features
+
+**Migration Strategy:**
+- [x] **Grandfather existing users** ✅
+- Mark all current users as verified (both email and phone)
+- Only NEW signups require verification
+- Test with a few new accounts before full rollout
 
 ---
 
