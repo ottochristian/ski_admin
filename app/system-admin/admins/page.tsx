@@ -90,16 +90,30 @@ export default function AdminsPage() {
         return
       }
 
-      // Get last sign in from auth.users (skip if admin API not available)
+      // Get last sign in from auth.users via API route
       const adminsWithSignIn = await Promise.all(
         (adminsData || []).map(async (admin) => {
           let lastSignIn = null
           try {
-            const { data: authUser } = await supabase.auth.admin.getUserById(admin.id)
-            lastSignIn = authUser?.user?.last_sign_in_at || null
+            // Get the current session token
+            const { data: { session } } = await supabase.auth.getSession()
+            
+            if (session?.access_token) {
+              // Call API route with auth token
+              const response = await fetch(`/api/admin/users/${admin.id}/last-sign-in`, {
+                headers: {
+                  'Authorization': `Bearer ${session.access_token}`
+                }
+              })
+              
+              if (response.ok) {
+                const data = await response.json()
+                lastSignIn = data.last_sign_in_at || null
+              }
+            }
           } catch (err) {
-            // Admin API might not be available in client - that's okay
-            console.warn('Could not fetch last sign in:', err)
+            // Skip if API call fails
+            console.error('Error fetching last sign-in for admin:', admin.id, err)
           }
 
           return {
