@@ -68,6 +68,10 @@ export default function SignupPage() {
     setLoading(true)
     setError(null)
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'signup/page.tsx:66',message:'Signup handleSubmit start',data:{email:email,clubId:selectedClubId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+
     try {
       // 1. Sign up the user (try without metadata first to isolate the issue)
       let authData, signUpError
@@ -190,8 +194,46 @@ export default function SignupPage() {
 
       // Check if email confirmation is required
       if (!authData.session) {
-        // Email confirmation is required
-        router.push('/login?message=Account created! Please check your email to confirm your account, then log in.')
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'signup/page.tsx:193',message:'Email confirmation required - sending OTP',data:{hasSession:false,email:email,userId:authData.user?.id,sendingOtp:true},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+        
+        // Email confirmation is required - Generate and send OTP
+        try {
+          const otpResponse = await fetch('/api/otp/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: authData.user.id,
+              type: 'email_verification',
+              contact: email.toLowerCase(),
+              metadata: {
+                firstName: firstName,
+                clubName: clubs.find(c => c.id === clubId)?.name || 'Ski Club'
+              }
+            })
+          })
+
+          const otpData = await otpResponse.json()
+          
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'signup/page.tsx:212',message:'OTP send response',data:{success:otpData.success,error:otpData.error,hasCode:!!otpData.code},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
+
+          if (!otpResponse.ok || !otpData.success) {
+            console.error('Failed to send verification email:', otpData.error)
+            setError('Account created but failed to send verification email. Please contact support.')
+            setLoading(false)
+            return
+          }
+
+          // Success! Redirect to email verification page
+          router.push(`/verify-email?email=${encodeURIComponent(email.toLowerCase())}`)
+        } catch (err) {
+          console.error('Error sending verification email:', err)
+          setError('Account created but failed to send verification email. Please contact support.')
+        }
+        
         setLoading(false)
         return
       }

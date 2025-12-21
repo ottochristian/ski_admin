@@ -28,6 +28,10 @@ class NotificationService {
   private emailEnabled: boolean
 
   constructor() {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'notification-service.ts:29',message:'NotificationService constructor start',data:{sendgridApiKeyExists:!!process.env.SENDGRID_API_KEY,sendgridApiKeyLength:process.env.SENDGRID_API_KEY?.length,nodeEnv:process.env.NODE_ENV},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
     // Initialize SendGrid for email
     const sendgridApiKey = process.env.SENDGRID_API_KEY
     if (sendgridApiKey) {
@@ -35,13 +39,22 @@ class NotificationService {
         sgMail.setApiKey(sendgridApiKey)
         this.emailEnabled = true
         console.log('✅ SendGrid email service initialized')
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'notification-service.ts:42',message:'SendGrid initialized successfully',data:{emailEnabled:true},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
       } catch (error) {
         console.error('❌ SendGrid initialization failed:', error)
         this.emailEnabled = false
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'notification-service.ts:49',message:'SendGrid initialization FAILED',data:{error:error instanceof Error?error.message:String(error),emailEnabled:false},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
       }
     } else {
       this.emailEnabled = false
       console.log('⚠️ SendGrid not configured - Email logging to console only')
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'notification-service.ts:57',message:'SendGrid NOT configured',data:{emailEnabled:false,sendgridApiKey:'undefined'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
     }
 
     // Initialize Twilio only if credentials are provided
@@ -186,6 +199,10 @@ class NotificationService {
    * Send email via SendGrid (Twilio's email service)
    */
   private async sendEmail(options: NotificationOptions): Promise<void> {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'notification-service.ts:208',message:'sendEmail called',data:{recipient:options.recipient,subject:options.subject,hasCode:!!options.code,emailEnabled:this.emailEnabled,nodeEnv:process.env.NODE_ENV},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    
     const isDev = process.env.NODE_ENV === 'development'
     
     // Always log in development
@@ -207,6 +224,9 @@ class NotificationService {
       if (isDev) {
         console.log('⚠️ SendGrid not configured - email logged above')
       }
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'notification-service.ts:234',message:'SendGrid not enabled - skipping send',data:{emailEnabled:false},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
       return
     }
 
@@ -226,13 +246,23 @@ class NotificationService {
         html: this.buildEmailHTML(options)
       }
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'notification-service.ts:256',message:'Calling sgMail.send',data:{to:msg.to,from:msg.from,subject:msg.subject},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+
       await sgMail.send(msg)
       console.log(`✅ Email sent successfully to ${options.recipient}`)
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'notification-service.ts:264',message:'Email sent successfully',data:{recipient:options.recipient,success:true},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
     } catch (error: any) {
       console.error('❌ SendGrid email error:', error)
       if (error.response) {
         console.error('SendGrid error details:', error.response.body)
       }
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'notification-service.ts:274',message:'SendGrid send FAILED',data:{error:error.message,responseBody:error.response?.body,code:error.code,statusCode:error.response?.statusCode},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       throw new Error(`Failed to send email: ${error.message}`)
     }
   }

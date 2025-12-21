@@ -110,13 +110,23 @@ export async function POST(request: NextRequest) {
     // Send OTP based on type
     let notificationResult
     
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'otp/send/route.ts:111',message:'Before sending notification',data:{type:type,contact:contact,code:otpResult.code,hasMetadata:!!metadata},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    
     switch (type) {
       case 'email_verification':
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'otp/send/route.ts:115',message:'Calling sendEmailVerificationOTP',data:{contact:contact,code:otpResult.code,firstName:metadata?.firstName},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
         notificationResult = await notificationService.sendEmailVerificationOTP(
           contact,
           otpResult.code,
           metadata?.firstName
         )
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'otp/send/route.ts:123',message:'After sendEmailVerificationOTP',data:{success:notificationResult.success,emailSent:notificationResult.emailSent,error:notificationResult.error},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
         break
         
       case 'phone_verification':
