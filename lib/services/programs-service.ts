@@ -61,6 +61,9 @@ export class ProgramsService extends BaseService {
             registrations (count)
           )
         `)
+    } else {
+      selectQuery = this.supabase.from('programs').select('*')
+    }
 
     // Only filter by season if provided - RLS handles club filtering automatically
     let query = selectQuery
