@@ -190,7 +190,6 @@ export function CreateClubAdminDialog({ clubs, onSuccess }: CreateClubAdminDialo
       }
 
       // Show success message with OTP code in dev mode
-      const normalizedEmail = inviteEmail.toLowerCase().trim()
       let description = data.message || `Invitation sent to ${normalizedEmail}`
       if (data.code) {
         description += `\n\nDev Mode - OTP Code: ${data.code}\nSetup link: ${window.location.origin}/setup-password?email=${encodeURIComponent(normalizedEmail)}`
