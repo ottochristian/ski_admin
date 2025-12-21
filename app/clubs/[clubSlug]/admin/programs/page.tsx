@@ -464,7 +464,7 @@ export default function ProgramsPage() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[550px] max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-600">
               <AlertTriangle className="h-5 w-5" />
@@ -475,7 +475,7 @@ export default function ProgramsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 overflow-y-auto flex-1">
             {loadingCounts ? (
               <div className="flex items-center justify-center py-8">
                 <div className="animate-spin h-6 w-6 border-2 border-slate-300 border-t-slate-600 rounded-full" />
@@ -496,11 +496,11 @@ export default function ProgramsPage() {
 
                 <div className="bg-red-50 border border-red-200 rounded-md p-4">
                   <p className="text-sm font-semibold text-red-900 mb-2">
-                    🚨 Warning: This action cannot be undone from the UI
+                    🚨 Soft Delete: Data remains in database
                   </p>
                   <p className="text-sm text-red-800">
-                    All relationships between athletes, coaches, sub-programs, and groups will be soft-deleted. 
-                    This data will remain in the database but will no longer be visible in the admin portal.
+                    This program will be hidden from the admin portal but data remains in the database for audit/recovery purposes. 
+                    All relationships with athletes, coaches, sub-programs, and groups will be preserved.
                   </p>
                 </div>
 
@@ -521,7 +521,7 @@ export default function ProgramsPage() {
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex-shrink-0 pt-4 border-t">
             <Button
               variant="outline"
               onClick={() => {
@@ -537,6 +537,7 @@ export default function ProgramsPage() {
               variant="destructive"
               onClick={handleDeleteConfirm}
               disabled={deleteConfirmText !== 'DELETE' || loadingCounts}
+              className="bg-red-600 hover:bg-red-700"
             >
               Delete Program
             </Button>
