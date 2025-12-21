@@ -55,8 +55,8 @@ export default function ProgramsPage() {
   const {
     data: allPrograms = [],
     isLoading,
-    error,
     refetch,
+    error,
   } = usePrograms(selectedSeason?.id, true) // Include sub_programs, RLS filters by club
 
   // Admin view: Show ALL programs and sub-programs regardless of status
@@ -116,7 +116,7 @@ export default function ProgramsPage() {
     if (!program) return
 
     const confirmActivate = window.confirm(
-      `Activate all sub-programs and groups for "${program.name}"?\n\nThis will set all sub-programs and groups to ACTIVE status.`
+      `Activate "${program.name}" and all its sub-programs and groups?\n\nThis will set the program, all sub-programs, and all groups to ACTIVE status.`
     )
 
     if (!confirmActivate) return
@@ -133,7 +133,20 @@ export default function ProgramsPage() {
         return
       }
 
-      // 1. Activate all sub-programs
+      // 1. Activate the parent program first
+      const { error: programError } = await supabase
+        .from('programs')
+        .update({ status: ProgramStatus.ACTIVE })
+        .eq('id', programId)
+
+      if (programError) {
+        console.error('Error activating program:', programError)
+        alert(`Error activating program: ${programError.message}`)
+        setActivatingId(null)
+        return
+      }
+
+      // 2. Activate all sub-programs
       const { error: subProgramError } = await supabase
         .from('sub_programs')
         .update({ status: ProgramStatus.ACTIVE })
@@ -156,11 +169,11 @@ export default function ProgramsPage() {
         console.error('Error activating groups:', groupsError)
         alert(`Error activating groups: ${groupsError.message}`)
       } else {
-        alert(`✅ All sub-programs and groups for "${program.name}" are now ACTIVE!`)
+        alert(`✅ "${program.name}" and all its sub-programs and groups are now ACTIVE!`)
       }
 
-      // Refetch to update UI
-      refetch()
+      // Refetch to update UI with new status
+      await refetch()
     } catch (err) {
       console.error('Error activating program contents:', err)
       alert('An unexpected error occurred.')
