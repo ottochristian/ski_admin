@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { otpService } from '@/lib/services/otp-service'
 import { notificationService } from '@/lib/services/notification-service'
+import { tokenService } from '@/lib/services/token-service'
 
 // This route requires service role key for admin operations
 function getSupabaseAdmin() {
@@ -157,7 +158,28 @@ export async function POST(request: NextRequest) {
 
     const clubName = clubData?.name || 'Ski Admin'
 
-    // Step 4: Generate OTP code
+    // Step 4: Generate secure setup token (prevents unauthorized access)
+    let setupToken: string
+    try {
+      setupToken = await tokenService.generateSetupToken({
+        email,
+        userId,
+        type: 'admin_setup',
+        clubId,
+        expiresInHours: 48 // 48 hours to complete setup
+      })
+    } catch (tokenError) {
+      console.error('Error generating setup token:', tokenError)
+      // Clean up
+      await supabaseAdmin.auth.admin.deleteUser(userId)
+      await supabaseAdmin.from('profiles').delete().eq('id', userId)
+      return NextResponse.json(
+        { error: 'Failed to generate setup token' },
+        { status: 500 }
+      )
+    }
+
+    // Step 5: Generate OTP code
     const otpResult = await otpService.generate(
       userId,
       'admin_invitation',
@@ -175,10 +197,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Step 5: Build setup link
-    const setupLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/setup-password?email=${encodeURIComponent(email)}`
+    // Step 6: Build secure setup link with token
+    const setupLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/setup-password?token=${setupToken}`
 
-    // Step 6: Send OTP via email
+    // Step 7: Send OTP via email
     const notificationResult = await notificationService.sendAdminInvitationOTP(
       email,
       otpResult.code,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { otpService, OTPType } from '@/lib/services/otp-service'
-import { rateLimiter } from '@/lib/services/rate-limiter'
+import { dbRateLimiter } from '@/lib/services/rate-limiter-db'
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,8 +32,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check failed attempts rate limit
-    const failedAttemptsCheck = rateLimiter.checkFailedOTPAttempts(userId)
+    // Check failed attempts rate limit (database-backed)
+    const failedAttemptsCheck = await dbRateLimiter.checkFailedOTPAttempts(userId)
     if (!failedAttemptsCheck.allowed) {
       const hoursRemaining = Math.ceil((failedAttemptsCheck.resetAt.getTime() - Date.now()) / 3600000)
       return NextResponse.json(
@@ -50,8 +50,8 @@ export async function POST(request: NextRequest) {
     const result = await otpService.verify(userId, code, type, contact)
 
     if (!result.success) {
-      // Record failed attempt
-      rateLimiter.recordFailedOTPAttempt(userId)
+      // Record failed attempt (database-backed)
+      await dbRateLimiter.recordFailedOTPAttempt(userId)
       
       return NextResponse.json(
         { 
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Success! Reset failed attempts counter
-    rateLimiter.resetFailedOTPAttempts(userId)
+    await dbRateLimiter.resetFailedOTPAttempts(userId)
 
     return NextResponse.json({
       success: true,

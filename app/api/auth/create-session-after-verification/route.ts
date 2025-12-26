@@ -14,6 +14,10 @@ function getSupabaseAdmin() {
   )
 }
 
+/**
+ * Create a session for a user after email verification
+ * Uses Supabase Admin API to generate session tokens
+ */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -28,26 +32,7 @@ export async function POST(request: NextRequest) {
 
     const supabaseAdmin = getSupabaseAdmin()
 
-    // Generate a session for the user using admin API
-    // This creates an access token and refresh token
-    const { data, error } = await supabaseAdmin.auth.admin.generateLink({
-      type: 'magiclink',
-      email: '', // Not used, we're using userId
-      options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/callback`
-      }
-    })
-
-    if (error) {
-      console.error('Error generating session:', error)
-      return NextResponse.json(
-        { error: 'Failed to create session' },
-        { status: 500 }
-      )
-    }
-
-    // Alternative: Use the user's email to create an OTP that can be used to sign in
-    // Get user's email first
+    // Get user's email
     const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId)
     
     if (userError || !userData.user) {
@@ -58,7 +43,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate a magic link that will auto-sign them in
+    // Generate a magic link for the user
+    // This creates a proper session token that can be verified
     const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
       type: 'magiclink',
       email: userData.user.email!,
@@ -67,17 +53,18 @@ export async function POST(request: NextRequest) {
     if (linkError || !linkData) {
       console.error('Error generating magic link:', linkError)
       return NextResponse.json(
-        { error: 'Failed to generate session link' },
+        { error: 'Failed to generate session' },
         { status: 500 }
       )
     }
 
-    // Extract the token from the magic link
+    // Extract the hashed token from the action link
     const url = new URL(linkData.properties.action_link)
-    const token = url.searchParams.get('token')
+    const tokenHash = url.searchParams.get('token_hash')
     const type = url.searchParams.get('type')
 
-    if (!token || !type) {
+    if (!tokenHash || !type) {
+      console.error('Missing token_hash or type in generated link')
       return NextResponse.json(
         { error: 'Failed to extract session token' },
         { status: 500 }
@@ -86,9 +73,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      token,
-      type,
-      actionLink: linkData.properties.action_link
+      tokenHash,
+      type
     })
   } catch (error) {
     console.error('Create session error:', error)

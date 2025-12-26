@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { otpService, OTPType } from '@/lib/services/otp-service'
 import { notificationService } from '@/lib/services/notification-service'
-import { rateLimiter } from '@/lib/services/rate-limiter'
+import { dbRateLimiter } from '@/lib/services/rate-limiter-db'
 
 // Helper to get Supabase admin client
 function getSupabaseAdmin() {
@@ -51,8 +51,8 @@ export async function POST(request: NextRequest) {
     const ipAddress = getClientIP(request)
     const userAgent = request.headers.get('user-agent') || 'unknown'
 
-    // Check rate limits
-    const userRateLimit = rateLimiter.checkOTPRequest(userId)
+    // Check rate limits (database-backed for production)
+    const userRateLimit = await dbRateLimiter.checkOTPRequestByUser(userId)
     if (!userRateLimit.allowed) {
       const minutesRemaining = Math.ceil((userRateLimit.resetAt.getTime() - Date.now()) / 60000)
       return NextResponse.json(
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const ipRateLimit = rateLimiter.checkOTPRequestByIP(ipAddress)
+    const ipRateLimit = await dbRateLimiter.checkOTPRequestByIP(ipAddress)
     if (!ipRateLimit.allowed) {
       const minutesRemaining = Math.ceil((ipRateLimit.resetAt.getTime() - Date.now()) / 60000)
       return NextResponse.json(
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const contactRateLimit = rateLimiter.checkOTPRequestByContact(contact)
+    const contactRateLimit = await dbRateLimiter.checkOTPRequestByContact(contact)
     if (!contactRateLimit.allowed) {
       const minutesRemaining = Math.ceil((contactRateLimit.resetAt.getTime() - Date.now()) / 60000)
       return NextResponse.json(

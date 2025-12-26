@@ -116,20 +116,24 @@ function VerifyEmailContent() {
         return
       }
 
-      // Use the token to verify and create a session
+      // Use the token hash to verify and create a session
       const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
-        token_hash: sessionData.token,
-        type: 'email'
+        token_hash: sessionData.tokenHash,
+        type: sessionData.type
       })
 
       if (verifyError) {
         console.error('Error verifying session token:', verifyError)
+        // Fall back to manual login
         setSuccess('Email verified! Redirecting to login...')
         setTimeout(() => {
           router.push('/login?message=Email verified! You can now log in.')
         }, 2000)
         return
       }
+
+      // Session created successfully!
+      console.log('Session created:', verifyData.session ? 'Yes' : 'No')
 
       // Get user's profile to determine role and redirect
       const { data: profile, error: profileError } = await supabase
