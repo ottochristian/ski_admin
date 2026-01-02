@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { useRequireAdmin } from '@/lib/auth-context'
 import { useSeason } from '@/lib/hooks/use-season'
 import { useCoaches } from '@/lib/hooks/use-coaches'
@@ -66,6 +67,7 @@ const COACH_ROLES: { value: CoachRole; label: string }[] = [
 export default function AssignCoachPage() {
   const params = useParams()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const coachId = params.coachId as string
 
   const { profile, loading: authLoading } = useRequireAdmin()
@@ -260,6 +262,9 @@ export default function AssignCoachPage() {
         throw result.error
       }
 
+      // Invalidate coaches cache to show updated assignments
+      await queryClient.invalidateQueries({ queryKey: ['coaches', true] })
+      
       router.push('/admin/coaches')
     } catch (err) {
       console.error('Error saving assignments:', err)
