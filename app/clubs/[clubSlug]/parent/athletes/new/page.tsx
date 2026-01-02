@@ -127,7 +127,11 @@ export default function NewAthletePage() {
       }
 
       // Force refetch to ensure cache is updated before redirect
-      await queryClient.refetchQueries({ queryKey: ['athletes'] })
+      // Invalidate athletes cache to show new athlete immediately
+      await queryClient.invalidateQueries({ queryKey: ['athletes'] })
+      if (formData.householdId) {
+        await queryClient.invalidateQueries({ queryKey: ['athletes', 'household', formData.householdId] })
+      }
       router.push(`/clubs/${clubSlug}/parent/athletes`)
     } catch (err) {
       console.error('Error creating athlete:', err)

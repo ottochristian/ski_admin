@@ -2,6 +2,7 @@
 
 import { useEffect, useState, FormEvent } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import {
   Card,
@@ -165,6 +166,12 @@ export default function EditSubProgramPage() {
     if (updateError) {
       setError(updateError.message)
       return
+    }
+
+    // Invalidate cache to show updated sub-program
+    if (subProgram) {
+      await queryClient.invalidateQueries({ queryKey: ['sub-programs', subProgram.program_id] })
+      await queryClient.invalidateQueries({ queryKey: ['programs'] })
     }
 
     router.push('/admin/programs')

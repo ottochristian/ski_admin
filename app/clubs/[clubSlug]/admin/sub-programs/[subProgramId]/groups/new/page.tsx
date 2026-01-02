@@ -2,6 +2,7 @@
 
 import { useEffect, useState, FormEvent } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { ProgramStatus } from '@/lib/programStatus'
 import {
@@ -29,6 +30,7 @@ type SimpleSubProgram = {
 
 export default function NewGroupPage() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const params = useParams() as { clubSlug?: string; subProgramId?: string }
   const clubSlug = params.clubSlug as string
   const basePath = `/clubs/${clubSlug}/admin`
@@ -114,6 +116,11 @@ export default function NewGroupPage() {
     if (insertError) {
       setError(insertError.message)
       return
+    }
+
+    // Invalidate cache to show new group immediately
+    if (subProgram) {
+      await queryClient.invalidateQueries({ queryKey: ['sub-programs', subProgram.program_id] })
     }
 
     // Navigate back to groups list

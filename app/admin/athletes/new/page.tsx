@@ -91,7 +91,8 @@ export default function NewAthletePage() {
       }
 
       // Force refetch to ensure cache is updated before redirect
-      await queryClient.refetchQueries({ queryKey: ['athletes'] })
+      // Invalidate athletes cache to show new athlete
+      await queryClient.invalidateQueries({ queryKey: ['athletes'] })
 
       // Redirect to athletes list
       router.push('/admin/athletes')
