@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { useClub } from '@/lib/club-context'
 import { useCoachSeason } from '@/lib/use-coach-season'
 import {
@@ -61,6 +61,8 @@ interface Athlete {
 
 export default function CoachAthletesPage() {
   const router = useRouter()
+  const [supabase] = useState(() => createClient())
+
   const { club, loading: clubLoading } = useClub()
   const { selectedSeason, loading: seasonLoading } = useCoachSeason()
 

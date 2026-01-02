@@ -1,11 +1,15 @@
 import { BaseService, handleSupabaseError, QueryResult } from './base-service'
-import { supabase } from '../supabaseClient'
+import { getServiceClient } from './service-client'
 
 /**
  * Service for household_guardians related operations
  * PHASE 2: RLS-FIRST APPROACH - RLS handles filtering automatically
  */
 export class HouseholdGuardiansService extends BaseService {
+  constructor(supabase = getServiceClient()) {
+    super(supabase)
+  }
+
   /**
    * Get household ID for the current authenticated user
    * RLS ensures user can only see their own household
@@ -15,7 +19,7 @@ export class HouseholdGuardiansService extends BaseService {
     const {
       data: { user },
       error: userError,
-    } = await supabase.auth.getUser()
+    } = await this.supabase.auth.getUser()
 
     if (userError || !user) {
       return {
@@ -50,7 +54,7 @@ export class HouseholdGuardiansService extends BaseService {
     const {
       data: { user },
       error: userError,
-    } = await supabase.auth.getUser()
+    } = await this.supabase.auth.getUser()
 
     if (userError || !user) {
       return {
@@ -131,6 +135,6 @@ export class HouseholdGuardiansService extends BaseService {
   }
 }
 
-export const householdGuardiansService = new HouseholdGuardiansService()
+export const householdGuardiansService = new HouseholdGuardiansService(getServiceClient())
 
 

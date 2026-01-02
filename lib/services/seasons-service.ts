@@ -1,11 +1,15 @@
 import { BaseService, handleSupabaseError, QueryResult } from './base-service'
-import { supabase } from '../supabaseClient'
+import { getServiceClient } from './service-client'
 
 /**
  * Service for season-related database operations
  * PHASE 2: RLS-FIRST APPROACH - RLS handles club filtering automatically
  */
 export class SeasonsService extends BaseService {
+  constructor(supabase = getServiceClient()) {
+    super(supabase)
+  }
+
   /**
    * Create a new season
    * Still need club_id for INSERT - RLS will verify user can insert to that club
@@ -79,6 +83,6 @@ export class SeasonsService extends BaseService {
   }
 }
 
-export const seasonsService = new SeasonsService()
+export const seasonsService = new SeasonsService(getServiceClient())
 
 

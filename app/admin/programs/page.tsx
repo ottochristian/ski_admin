@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { ProgramStatus } from '@/lib/programStatus'
 import {
   Card,
@@ -41,6 +41,8 @@ type ProgramWithSubPrograms = Program & {
 
 export default function ProgramsPage() {
   const router = useRouter()
+  const [supabase] = useState(() => createClient())
+
   const { profile, loading: authLoading } = useRequireAdmin()
   const { currentSeason: selectedSeason, loading: seasonLoading } = useSeason()
 

@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useMemo } from 'react'
 import { usePathname, useSearchParams, useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
-import { supabase } from '../supabaseClient'
+import { createClient } from '../supabase/client'
 import { useAuth } from '../auth-context'
 
 /**
@@ -58,6 +58,7 @@ interface SeasonProviderProps {
 }
 
 export function SeasonProvider({ children }: SeasonProviderProps) {
+  const [supabase] = useState(() => createClient())
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const router = useRouter()

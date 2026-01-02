@@ -1,10 +1,15 @@
 import { BaseService, handleSupabaseError, QueryResult } from './base-service'
+import { getServiceClient } from './service-client'
 
 /**
  * Service for sub-program-related database operations
  * PHASE 2: RLS-FIRST APPROACH - RLS handles club filtering automatically
  */
 export class SubProgramsService extends BaseService {
+  constructor(supabase = getServiceClient()) {
+    super(supabase)
+  }
+
   /**
    * Get all sub-programs for a program
    * RLS ensures user can only access sub-programs in their club
@@ -83,6 +88,6 @@ export class SubProgramsService extends BaseService {
   }
 }
 
-export const subProgramsService = new SubProgramsService()
+export const subProgramsService = new SubProgramsService(getServiceClient())
 
 

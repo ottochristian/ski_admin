@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseAdminClient } from '@/lib/supabase-server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/api-auth'
+import { tokenService } from '@/lib/services/token-service'
+import { otpService } from '@/lib/services/otp-service'
+import { notificationService } from '@/lib/services/notification-service'
 
 /**
  * API route to invite a coach by email
@@ -44,214 +47,154 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Normalize email to lowercase
+    const normalizedEmail = email.toLowerCase().trim()
+
     // Check if user already exists
-    const supabaseAdmin = createSupabaseAdminClient()
+    const supabaseAdmin = createAdminClient()
     const { data: existingUser } = await supabaseAdmin.auth.admin.listUsers()
-    const userExists = existingUser?.users?.some((u: { email?: string }) => u.email === email)
+    const userExists = existingUser?.users?.some((u: { email?: string }) => u.email?.toLowerCase() === normalizedEmail)
 
     if (userExists) {
       return NextResponse.json(
-        { error: 'A user with this email already exists' },
+        { error: 'A user with this email already exists. If they need a new invitation, please delete their account first or have them use password reset.' },
         { status: 400 }
       )
     }
 
-    // Build redirect URL for password setup
-    let redirectTo: string
-    if (process.env.NEXT_PUBLIC_APP_URL) {
-      redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/setup-password`
-    } else {
-      // Default to localhost for development
-      redirectTo = 'http://localhost:3000/setup-password'
-    }
+    // Step 1: Create auth user (without sending Supabase's native email)
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email: normalizedEmail,
+      email_confirm: false, // We'll confirm via OTP
+      user_metadata: {
+        first_name: firstName,
+        last_name: lastName,
+        role: 'coach',
+        club_id: profile.club_id
+      }
+    })
 
-    console.log('Inviting coach:', { email, firstName, lastName, redirectTo })
-
-    // Invite user by email
-    let inviteOptions: { redirectTo?: string; data?: Record<string, any> } = {}
-
-    if (redirectTo && redirectTo.startsWith('http')) {
-      inviteOptions.redirectTo = redirectTo
-    }
-
-    // Add metadata for profile creation
-    inviteOptions.data = {
-      first_name: firstName,
-      last_name: lastName,
-      role: 'coach',
-      club_id: profile.club_id,
-    } as Record<string, any>
-
-    const { data: inviteData, error: inviteError } =
-      await supabaseAdmin.auth.admin.inviteUserByEmail(email, inviteOptions)
-
-    if (inviteError) {
-      console.error('Invite error details:', {
-        message: inviteError.message,
-        status: inviteError.status,
-        name: inviteError.name,
-        fullError: JSON.stringify(inviteError, null, 2),
-      })
+    if (authError || !authData.user) {
+      console.error('Error creating auth user:', authError)
       return NextResponse.json(
-        {
-          error: inviteError.message || 'Failed to send invitation',
-          details: inviteError,
-          hint:
-            inviteError.message?.includes('pattern')
-              ? 'Check that redirectTo URL is valid and added to allowed redirect URLs in Supabase dashboard'
-              : undefined,
-        },
-        { status: 400 }
-      )
-    }
-
-    if (!inviteData.user) {
-      return NextResponse.json(
-        { error: 'Failed to create user' },
+        { error: 'Failed to create coach auth user' },
         { status: 500 }
       )
     }
 
-    // Update user metadata with coach info
-    const { error: metadataError } = await supabaseAdmin.auth.admin.updateUserById(
-      inviteData.user.id,
+    const userId = authData.user.id
+
+    // Step 2: Create/upsert profile
+    const { error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .upsert({
+        id: userId,
+        email: normalizedEmail,
+        first_name: firstName,
+        last_name: lastName,
+        role: 'coach',
+        club_id: profile.club_id,
+        email_verified_at: null // Will be set when they verify OTP
+      }, {
+        onConflict: 'id'
+      })
+
+    if (profileError) {
+      console.error('Error creating profile:', profileError)
+      // Clean up auth user if profile creation fails
+      await supabaseAdmin.auth.admin.deleteUser(userId)
+      return NextResponse.json(
+        { error: 'Failed to create coach profile' },
+        { status: 500 }
+      )
+    }
+
+    // Step 3: Coach record is automatically created by database trigger
+    // The trigger 'trigger_ensure_coach_record_on_insert' on the profiles table
+    // automatically creates a coach record when a profile with role='coach' is inserted.
+    // No manual creation needed here!
+
+    // Step 4: Generate secure setup token
+    let setupToken: string
+    try {
+      setupToken = await tokenService.generateSetupToken({
+        email: normalizedEmail,
+        userId,
+        type: 'admin_setup', // Use same type as admin for now
+        clubId: profile.club_id,
+        expiresInHours: 48
+      })
+    } catch (tokenError) {
+      console.error('Error generating setup token:', tokenError)
+      // Clean up
+      await supabaseAdmin.auth.admin.deleteUser(userId)
+      await supabaseAdmin.from('profiles').delete().eq('id', userId)
+      return NextResponse.json(
+        { error: 'Failed to generate setup token' },
+        { status: 500 }
+      )
+    }
+
+    // Step 5: Generate OTP code
+    const otpResult = await otpService.generate(
+      userId,
+      'admin_invitation', // Use same type as admin
+      normalizedEmail
+    )
+
+    if (!otpResult.success || !otpResult.code) {
+      console.error('Error generating OTP:', otpResult.error)
+      // Clean up
+      await supabaseAdmin.auth.admin.deleteUser(userId)
+      await supabaseAdmin.from('profiles').delete().eq('id', userId)
+      return NextResponse.json(
+        { error: 'Failed to generate verification code' },
+        { status: 500 }
+      )
+    }
+
+    // Step 6: Get club name for email
+    const { data: clubData } = await supabaseAdmin
+      .from('clubs')
+      .select('name')
+      .eq('id', profile.club_id)
+      .single()
+
+    const clubName = clubData?.name || 'Ski Club'
+
+    // Step 7: Build secure setup link with token
+    const setupLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/setup-password?token=${setupToken}`
+
+    // Step 8: Send OTP via SendGrid
+    const notificationResult = await notificationService.sendAdminInvitationOTP(
+      normalizedEmail,
+      otpResult.code,
       {
-        user_metadata: {
-          first_name: firstName,
-          last_name: lastName,
-          role: 'coach',
-          club_id: profile.club_id,
-        },
+        firstName,
+        clubName,
+        setupLink,
+        role: 'coach' // Specify this is a coach invitation
       }
     )
 
-    if (metadataError) {
-      console.error('Error updating user metadata:', metadataError)
-    }
-
-    // Create profile for invited coach
-    // First check if profile already exists (might be created by trigger)
-    const { data: existingProfile } = await supabaseAdmin
-      .from('profiles')
-      .select('id, role')
-      .eq('id', inviteData.user.id)
-      .single()
-
-    if (!existingProfile) {
-      // Profile doesn't exist - create it
-      const { error: profileError } = await supabaseAdmin.rpc('create_user_profile', {
-        p_user_id: inviteData.user.id,
-        p_email: email,
-        p_first_name: firstName,
-        p_last_name: lastName,
-        p_role: 'coach',
-        p_club_id: profile.club_id,
+    if (!notificationResult.success) {
+      console.error('Error sending invitation email:', notificationResult.error)
+      // Don't fail the request - OTP is stored, they can try again
+      return NextResponse.json({
+        success: true,
+        message: `Coach created but email failed to send. OTP code: ${otpResult.code} (save this!)`,
+        warning: 'Email delivery failed',
+        code: process.env.NODE_ENV === 'development' ? otpResult.code : undefined,
+        coachId: userId
       })
-
-      if (profileError) {
-        console.error('Error creating profile:', profileError)
-        // Profile creation failed - try to continue anyway, might be created by trigger
-      }
-    } else {
-      // Profile exists - update it to ensure correct role and club_id
-      const { error: updateProfileError } = await supabaseAdmin
-        .from('profiles')
-        .update({
-          role: 'coach',
-          club_id: profile.club_id,
-          first_name: firstName,
-          last_name: lastName,
-          email: email,
-        })
-        .eq('id', inviteData.user.id)
-
-      if (updateProfileError) {
-        console.error('Error updating profile:', updateProfileError)
-      }
     }
 
-    // Verify profile exists before creating coach record
-    const { data: profileCheck } = await supabaseAdmin
-      .from('profiles')
-      .select('id')
-      .eq('id', inviteData.user.id)
-      .single()
-
-    if (!profileCheck) {
-      return NextResponse.json(
-        {
-          error: 'Failed to create profile for coach',
-          details: 'Profile was not created. Please try again or contact support.',
-        },
-        { status: 500 }
-      )
-    }
-
-    // Create or update coach record linked to the profile
-    // Use upsert to handle case where coach record might already exist
-    const { error: coachError } = await supabaseAdmin
-      .from('coaches')
-      .upsert(
-        {
-          profile_id: inviteData.user.id,
-          club_id: profile.club_id,
-          first_name: firstName,
-          last_name: lastName,
-          email: email || null,
-          phone: phone || null,
-        },
-        {
-          onConflict: 'profile_id',
-          ignoreDuplicates: false,
-        }
-      )
-
-    if (coachError) {
-      console.error('Error creating/updating coach record:', coachError)
-      
-      // Check if it's a unique constraint violation on email
-      if (coachError.code === '23505' && coachError.message?.includes('email')) {
-        // Coach record exists with this email but different profile_id
-        // Try to update it
-        const { error: updateError } = await supabaseAdmin
-          .from('coaches')
-          .update({
-            profile_id: inviteData.user.id,
-            club_id: profile.club_id,
-            first_name: firstName,
-            last_name: lastName,
-            phone: phone || null,
-          })
-          .eq('email', email)
-
-        if (updateError) {
-          console.error('Error updating existing coach record:', updateError)
-          return NextResponse.json(
-            {
-              success: true,
-              message: `Invitation sent to ${email}, but there was an error updating the coach record. Please contact support.`,
-              warning: updateError.message,
-            },
-            { status: 200 }
-          )
-        }
-      } else {
-        // Other error
-        return NextResponse.json(
-          {
-            success: true,
-            message: `Invitation sent to ${email}, but there was an error creating the coach record. Please contact support.`,
-            warning: coachError.message,
-          },
-          { status: 200 }
-        )
-      }
-    }
-
+    // Success!
     return NextResponse.json({
       success: true,
-      message: `Invitation sent to ${email}`,
-      coachId: inviteData.user.id,
+      message: `Invitation sent to ${normalizedEmail}`,
+      coachId: userId,
+      code: process.env.NODE_ENV === 'development' ? otpResult.code : undefined
     })
   } catch (error) {
     console.error('Error inviting coach:', error)

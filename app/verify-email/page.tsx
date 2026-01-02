@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { OTPInput } from '@/components/ui/otp-input'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AlertCircle, CheckCircle, Mail } from 'lucide-react'
 
 function VerifyEmailContent() {
+  const [supabase] = useState(() => createClient())
   const router = useRouter()
   const searchParams = useSearchParams()
   const emailFromUrl = searchParams.get('email')
@@ -88,114 +89,17 @@ function VerifyEmailContent() {
         return
       }
 
-      // OTP verified! Update profile to mark email as verified
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ email_verified_at: new Date().toISOString() })
-        .eq('id', user.id)
-
-      if (updateError) {
-        console.error('Error updating profile:', updateError)
-      }
-
-      // Create session for auto-login
-      const sessionResponse = await fetch('/api/auth/create-session-after-verification', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id })
-      })
-
-      const sessionData = await sessionResponse.json()
-
-      if (!sessionResponse.ok || !sessionData.success) {
-        console.error('Failed to create session:', sessionData.error)
-        setSuccess('Email verified! Redirecting to login...')
-        setTimeout(() => {
-          router.push('/login?message=Email verified! You can now log in.')
-        }, 2000)
-        return
-      }
-
-      // Use the token hash to verify and create a session
-      const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
-        token_hash: sessionData.tokenHash,
-        type: sessionData.type
-      })
-
-      if (verifyError) {
-        console.error('Error verifying session token:', verifyError)
-        // Fall back to manual login
-        setSuccess('Email verified! Redirecting to login...')
-        setTimeout(() => {
-          router.push('/login?message=Email verified! You can now log in.')
-        }, 2000)
-        return
-      }
-
-      // Session created successfully!
-      console.log('Session created:', verifyData.session ? 'Yes' : 'No')
-
-      // Get user's profile to determine role and redirect
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role, club_id')
-        .eq('id', user.id)
-        .single()
-
-      if (profileError || !profile) {
-        console.error('Error fetching profile:', profileError)
-        setSuccess('Email verified! Redirecting...')
-        setTimeout(() => {
-          router.push('/')
-        }, 1500)
-        return
-      }
-
-      setSuccess('Email verified! Redirecting to your portal...')
+      // OTP verified successfully!
+      // The server has already:
+      // 1. Confirmed the email in Supabase auth
+      // 2. Created the profile and household (if needed)
       
-      // Small delay for UX, then redirect based on role
-      setTimeout(async () => {
-        if (profile.role === 'system_admin') {
-          router.push('/system-admin')
-        } else if (profile.role === 'admin') {
-          if (profile.club_id) {
-            const { data: club } = await supabase
-              .from('clubs')
-              .select('slug')
-              .eq('id', profile.club_id)
-              .single()
-            
-            if (club?.slug) {
-              router.push(`/clubs/${club.slug}/admin`)
-            } else {
-              router.push('/admin')
-            }
-          } else {
-            router.push('/admin')
-          }
-        } else if (profile.role === 'coach') {
-          router.push('/coach')
-        } else if (profile.role === 'parent') {
-          if (profile.club_id) {
-            const { data: club } = await supabase
-              .from('clubs')
-              .select('slug')
-              .eq('id', profile.club_id)
-              .single()
-            
-            if (club?.slug) {
-              router.push(`/clubs/${club.slug}/parent/dashboard`)
-            } else {
-              router.push('/')
-            }
-          } else {
-            router.push('/')
-          }
-        } else {
-          // Unknown role, redirect to home
-          router.push('/')
-        }
-      }, 1500)
+      setSuccess('✅ Email verified! You can now log in with your credentials.')
+      
+      // Redirect to login page
+      setTimeout(() => {
+        router.push('/login?message=Email verified! Please log in with your credentials.')
+      }, 2000)
     } catch (err) {
       console.error('Verification error:', err)
       setError('An error occurred. Please try again.')

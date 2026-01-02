@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { useRequireAdmin } from '@/lib/auth-context'
 import { useHouseholds } from '@/lib/hooks/use-households'
 import { useQueryClient } from '@tanstack/react-query'
@@ -20,6 +20,8 @@ import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 
 export default function NewAthletePage() {
   const router = useRouter()
+  const [supabase] = useState(() => createClient())
+
   const params = useParams()
   const clubSlug = params.clubSlug as string
   const basePath = `/clubs/${clubSlug}/admin`
@@ -61,31 +63,25 @@ export default function NewAthletePage() {
     }
 
     try {
-      // Get household to ensure it belongs to the club (RLS will enforce this)
-      const householdResult = await supabase
-        .from('households')
-        .select('id')
-        .eq('id', formData.householdId)
-        .single()
-
-      if (householdResult.error || !householdResult.data) {
-        setError('Household not found or access denied')
-        setSaving(false)
-        return
-      }
-
-      // Create athlete - RLS ensures club_id is set correctly
-      const { error: insertError } = await supabase.from('athletes').insert({
-        first_name: formData.firstName,
-        last_name: formData.lastName,
-        date_of_birth: formData.dateOfBirth || null,
-        gender: formData.gender || null,
-        household_id: formData.householdId,
-        club_id: profile.club_id,
+      // Call API to create athlete (uses admin client to bypass RLS for performance)
+      const response = await fetch('/api/athletes/admin-create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          dateOfBirth: formData.dateOfBirth || null,
+          gender: formData.gender || null,
+          householdId: formData.householdId,
+        }),
       })
 
-      if (insertError) {
-        setError(insertError.message)
+      const result = await response.json()
+
+      if (!response.ok) {
+        setError(result.error || 'Failed to create athlete')
         setSaving(false)
         return
       }
@@ -93,7 +89,7 @@ export default function NewAthletePage() {
       // Force refetch to ensure cache is updated before redirect
       await queryClient.refetchQueries({ queryKey: ['athletes'] })
 
-      // Redirect to athletes list (club-aware route)
+      // Redirect to athletes list
       router.push(`${basePath}/athletes`)
     } catch (err) {
       console.error('Error creating athlete:', err)

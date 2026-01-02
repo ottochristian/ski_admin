@@ -3,7 +3,7 @@
 import { useEffect, useState, FormEvent } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { useParentClub } from '@/lib/use-parent-club'
 import {
   Card,
@@ -41,6 +41,8 @@ interface HouseholdData {
 
 export default function ParentProfilePage() {
   const router = useRouter()
+  const [supabase] = useState(() => createClient())
+
   const params = useParams()
   const clubSlug = params.clubSlug as string
   const { profile, household } = useParentClub()

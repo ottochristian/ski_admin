@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/auth-context'
 import {
   DropdownMenu,
@@ -23,6 +23,8 @@ interface ProfileMenuProps {
 
 export function ProfileMenu({ profile }: ProfileMenuProps) {
   const router = useRouter()
+  const [supabase] = useState(() => createClient())
+
   const { signOut } = useAuth()
   const [avatarUrl, setAvatarUrl] = useState<string | null>(profile.avatar_url || null)
   const [initials, setInitials] = useState('')

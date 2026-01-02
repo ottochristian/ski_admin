@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { supabase } from './supabaseClient'
+import { createClient } from './supabase/client'
 import { useAuth } from './auth-context'
 
 export interface Club {
@@ -23,6 +23,7 @@ interface ClubContextType {
 const ClubContext = createContext<ClubContextType | undefined>(undefined)
 
 export function ClubProvider({ children }: { children: ReactNode }) {
+  const [supabase] = useState(() => createClient())
   const [club, setClub] = useState<Club | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

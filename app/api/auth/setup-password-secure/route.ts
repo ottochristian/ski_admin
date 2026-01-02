@@ -1,19 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { tokenService } from '@/lib/services/token-service'
-
-function getSupabaseAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    }
-  )
-}
+import { createAdminClient } from '@/lib/supabase/server'
 
 export async function POST(request: NextRequest) {
   try {
@@ -55,7 +42,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabaseAdmin = getSupabaseAdmin()
+    const supabaseAdmin = createAdminClient()
 
     // Check if token already used
     const isUsed = await tokenService.isTokenUsed(jti, supabaseAdmin)

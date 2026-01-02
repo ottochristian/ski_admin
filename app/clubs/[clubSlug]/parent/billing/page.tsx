@@ -5,7 +5,7 @@ import { useSearchParams, useParams } from 'next/navigation'
 import { useParentClub } from '@/lib/use-parent-club'
 import { useCurrentSeason } from '@/lib/contexts/season-context'
 import { useOrdersByHousehold } from '@/lib/hooks/use-orders'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import {
   Card,
   CardContent,
@@ -36,6 +36,8 @@ type Order = {
 
 export default function BillingPage() {
   const searchParams = useSearchParams()
+  const [supabase] = useState(() => createClient())
+
   const params = useParams()
   const clubSlug = params.clubSlug as string
   const { clubId, household, loading: authLoading } = useParentClub()

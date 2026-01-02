@@ -2,7 +2,7 @@
 
 import { useEffect, useState, FormEvent } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import {
   Card,
   CardHeader,
@@ -30,6 +30,8 @@ type SubProgram = {
 
 export default function EditSubProgramPage() {
   const router = useRouter()
+  const [supabase] = useState(() => createClient())
+
   const params = useParams()
   const subProgramId = params.subProgramId as string | undefined
 

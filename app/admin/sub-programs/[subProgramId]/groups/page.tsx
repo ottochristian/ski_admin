@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { ProgramStatus } from '@/lib/programStatus'
 import {
   Card,
@@ -35,6 +35,8 @@ type Group = {
 
 export default function GroupsPage() {
   const router = useRouter()
+  const [supabase] = useState(() => createClient())
+
   const params = useParams()
   const subProgramId = params.subProgramId as string
 

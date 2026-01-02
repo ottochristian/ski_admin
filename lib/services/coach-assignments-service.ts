@@ -1,10 +1,15 @@
 import { BaseService, handleSupabaseError, QueryResult } from './base-service'
+import { getServiceClient } from './service-client'
 
 /**
  * Service for coach assignment-related database operations
  * PHASE 2: RLS-FIRST APPROACH - RLS handles club filtering automatically
  */
 export class CoachAssignmentsService extends BaseService {
+  constructor(supabase = getServiceClient()) {
+    super(supabase)
+  }
+
   /**
    * Get assignments for a coach in a season
    * RLS automatically filters by club
@@ -76,6 +81,6 @@ export class CoachAssignmentsService extends BaseService {
   }
 }
 
-export const coachAssignmentsService = new CoachAssignmentsService()
+export const coachAssignmentsService = new CoachAssignmentsService(getServiceClient())
 
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { ProgramStatus } from '@/lib/programStatus'
 import {
   Card,
@@ -36,6 +36,8 @@ type Group = {
 
 export default function GroupsPage() {
   const router = useRouter()
+  const [supabase] = useState(() => createClient())
+
   const params = useParams() as { clubSlug?: string; subProgramId?: string }
   const clubSlug = params.clubSlug as string
   const basePath = `/clubs/${clubSlug}/admin`

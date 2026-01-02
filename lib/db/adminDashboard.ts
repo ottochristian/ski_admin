@@ -1,5 +1,5 @@
 // lib/db/adminDashboard.ts
-import { supabase } from "@/lib/supabaseClient"
+import { createClient } from '@/lib/supabase/client'
 import { ProgramStatus } from "@/lib/programStatus"
 import { RecentRegistration } from "@/lib/types"
 

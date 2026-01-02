@@ -21,11 +21,33 @@ export const supabase = createClient(
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      // Add timeout to auth requests
       storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+      storageKey: 'supabase.auth.token',
+      flowType: 'implicit' // More reliable than pkce for localhost
     },
   }
 )
+
+// Create ephemeral client for login operations (no session persistence)
+// This avoids hanging issues with Safari and token refresh
+export const createEphemeralClient = () => {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Supabase credentials not configured')
+  }
+  
+  return createClient(
+    supabaseUrl,
+    supabaseAnonKey,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+        storage: undefined
+      }
+    }
+  )
+}
 
 // Export a helper to check if client is properly configured
 export const isSupabaseConfigured = () => {

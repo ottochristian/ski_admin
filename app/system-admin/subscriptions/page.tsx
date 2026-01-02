@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { useSystemAdmin } from '@/lib/use-system-admin'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -55,6 +55,7 @@ const TIERS: SubscriptionTier[] = [
 ]
 
 export default function SubscriptionsPage() {
+  const [supabase] = useState(() => createClient())
   const { profile, loading: authLoading } = useSystemAdmin()
   const [loading, setLoading] = useState(true)
   const [clubSubscriptions, setClubSubscriptions] = useState<ClubSubscription[]>([])
@@ -98,7 +99,7 @@ export default function SubscriptionsPage() {
     }
 
     loadSubscriptions()
-  }, [authLoading])
+  }, [authLoading, supabase])
 
   if (authLoading || loading) {
     return (

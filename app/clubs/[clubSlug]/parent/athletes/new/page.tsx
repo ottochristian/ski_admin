@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { useParentClub } from '@/lib/use-parent-club'
 import { useQueryClient } from '@tanstack/react-query'
 import {
@@ -19,6 +19,8 @@ import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 
 export default function NewAthletePage() {
   const params = useParams()
+  const [supabase] = useState(() => createClient())
+
   const router = useRouter()
   const queryClient = useQueryClient()
   const clubSlug = params.clubSlug as string

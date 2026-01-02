@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 import { useState, useEffect, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { useClub } from '@/lib/club-context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 export default function SignupPage() {
   const router = useRouter()
+  const [supabase] = useState(() => createClient())
+
   const { club } = useClub()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -74,17 +76,18 @@ export default function SignupPage() {
       
       try {
         // Add timeout wrapper for signUp call
+        // NOTE: We do NOT set emailRedirectTo here because we use our custom OTP verification
+        // system instead of Supabase's native email confirmation
         const signUpPromise = supabase.auth.signUp({
           email,
           password,
           options: {
-            emailRedirectTo: `${window.location.origin}/login?confirmed=true`,
-            // Temporarily remove metadata to see if that's causing the issue
-            // data: {
-            //   first_name: firstName || '',
-            //   last_name: lastName || '',
-            //   profile_pending: 'true',
-            // },
+            // Do NOT add emailRedirectTo - it triggers Supabase native emails
+            // Our OTP system handles verification instead
+            data: {
+              first_name: firstName || '',
+              last_name: lastName || '',
+            },
           },
         })
         
@@ -188,9 +191,11 @@ export default function SignupPage() {
         console.warn('store_signup_data function may not exist:', err)
       }
 
-      // Check if email confirmation is required
-      if (!authData.session) {
-        // Email confirmation is required - Generate and send OTP
+      // ALWAYS send OTP for verification (regardless of Supabase confirmation settings)
+      // This gives us full control over the verification flow
+      console.log('[SIGNUP] Sending OTP verification email...')
+      {
+        // Send OTP verification email
         try {
           const otpResponse = await fetch('/api/otp/send', {
             method: 'POST',
@@ -207,6 +212,7 @@ export default function SignupPage() {
           })
 
           const otpData = await otpResponse.json()
+          console.log('[SIGNUP] OTP send result:', { ok: otpResponse.ok, success: otpData.success })
 
           if (!otpResponse.ok || !otpData.success) {
             console.error('Failed to send verification email:', otpData.error)
@@ -215,6 +221,7 @@ export default function SignupPage() {
             return
           }
 
+          console.log('[SIGNUP] Redirecting to verify-email page')
           // Success! Redirect to email verification page
           router.push(`/verify-email?email=${encodeURIComponent(email.toLowerCase())}`)
         } catch (err) {
@@ -226,6 +233,18 @@ export default function SignupPage() {
         return
       }
 
+      // ========================================================================
+      // NOTE: The code below (lines 240-350) is LEGACY and will be removed
+      // after Supabase email confirmations are disabled.
+      //
+      // NEW FLOW (Option A):
+      // 1. Signup → Store in signup_data → Send OTP
+      // 2. Verify OTP → Create profile + household
+      // 3. Login → Access portal
+      //
+      // This block will be deleted after testing confirms the new flow works.
+      // ========================================================================
+      /*
       // Session exists - email confirmation is disabled, proceed with profile creation immediately
       // Wait a moment for user to be committed to auth.users
       await new Promise(resolve => setTimeout(resolve, 1000))
@@ -331,6 +350,8 @@ export default function SignupPage() {
         // Redirect to login - profile will be created when they log in
         router.push('/login?message=Account created! You can now log in.')
       }
+      */
+      // END LEGACY CODE - TO BE REMOVED
     } catch (err) {
       console.error('Signup error:', err)
       setError(err instanceof Error ? err.message : 'An error occurred')

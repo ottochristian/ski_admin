@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 import { useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,6 +14,8 @@ import { Loader2, ArrowLeft } from 'lucide-react'
 
 export default function ForgotPasswordPage() {
   const router = useRouter()
+  const [supabase] = useState(() => createClient())
+
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)

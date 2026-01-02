@@ -1,10 +1,15 @@
 import { BaseService, handleSupabaseError, QueryResult } from './base-service'
+import { getServiceClient } from './service-client'
 
 /**
  * Service for registration-related database operations
  * PHASE 2: RLS-FIRST APPROACH - RLS handles club filtering automatically
  */
 export class RegistrationsService extends BaseService {
+  constructor(supabase = getServiceClient()) {
+    super(supabase)
+  }
+
   /**
    * Get all registrations for the authenticated user's club
    * RLS automatically filters by club - no manual filtering needed!
@@ -119,6 +124,6 @@ export class RegistrationsService extends BaseService {
   }
 }
 
-export const registrationsService = new RegistrationsService()
+export const registrationsService = new RegistrationsService(getServiceClient())
 
 

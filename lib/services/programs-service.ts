@@ -1,4 +1,5 @@
 import { BaseService, handleSupabaseError, QueryResult } from './base-service'
+import { getServiceClient } from './service-client'
 import { Program } from '../types'
 
 /**
@@ -10,6 +11,10 @@ import { Program } from '../types'
  * - Simpler, more secure, less error-prone
  */
 export class ProgramsService extends BaseService {
+  constructor(supabase = getServiceClient()) {
+    super(supabase)
+  }
+
   /**
    * Get all programs for the authenticated user's club
    * RLS automatically filters by club - no manual filtering needed!
@@ -184,6 +189,6 @@ export class ProgramsService extends BaseService {
   }
 }
 
-export const programsService = new ProgramsService()
+export const programsService = new ProgramsService(getServiceClient())
 
 

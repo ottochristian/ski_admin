@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { useSystemAdmin } from '@/lib/use-system-admin'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -30,6 +30,7 @@ type Club = {
 
 export default function ClubsPage() {
   const router = useRouter()
+  const [supabase] = useState(() => createClient())
   const { profile, loading: authLoading } = useSystemAdmin()
   const [loading, setLoading] = useState(true)
   const [clubs, setClubs] = useState<Club[]>([])
@@ -96,7 +97,7 @@ export default function ClubsPage() {
     }
 
     loadClubs()
-  }, [authLoading])
+  }, [authLoading, supabase])
 
   if (authLoading || loading) {
     return (

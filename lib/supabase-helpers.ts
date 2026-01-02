@@ -1,4 +1,5 @@
-import { supabase } from './supabaseClient'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { getServiceClient } from './services/service-client'
 
 /**
  * Standard helper to add club_id filter to any Supabase query
@@ -47,8 +48,16 @@ export function withClubData<T extends Record<string, any>>(
 
 /**
  * Get current season for a club
+ * 
+ * @param clubId - The club ID
+ * @param supabaseClient - Optional Supabase client (defaults to service client)
  */
-export async function getCurrentSeason(clubId: string) {
+export async function getCurrentSeason(
+  clubId: string,
+  supabaseClient?: SupabaseClient
+) {
+  const supabase = supabaseClient || getServiceClient()
+  
   const { data, error } = await supabase
     .from('seasons')
     .select('id')

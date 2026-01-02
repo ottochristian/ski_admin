@@ -1,22 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/server'
 import { otpService, OTPType } from '@/lib/services/otp-service'
 import { notificationService } from '@/lib/services/notification-service'
 import { dbRateLimiter } from '@/lib/services/rate-limiter-db'
-
-// Helper to get Supabase admin client
-function getSupabaseAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    }
-  )
-}
 
 // Helper to get client IP address
 function getClientIP(request: NextRequest): string {
@@ -29,9 +15,12 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { userId, type, contact, metadata } = body
+    
+    console.log('[OTP SEND] Request received:', { userId, type, contact, metadata })
 
     // Validate required fields
     if (!userId || !type || !contact) {
+      console.log('[OTP SEND] Missing required fields')
       return NextResponse.json(
         { error: 'Missing required fields: userId, type, contact' },
         { status: 400 }
@@ -108,15 +97,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Send OTP based on type
+    console.log('[OTP SEND] Sending notification for type:', type)
     let notificationResult
     
     switch (type) {
       case 'email_verification':
+        console.log('[OTP SEND] Calling sendEmailVerificationOTP...')
         notificationResult = await notificationService.sendEmailVerificationOTP(
           contact,
           otpResult.code,
           metadata?.firstName
         )
+        console.log('[OTP SEND] Email verification OTP sent:', notificationResult)
         break
         
       case 'phone_verification':
@@ -155,7 +147,10 @@ export async function POST(request: NextRequest) {
         })
     }
 
+    console.log('[OTP SEND] Notification result:', { success: notificationResult.success, error: notificationResult.error })
+
     if (!notificationResult.success) {
+      console.log('[OTP SEND] Notification failed!', notificationResult.error)
       return NextResponse.json(
         { error: notificationResult.error || 'Failed to send OTP' },
         { status: 500 }
@@ -175,6 +170,7 @@ export async function POST(request: NextRequest) {
       responseData._devNote = 'Code included for development only'
     }
 
+    console.log('[OTP SEND] Success! Returning response')
     return NextResponse.json(responseData)
   } catch (error) {
     console.error('OTP send error:', error)

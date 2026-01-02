@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from './supabaseClient'
+import { createClient } from './supabase/client'
 import { useClub } from './club-context'
 import { Profile } from './types'
 
@@ -15,6 +15,7 @@ import { Profile } from './types'
  */
 export function useAdminClub() {
   const router = useRouter()
+  const [supabase] = useState(() => createClient())
   const { club } = useClub()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -77,7 +78,7 @@ export function useAdminClub() {
     }
 
     checkAuthAndGetClub()
-  }, [router, club])
+  }, [router, club, supabase])
 
   return {
     profile,

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { useRequireAdmin } from '@/lib/auth-context'
 import { useHouseholds } from '@/lib/hooks/use-households'
 import { athletesService } from '@/lib/services/athletes-service'
@@ -21,6 +21,7 @@ import Link from 'next/link'
 import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 
 export default function NewAthletePage() {
+  const [supabase] = useState(() => createClient())
   const router = useRouter()
   const queryClient = useQueryClient()
   const { profile, loading: authLoading } = useRequireAdmin()

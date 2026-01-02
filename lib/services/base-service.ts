@@ -1,11 +1,24 @@
-import { supabase } from '../supabaseClient'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**
  * Base service class with common database operations
  * All service classes should extend this for consistent patterns
+ * 
+ * ARCHITECTURE: Services now use dependency injection for the Supabase client.
+ * This allows the same service to work in different contexts:
+ * - Client components: Pass browser client from createClient()
+ * - API routes: Pass admin client from createAdminClient()
+ * - Server components: Pass server client from createClient()
+ * - Tests: Pass mock client
+ * 
+ * This is proper dependency injection and makes services testable and flexible.
  */
 export class BaseService {
-  protected supabase = supabase
+  protected supabase: SupabaseClient
+
+  constructor(supabaseClient: SupabaseClient) {
+    this.supabase = supabaseClient
+  }
 
   /**
    * Standard error handler - can be overridden in subclasses

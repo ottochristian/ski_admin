@@ -1,9 +1,9 @@
 'use client'
 export const dynamic = 'force-dynamic'
 
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 
 /**
  * Legacy dashboard route - redirects users to their appropriate club-aware dashboard
@@ -11,67 +11,26 @@ import { supabase } from '@/lib/supabaseClient'
  */
 export default function DashboardPage() {
   const router = useRouter()
+  const [supabase] = useState(() => createClient())
 
   useEffect(() => {
     async function redirect() {
-      // Get current user
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser()
-
-      if (userError || !user) {
-        router.push('/login')
-        return
-      }
-
-      // Get profile to determine role and club
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('role, club_id')
-        .eq('id', user.id)
-        .single()
-
-      if (!profileData) {
-        router.push('/login')
-        return
-      }
-
-      // Redirect based on role
-      if (profileData.role === 'system_admin') {
-        router.push('/system-admin')
-        return
-      }
-
-      if (profileData.role === 'admin') {
-        // Get club slug for club-aware route
-        if (profileData.club_id) {
-          const { data: club } = await supabase
-            .from('clubs')
-            .select('slug')
-            .eq('id', profileData.club_id)
-            .single()
-
-          if (club?.slug) {
-            router.push(`/clubs/${club.slug}/admin`)
-            return
-          }
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          router.push('/login')
+          return
         }
-        // Fallback to legacy route if no club
-        router.push('/admin')
-        return
-      }
 
-      if (profileData.role === 'coach') {
-        router.push('/coach')
-        return
-      }
+        // Get profile to determine role
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role, club_id')
+          .eq('id', user.id)
+          .single()
 
-      if (profileData.role === 'parent') {
-        // Parents MUST have a club_id
-        if (!profileData.club_id) {
-          // This shouldn't happen, but handle it gracefully
-          router.push('/login?error=no_club')
+        if (!profile) {
+          router.push('/login')
           return
         }
 
@@ -79,27 +38,39 @@ export default function DashboardPage() {
         const { data: club } = await supabase
           .from('clubs')
           .select('slug')
-          .eq('id', profileData.club_id)
+          .eq('id', profile.club_id)
           .single()
 
-        if (club?.slug) {
-          router.push(`/clubs/${club.slug}/parent/dashboard`)
+        if (!club) {
+          router.push('/login')
           return
         }
+
+        // Redirect to appropriate portal
+        if (profile.role === 'system_admin') {
+          router.push('/system-admin')
+        } else if (profile.role === 'parent') {
+          router.push(`/clubs/${club.slug}/parent/dashboard`)
+        } else if (profile.role === 'coach') {
+          router.push(`/clubs/${club.slug}/coach/dashboard`)
+        } else if (profile.role === 'club_admin') {
+          router.push(`/clubs/${club.slug}/admin`)
+        } else {
+          router.push('/login')
+        }
+      } catch (error) {
+        console.error('Redirect error:', error)
+        router.push('/login')
       }
-
-      // Unknown role or error - go to login
-      router.push('/login')
     }
-
     redirect()
-  }, [router])
+  }, [router, supabase])
 
-  // Show loading while redirecting
   return (
     <div className="flex min-h-screen items-center justify-center">
       <div className="text-center">
-        <p className="text-muted-foreground">Redirecting...</p>
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600 mx-auto" />
+        <p className="mt-4 text-gray-600">Redirecting...</p>
       </div>
     </div>
   )

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import {
   Card,
   CardContent,
@@ -50,6 +50,7 @@ interface Registration {
 }
 
 export default function RegistrationsPage() {
+  const [supabase] = useState(() => createClient())
   const params = useParams()
   const clubSlug = params.clubSlug as string
   const { profile, loading: authLoading } = useRequireAdmin()
@@ -141,7 +142,7 @@ export default function RegistrationsPage() {
 
     loadParentEmails()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [registrationsKey])
+  }, [registrationsKey, supabase])
 
   // Transform data to match our interface and add parent emails
   const registrations: Registration[] = registrationsData.map((reg: any) => {

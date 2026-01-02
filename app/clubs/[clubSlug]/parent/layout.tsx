@@ -4,7 +4,7 @@ import type React from 'react'
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { useParentClub } from '@/lib/use-parent-club'
 import { CartProvider } from '@/lib/cart-context'
 import { SeasonProvider } from '@/lib/contexts/season-context'
@@ -79,6 +79,7 @@ function ParentLayoutContent({
   children: React.ReactNode
   clubSlug: string
 }) {
+  const [supabase] = useState(() => createClient())
   const router = useRouter()
   const { profile, household, loading, error } = useParentClub()
 

@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { User } from '@supabase/supabase-js'
-import { supabase } from './supabaseClient'
+import { createClient } from './supabase/client'
 import { Profile } from './types'
 import { useQueryClient } from '@tanstack/react-query'
 
@@ -19,6 +19,17 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 /**
+ * Helper to wrap Supabase calls with timeout
+ * Prevents indefinite hanging when Supabase client becomes unresponsive
+ */
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operation: string): Promise<T> {
+  const timeoutPromise = new Promise<T>((_, reject) => 
+    setTimeout(() => reject(new Error(`${operation} timeout after ${timeoutMs}ms`)), timeoutMs)
+  )
+  return Promise.race([promise, timeoutPromise])
+}
+
+/**
  * Unified authentication provider for the entire application
  * Handles user authentication, profile loading, and session management
  * Replaces duplicate auth logic across layouts and hooks
@@ -27,15 +38,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const queryClient = useQueryClient()
+  const [supabase] = useState(() => createClient())
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const initialLoadRef = useRef(true)
+  const loadAuthInProgressRef = useRef(false) // Prevent concurrent auth loads
+  const lastAuthEventRef = useRef<{ event: string; timestamp: number } | null>(null) // Track events
 
   // Load user and profile
   // showLoader: set to false when refreshing token (user already authenticated)
   const loadAuth = async (showLoader = true) => {
+    // Prevent concurrent loads - if one is in progress, skip
+    if (loadAuthInProgressRef.current) {
+      return
+    }
+
+    loadAuthInProgressRef.current = true
+
     try {
       if (showLoader) {
         setLoading(true)
@@ -44,8 +65,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // First check if we have a session (localStorage only, no network call)
       // This prevents "Auth session missing!" errors when user is not logged in
-      const { data: { session } } = await supabase.auth.getSession()
-      
+      const { data: { session } } = await withTimeout(
+        supabase.auth.getSession(),
+        10000,
+        'getSession'
+      )
+
       if (!session) {
         // No session - user is not logged in, this is normal for login page
         setUser(null)
@@ -54,11 +79,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return
       }
 
+
       // Get current user (validates session with server)
       const {
         data: { user: currentUser },
         error: userError,
-      } = await supabase.auth.getUser()
+      } = await withTimeout(
+        supabase.auth.getUser(),
+        10000,
+        'getUser'
+      )
+
 
       if (userError) {
         console.error('Auth error:', userError)
@@ -77,12 +108,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUser(currentUser)
 
+
       // Load profile
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', currentUser.id)
-        .single()
+      const { data: profileData, error: profileError } = await withTimeout(
+        supabase.from('profiles').select('*').eq('id', currentUser.id).single(),
+        10000,
+        'profile query'
+      )
+
 
       if (profileError) {
         console.error('Profile error:', profileError)
@@ -106,6 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         return newProfile
       })
+
       setError(null)
       
       // Only set loading to false if we explicitly showed the loader
@@ -114,10 +148,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (err) {
       console.error('Auth load error:', err)
-      setError('An error occurred during authentication')
+      
+      // If it's a timeout, show specific error
+      const errorMessage = err instanceof Error && err.message.includes('timeout')
+        ? 'Authentication request timed out. Please refresh the page.'
+        : 'An error occurred during authentication'
+      
+      setError(errorMessage)
       setUser(null)
       setProfile(null)
       setLoading(false)
+      
+      // If timeout on non-login page, redirect to login
+      if (err instanceof Error && err.message.includes('timeout') && pathname !== '/login') {
+        router.push('/login')
+      }
+    } finally {
+      // Always clear the in-progress flag
+      loadAuthInProgressRef.current = false
     }
   }
 
@@ -132,6 +180,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const now = Date.now()
+      
+
+      // Debounce duplicate events within 5 seconds
+      if (lastAuthEventRef.current && 
+          lastAuthEventRef.current.event === event && 
+          now - lastAuthEventRef.current.timestamp < 5000) {
+        return
+      }
+
+      lastAuthEventRef.current = { event, timestamp: now }
+
       if (event === 'SIGNED_OUT' || !session) {
         setUser(null)
         setProfile(null)
@@ -147,7 +207,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else if (event === 'SIGNED_IN') {
         // If this is the initial load, show the loader (first time sign in)
         // After initial load, this is a tab switch - silent refresh (no loader)
-        await loadAuth(initialLoadRef.current)
+        
+        // Only reload auth on SIGNED_IN if this is the initial load
+        // Subsequent SIGNED_IN events (which shouldn't happen) will be ignored
+        if (initialLoadRef.current) {
+          await loadAuth(true)
+        } else {
+        }
       } else if (event === 'TOKEN_REFRESHED') {
         // Silent refresh on token refresh (no loader, user already authenticated)
         await loadAuth(false)
@@ -188,10 +254,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       queryClient.clear()
       
       await supabase.auth.signOut()
+      
       setUser(null)
       setProfile(null)
       
-      router.push('/login')
+      // Force a hard navigation to login page
+      // Using window.location.href instead of router.push() for reliable full page reload
+      // This ensures all client-side state is cleared and server components re-render
+      window.location.href = '/login'
     } catch (err) {
       console.error('Sign out error:', err)
       throw err

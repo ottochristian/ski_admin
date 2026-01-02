@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import {
   Dialog,
   DialogContent,
@@ -46,6 +46,8 @@ interface CreateClubAdminDialogProps {
 
 export function CreateClubAdminDialog({ clubs, onSuccess }: CreateClubAdminDialogProps) {
   const { toast: showToast } = useToast()
+  const [supabase] = useState(() => createClient())
+
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('invite')

@@ -1,18 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-function getSupabaseAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    }
-  )
-}
+import { createAdminClient } from '@/lib/supabase/server'
 
 /**
  * Create a session for a user after email verification
@@ -30,7 +17,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabaseAdmin = getSupabaseAdmin()
+    const supabaseAdmin = createAdminClient()
 
     // Get user's email
     const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId)

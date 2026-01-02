@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import {
   Card,
   CardContent,
@@ -58,6 +58,8 @@ const getAssignmentDisplayName = (assignment: CoachAssignment): string => {
 
 export default function CoachDashboardPage() {
   const router = useRouter()
+  const [supabase] = useState(() => createClient())
+
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

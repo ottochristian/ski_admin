@@ -1,10 +1,12 @@
-import { supabase } from './supabaseClient'
+import { createClient } from './supabase/client'
 
 /**
  * Get the user's club from their profile
  */
 export async function getUserClub() {
   try {
+    const supabase = createClient()
+    
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -36,6 +38,8 @@ export async function getUserClub() {
  * Get club by slug
  */
 export async function getClubBySlug(slug: string) {
+  const supabase = createClient()
+  
   const { data, error } = await supabase
     .from('clubs')
     .select('id, name, slug, logo_url, primary_color')

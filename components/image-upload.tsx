@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -27,6 +27,7 @@ export function ImageUpload({
   accept = 'image/*',
   label,
 }: ImageUploadProps) {
+  const [supabase] = useState(() => createClient())
   const { toast: showToast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isUploadingRef = useRef(false)

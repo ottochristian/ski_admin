@@ -2,7 +2,7 @@
 
 import { useEffect, useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import {
   Card,
   CardContent,
@@ -33,6 +33,8 @@ interface CoachData {
 
 export default function CoachProfilePage() {
   const router = useRouter()
+  const [supabase] = useState(() => createClient())
+
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)

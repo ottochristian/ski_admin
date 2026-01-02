@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { useRequireAdmin } from '@/lib/auth-context'
 import {
   Card,
@@ -19,6 +19,8 @@ import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 
 export default function NewCoachPage() {
   const router = useRouter()
+  const [supabase] = useState(() => createClient())
+
   const { profile, loading: authLoading } = useRequireAdmin()
 
   const [saving, setSaving] = useState(false)

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { supabase } from './supabaseClient'
+import { createClient } from './supabase/client'
 import { useAdminClub } from './use-admin-club'
 
 export type Season = {
@@ -21,6 +21,7 @@ export type Season = {
  * Reads selected season from URL params or localStorage
  */
 export function useAdminSeason() {
+  const [supabase] = useState(() => createClient())
   const { clubId, loading: clubLoading, error: clubError } = useAdminClub()
   const searchParams = useSearchParams()
   const [loading, setLoading] = useState(true)
@@ -86,7 +87,7 @@ export function useAdminSeason() {
     }
 
     loadSeasons()
-  }, [clubId, clubLoading, clubError, searchParams])
+  }, [clubId, clubLoading, clubError, searchParams, supabase])
 
   return {
     currentSeason,

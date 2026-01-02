@@ -7,10 +7,12 @@ import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 import { Snowflake, Trophy, Users } from "lucide-react"
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 
 export default function HomePage() {
   const router = useRouter()
+  const [supabase] = useState(() => createClient())
+
   const [checkingAuth, setCheckingAuth] = useState(true)
 
   useEffect(() => {

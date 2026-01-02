@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { ProgramStatus } from '@/lib/programStatus'
 import {
   Card,
@@ -34,6 +34,8 @@ type SubProgram = {
 
 export default function SubProgramsPage() {
   const router = useRouter()
+  const [supabase] = useState(() => createClient())
+
   const params = useParams() as { programId?: string }
   const rawProgramId = params.programId
   const programId =

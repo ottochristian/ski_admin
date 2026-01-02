@@ -1,10 +1,15 @@
 import { BaseService, handleSupabaseError, QueryResult } from './base-service'
+import { getServiceClient } from './service-client'
 
 /**
  * Service for household-related database operations
  * PHASE 2: RLS-FIRST APPROACH - RLS handles club filtering automatically
  */
 export class HouseholdsService extends BaseService {
+  constructor(supabase = getServiceClient()) {
+    super(supabase)
+  }
+
   /**
    * Get all households for the authenticated user's club
    * RLS automatically filters by club - no manual filtering needed!
@@ -33,6 +38,6 @@ export class HouseholdsService extends BaseService {
   }
 }
 
-export const householdsService = new HouseholdsService()
+export const householdsService = new HouseholdsService(getServiceClient())
 
 

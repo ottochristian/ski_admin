@@ -1,42 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/server'
 import { otpService } from '@/lib/services/otp-service'
 import { notificationService } from '@/lib/services/notification-service'
 import { tokenService } from '@/lib/services/token-service'
 
-// This route requires service role key for admin operations
-function getSupabaseAdmin() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error('Missing Supabase configuration. Check NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables.')
-  }
-
-  return createClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  })
-}
-
 export async function POST(request: NextRequest) {
   try {
     // Initialize Supabase admin client
-    let supabaseAdmin
-    try {
-      supabaseAdmin = getSupabaseAdmin()
-    } catch (configError) {
-      console.error('Supabase configuration error:', configError)
-      return NextResponse.json(
-        { 
-          error: 'Server configuration error',
-          details: configError instanceof Error ? configError.message : 'Missing environment variables'
-        },
-        { status: 500 }
-      )
-    }
+    const supabaseAdmin = createAdminClient()
 
     // Verify the requester is a system admin
     const authHeader = request.headers.get('authorization')

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { OTPInput } from '@/components/ui/otp-input'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -42,7 +42,9 @@ function SetupPasswordContent() {
   // Validate token on mount
   useEffect(() => {
     async function validateSetupToken() {
+
       if (!tokenFromUrl) {
+
         setTokenError('No setup token provided. Please use the link from your invitation email.')
         setValidatingToken(false)
         setTokenValid(false)

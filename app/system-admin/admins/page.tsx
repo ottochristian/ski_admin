@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { useSystemAdmin } from '@/lib/use-system-admin'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -46,6 +46,8 @@ type Club = {
 
 export default function AdminsPage() {
   const { profile, loading: authLoading } = useSystemAdmin()
+  const [supabase] = useState(() => createClient())
+
   const [loading, setLoading] = useState(true)
   const [admins, setAdmins] = useState<ClubAdmin[]>([])
   const [clubs, setClubs] = useState<Club[]>([])

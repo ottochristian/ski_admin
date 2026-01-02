@@ -1,10 +1,15 @@
 import { BaseService, handleSupabaseError, QueryResult } from './base-service'
+import { getServiceClient } from './service-client'
 import { Profile } from '../types'
 
 /**
  * Service for profile-related database operations
  */
 export class ProfilesService extends BaseService {
+  constructor(supabase = getServiceClient()) {
+    super(supabase)
+  }
+
   /**
    * Get profile by user ID
    */
@@ -49,6 +54,6 @@ export class ProfilesService extends BaseService {
   }
 }
 
-export const profilesService = new ProfilesService()
+export const profilesService = new ProfilesService(getServiceClient())
 
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from './supabaseClient'
+import { createClient } from './supabase/client'
 import { Profile } from './types'
 import { isRecoverySystemAdmin } from './system-admin-recovery'
 
@@ -17,6 +17,7 @@ import { isRecoverySystemAdmin } from './system-admin-recovery'
  */
 export function useSystemAdmin() {
   const router = useRouter()
+  const [supabase] = useState(() => createClient())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -79,7 +80,7 @@ export function useSystemAdmin() {
     }
 
     checkAuth()
-  }, [router])
+  }, [router, supabase])
 
   return {
     profile,

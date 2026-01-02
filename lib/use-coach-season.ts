@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { supabase } from './supabaseClient'
+import { createClient } from './supabase/client'
 import { useClub } from './club-context'
 
 export type Season = {

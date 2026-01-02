@@ -6,7 +6,7 @@ import { useCart } from '@/lib/cart-context'
 import { useParentClub } from '@/lib/use-parent-club'
 import { useCurrentSeason } from '@/lib/contexts/season-context'
 import { useRegistrations } from '@/lib/hooks/use-registrations'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import {
   Card,
   CardContent,
@@ -20,6 +20,8 @@ import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 
 export default function CartPage() {
   const params = useParams()
+  const [supabase] = useState(() => createClient())
+
   const router = useRouter()
   const clubSlug = params.clubSlug as string
   const { items, removeItem, clearCart, total } = useCart()

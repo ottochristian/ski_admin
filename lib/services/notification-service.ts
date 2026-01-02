@@ -151,14 +151,18 @@ class NotificationService {
       firstName?: string
       clubName: string
       setupLink: string
+      role?: 'admin' | 'coach' // Add role parameter
     }
   ): Promise<NotificationResult> {
-    const message = this.buildAdminInvitationMessage(code, options)
+    const role = options.role || 'admin'
+    const message = this.buildAdminInvitationMessage(code, { ...options, role })
+    
+    const roleLabel = role === 'coach' ? 'Coach' : 'Admin'
     
     return this.send({
       method: 'email',
       recipient: email,
-      subject: `Admin Invitation - ${options.clubName}`,
+      subject: `${roleLabel} Invitation - ${options.clubName}`,
       message,
       code,
       link: options.setupLink,
@@ -324,14 +328,17 @@ The Ski Admin Team
    */
   private buildAdminInvitationMessage(
     code: string,
-    options: { firstName?: string; clubName: string; setupLink: string }
+    options: { firstName?: string; clubName: string; setupLink: string; role?: 'admin' | 'coach' }
   ): string {
     const greeting = options.firstName ? `Hi ${options.firstName},` : 'Hello,'
+    const role = options.role || 'admin'
+    const roleLabel = role === 'coach' ? 'a coach' : 'an administrator'
+    const actionText = role === 'coach' ? 'Start coaching' : 'Start managing your club'
     
     return `
 ${greeting}
 
-You've been invited to join ${options.clubName} as an administrator!
+You've been invited to join ${options.clubName} as ${roleLabel}!
 
 Your verification code is: ${code}
 
@@ -339,7 +346,7 @@ To complete your setup:
 1. Visit: ${options.setupLink}
 2. Enter the code above
 3. Create your password
-4. Start managing your club!
+4. ${actionText}!
 
 This code will expire in 24 hours.
 

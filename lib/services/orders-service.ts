@@ -1,10 +1,15 @@
 import { BaseService, handleSupabaseError, QueryResult } from './base-service'
+import { getServiceClient } from './service-client'
 
 /**
  * Service for order-related database operations
  * PHASE 2: RLS-FIRST APPROACH - RLS handles club filtering automatically
  */
 export class OrdersService extends BaseService {
+  constructor(supabase = getServiceClient()) {
+    super(supabase)
+  }
+
   /**
    * Get orders for a household in a season
    * RLS automatically filters by club
@@ -43,6 +48,6 @@ export class OrdersService extends BaseService {
   }
 }
 
-export const ordersService = new OrdersService()
+export const ordersService = new OrdersService(getServiceClient())
 
 

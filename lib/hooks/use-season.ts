@@ -3,7 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'next/navigation'
 import { useState, useEffect } from 'react'
-import { supabase } from '../supabaseClient'
+import { createClient } from './supabase/client'
 import { useAuth } from '../auth-context'
 import { seasonsService } from '../services/seasons-service'
 

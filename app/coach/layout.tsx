@@ -3,7 +3,7 @@
 import type React from 'react'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { CoachSidebar } from '@/components/coach-sidebar'
 import { UnifiedSeasonSelector } from '@/components/unified-season-selector'
 import { ProfileMenu } from '@/components/profile-menu'
@@ -16,6 +16,7 @@ export default function CoachLayout({
 }: {
   children: React.ReactNode
 }) {
+  const [supabase] = useState(() => createClient())
   const router = useRouter()
   const { club, loading: clubLoading } = useClub()
   const [isLoading, setIsLoading] = useState(true)

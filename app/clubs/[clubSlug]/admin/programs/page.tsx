@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { ProgramStatus } from '@/lib/programStatus'
 import {
   Card,
@@ -49,6 +49,8 @@ type ProgramWithSubPrograms = Program & {
 
 export default function ProgramsPage() {
   const router = useRouter()
+  const [supabase] = useState(() => createClient())
+
   const params = useParams()
   const clubSlug = params.clubSlug as string
   const { profile, loading: authLoading } = useRequireAdmin()

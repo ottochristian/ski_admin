@@ -1,13 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabase/client'
 import { useSystemAdmin } from '@/lib/use-system-admin'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Building2, Users, UserCheck, TrendingUp } from 'lucide-react'
 
 export default function SystemAdminDashboard() {
   const { profile, loading: authLoading } = useSystemAdmin()
+  const [supabase] = useState(() => createClient())
+
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     totalClubs: 0,
