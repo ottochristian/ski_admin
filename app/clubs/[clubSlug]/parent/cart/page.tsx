@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { useCart } from '@/lib/cart-context'
 import { useParentClub } from '@/lib/use-parent-club'
 import { useCurrentSeason } from '@/lib/contexts/season-context'
@@ -180,6 +181,13 @@ export default function CartPage() {
 
       // 6. Clear cart and redirect to billing page
       clearCart()
+      
+      // Invalidate cache to show new order and registrations
+      if (household && currentSeason) {
+        await queryClient.invalidateQueries({ queryKey: ['orders', household.id, currentSeason.id] })
+        await queryClient.invalidateQueries({ queryKey: ['registrations', currentSeason.id] })
+      }
+      
       router.push(`/clubs/${clubSlug}/parent/billing?order=${order.id}`)
     } catch (err) {
       console.error('Error during checkout:', err)

@@ -2,6 +2,7 @@
 
 import { useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useSystemAdmin } from '@/lib/use-system-admin'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,6 +17,7 @@ import { useToast } from '@/components/ui/use-toast'
 
 export default function NewClubPage() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { profile, loading: authLoading } = useSystemAdmin()
   const { toast: showToast } = useToast()
   const [loading, setLoading] = useState(false)
@@ -115,6 +117,9 @@ export default function NewClubPage() {
         description: `Club "${name}" created successfully`,
       })
 
+      // Invalidate clubs cache to show new club
+      await queryClient.invalidateQueries({ queryKey: ['clubs'] })
+      
       // Redirect to clubs list
       router.push('/system-admin/clubs')
     } catch (err) {
