@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/client'
 import { ProgramStatus } from "@/lib/programStatus"
 import { RecentRegistration } from "@/lib/types"
 
+const supabase = createClient()
+
 export async function fetchAdminStats() {
   const [
     { count: athletesCount },
@@ -32,10 +34,13 @@ export async function fetchRecentRegistrations(limit = 5) {
       id,
       status,
       created_at,
-      athletes (
+      athletes!inner (
         first_name,
         last_name,
-        families ( family_name )
+        household_id,
+        households (
+          primary_email
+        )
       ),
       sub_programs (
         name,
@@ -46,7 +51,28 @@ export async function fetchRecentRegistrations(limit = 5) {
     .order("created_at", { ascending: false })
     .limit(limit)
 
-  if (error) throw error
+  if (error) {
+    console.error('Error fetching recent registrations:', error)
+    throw error
+  }
 
-  return (data || []) as RecentRegistration[]
+  // Transform data to match RecentRegistration type
+  return (data || []).map((reg: any) => ({
+    id: reg.id,
+    status: reg.status,
+    created_at: reg.created_at,
+    athletes: reg.athletes ? {
+      first_name: reg.athletes.first_name,
+      last_name: reg.athletes.last_name,
+      households: reg.athletes.households ? {
+        primary_email: reg.athletes.households.primary_email,
+      } : null,
+    } : null,
+    sub_programs: reg.sub_programs ? {
+      name: reg.sub_programs.name,
+      programs: reg.sub_programs.programs ? {
+        name: reg.sub_programs.programs.name,
+      } : null,
+    } : null,
+  })) as RecentRegistration[]
 }

@@ -10,10 +10,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface AddAthleteFormProps {
-  familyId: string;
+  householdId: string;
+  clubId: string;
 }
 
-export function AddAthleteForm({ familyId }: AddAthleteFormProps) {
+export function AddAthleteForm({ householdId, clubId }: AddAthleteFormProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +38,8 @@ export function AddAthleteForm({ familyId }: AddAthleteFormProps) {
 
     try {
       const { error } = await supabase.from("athletes").insert({
-        family_id: familyId,
+        household_id: householdId,
+        club_id: clubId,
         first_name: formData.firstName,
         last_name: formData.lastName,
         date_of_birth: formData.dateOfBirth,

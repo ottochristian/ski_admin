@@ -58,30 +58,27 @@ export function SendMessageForm({ userId, programs }: SendMessageFormProps) {
       if (messageError) throw messageError;
 
       // Get recipients based on target
-      let recipientsQuery = supabase
-        .from("families")
-        .select("profile_id");
+      // First get athlete household_ids, then get user_ids from household_guardians
+      let householdIds: string[] = [];
 
       if (targetType === "group") {
-        // Get families with athletes in this group
+        // Get household_ids for athletes in this group
         const { data: registrations } = await supabase
           .from("registrations")
-          .select("athletes(family_id)")
+          .select("athletes(household_id)")
           .eq("group_id", selectedGroup);
         
-        const familyIds = [...new Set(registrations?.map((r: any) => r.athletes?.family_id).filter(Boolean))];
-        recipientsQuery = recipientsQuery.in("id", familyIds);
+        householdIds = [...new Set(registrations?.map((r: any) => r.athletes?.household_id).filter(Boolean))];
       } else if (targetType === "sub_program") {
-        // Get families with athletes in this sub-program
+        // Get household_ids for athletes in this sub-program
         const { data: registrations } = await supabase
           .from("registrations")
-          .select("athletes(family_id)")
+          .select("athletes(household_id)")
           .eq("sub_program_id", selectedSubProgram);
         
-        const familyIds = [...new Set(registrations?.map((r: any) => r.athletes?.family_id).filter(Boolean))];
-        recipientsQuery = recipientsQuery.in("id", familyIds);
+        householdIds = [...new Set(registrations?.map((r: any) => r.athletes?.household_id).filter(Boolean))];
       } else if (targetType === "program") {
-        // Get families with athletes in any sub-program of this program
+        // Get household_ids for athletes in any sub-program of this program
         const { data: subPrograms } = await supabase
           .from("sub_programs")
           .select("id")
@@ -91,20 +88,28 @@ export function SendMessageForm({ userId, programs }: SendMessageFormProps) {
         
         const { data: registrations } = await supabase
           .from("registrations")
-          .select("athletes(family_id)")
+          .select("athletes(household_id)")
           .in("sub_program_id", subProgramIds);
         
-        const familyIds = [...new Set(registrations?.map((r: any) => r.athletes?.family_id).filter(Boolean))];
-        recipientsQuery = recipientsQuery.in("id", familyIds);
+        householdIds = [...new Set(registrations?.map((r: any) => r.athletes?.household_id).filter(Boolean))];
       }
 
-      const { data: families } = await recipientsQuery;
+      // Get user_ids from household_guardians for these households
+      let userIds: string[] = [];
+      if (householdIds.length > 0) {
+        const { data: guardians } = await supabase
+          .from("household_guardians")
+          .select("user_id")
+          .in("household_id", householdIds);
+        
+        userIds = [...new Set(guardians?.map((g: any) => g.user_id).filter(Boolean))] || [];
+      }
 
       // Insert message recipients
-      if (families && families.length > 0) {
-        const recipients = families.map((family: any) => ({
+      if (userIds.length > 0) {
+        const recipients = userIds.map((userId: string) => ({
           message_id: message.id,
-          recipient_id: family.profile_id,
+          recipient_id: userId,
         }));
 
         const { error: recipientsError } = await supabase

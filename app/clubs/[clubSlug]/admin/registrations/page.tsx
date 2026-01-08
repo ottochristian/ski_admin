@@ -80,15 +80,11 @@ export default function RegistrationsPage() {
         return
       }
 
-      // Extract unique household_ids and family_ids
+      // Extract unique household_ids
       const householdIds = new Set<string>()
-      const familyIds = new Set<string>()
       registrationsData.forEach((reg: any) => {
         if (reg.athletes?.household_id) {
           householdIds.add(reg.athletes.household_id)
-        }
-        if (reg.athletes?.family_id) {
-          familyIds.add(reg.athletes.family_id)
         }
       })
 
@@ -110,33 +106,6 @@ export default function RegistrationsPage() {
         }
       }
 
-      // Fetch parent emails for families via profiles
-      if (familyIds.size > 0) {
-        const { data: families } = await supabase
-          .from('families')
-          .select('id, profile_id')
-          .in('id', Array.from(familyIds))
-
-        if (families) {
-          const profileIds = families.map((f: any) => f.profile_id).filter(Boolean)
-          if (profileIds.length > 0) {
-            const { data: profiles } = await supabase
-              .from('profiles')
-              .select('id, email')
-              .in('id', profileIds)
-
-            if (profiles) {
-              const profileEmailMap = new Map(profiles.map((p: any) => [p.id, p.email]))
-              families.forEach((f: any) => {
-                if (f.id && f.profile_id && profileEmailMap.has(f.profile_id)) {
-                  emailMap.set(f.id, profileEmailMap.get(f.profile_id)!)
-                }
-              })
-            }
-          }
-        }
-      }
-
       setParentEmailMap(emailMap)
     }
 
@@ -148,10 +117,7 @@ export default function RegistrationsPage() {
   const registrations: Registration[] = registrationsData.map((reg: any) => {
     const athlete = reg.athletes
     const householdId = athlete?.household_id
-    const familyId = athlete?.family_id
-    const parentEmail = (householdId && parentEmailMap.get(householdId)) ||
-                       (familyId && parentEmailMap.get(familyId)) ||
-                       null
+    const parentEmail = householdId ? parentEmailMap.get(householdId) || null : null
 
     return {
       ...reg,

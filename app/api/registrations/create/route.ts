@@ -39,22 +39,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Club ID required' }, { status: 400 })
     }
 
-    // 3. Verify user is linked to household or family
+    // 3. Verify user is linked to household
     const { data: householdGuardian } = await adminSupabase
       .from('household_guardians')
       .select('household_id')
       .eq('user_id', user.id)
       .maybeSingle()
 
-    // Get family_id if using legacy families table
-    const { data: family } = await adminSupabase
-      .from('families')
-      .select('id')
-      .eq('profile_id', user.id)
-      .maybeSingle()
-
-    if (!householdGuardian && !family) {
-      log.warn('User attempted to create registration without household or family link', {
+    if (!householdGuardian) {
+      log.warn('User attempted to create registration without household link', {
         userId: user.id,
       })
       return NextResponse.json(
@@ -65,21 +58,19 @@ export async function POST(request: NextRequest) {
 
     // 4. Verify user owns all athletes they're trying to register
     const athleteIds = registrations.map((r: any) => r.athlete_id)
-    const householdId = householdGuardian?.household_id
-    const familyId = family?.id
+    const householdId = householdGuardian.household_id
 
     log.info('Checking athlete ownership', {
       userId: user.id,
       athleteIds,
       householdId,
-      familyId,
       clubId,
     })
 
     // First, let's check what athletes actually exist and their current links
     const { data: allRequestedAthletes, error: fetchError } = await adminSupabase
       .from('athletes')
-      .select('id, household_id, family_id, club_id')
+      .select('id, household_id, club_id')
       .in('id', athleteIds)
 
     if (fetchError) {
@@ -98,19 +89,17 @@ export async function POST(request: NextRequest) {
       foundAthletes: allRequestedAthletes?.map((a: any) => ({
         id: a.id,
         household_id: a.household_id,
-        family_id: a.family_id,
         club_id: a.club_id,
       })),
     })
 
-    // Verify all athletes belong to user's household or family AND the correct club
+    // Verify all athletes belong to user's household AND the correct club
     const matchingAthletes = allRequestedAthletes?.filter((athlete: any) => {
-      const householdMatch = householdId && athlete.household_id === householdId
-      const familyMatch = familyId && athlete.family_id === familyId
+      const householdMatch = athlete.household_id === householdId
       const clubMatch = athlete.club_id === clubId
       
-      // Athlete must belong to user's household/family AND the correct club
-      return clubMatch && (householdMatch || familyMatch)
+      // Athlete must belong to user's household AND the correct club
+      return clubMatch && householdMatch
     }) || []
 
     log.info('Athlete ownership check result', {
@@ -118,7 +107,6 @@ export async function POST(request: NextRequest) {
       foundCount: allRequestedAthletes?.length || 0,
       matchingCount: matchingAthletes.length,
       householdId,
-      familyId,
       matchingAthleteIds: matchingAthletes.map((a: any) => a.id),
     })
 
@@ -135,28 +123,22 @@ export async function POST(request: NextRequest) {
         expectedCount: athleteIds.length,
         foundCount: matchingAthletes.length,
         householdId,
-        familyId,
         athleteDetails: allRequestedAthletes?.map((a: any) => ({
           id: a.id,
           household_id: a.household_id,
-          family_id: a.family_id,
           matchesHousehold: a.household_id === householdId,
-          matchesFamily: a.family_id === familyId,
         })),
       })
       
       // Include debug info in development
       const debugInfo = process.env.NODE_ENV === 'development' ? {
         userHouseholdId: householdId,
-        userFamilyId: familyId,
         userClubId: clubId,
         athleteDetails: allRequestedAthletes?.map((a: any) => ({
           athlete_id: a.id,
           athlete_household_id: a.household_id,
-          athlete_family_id: a.family_id,
           athlete_club_id: a.club_id,
-          matchesHousehold: householdId ? a.household_id === householdId : false,
-          matchesFamily: familyId ? a.family_id === familyId : false,
+          matchesHousehold: a.household_id === householdId,
           matchesClub: a.club_id === clubId,
         })),
       } : undefined
@@ -207,5 +189,7 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+
 
 

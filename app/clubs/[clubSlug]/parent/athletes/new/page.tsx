@@ -15,7 +15,15 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
+import { toast } from 'sonner'
 
 export default function NewAthletePage() {
   const params = useParams()
@@ -35,6 +43,7 @@ export default function NewAthletePage() {
     dateOfBirth: '',
     gender: '',
   })
+
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -59,80 +68,30 @@ export default function NewAthletePage() {
         return
       }
 
-      // PHASE 2: RLS ensures user can only create athletes in their household
-      // Check if user is linked to household (RLS will enforce this)
-      const { data: guardianCheck, error: guardianError } = await supabase
-        .from('household_guardians')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('household_id', household.id)
-        .maybeSingle()
+      // Use SECURITY DEFINER function to create athlete (bypasses RLS issues)
+      const { data: athleteId, error: createError } = await supabase
+        .rpc('create_athlete_for_parent', {
+          p_user_id: user.id as any, // Cast to UUID for PostgreSQL function
+          p_first_name: formData.firstName,
+          p_last_name: formData.lastName,
+          p_household_id: household.id,
+          p_club_id: clubId,
+          p_date_of_birth: formData.dateOfBirth || null,
+          p_gender: formData.gender || null,
+        })
 
-      // If no guardian link exists, try to create it
-      if (!guardianCheck && !guardianError) {
-        console.log(
-          'No household_guardians entry found, creating one...'
-        )
-        const { error: createGuardianError } = await supabase
-          .from('household_guardians')
-          .insert([
-            {
-              household_id: household.id,
-              user_id: user.id,
-              is_primary: true,
-            },
-          ])
-
-        if (createGuardianError) {
-          console.error(
-            'Failed to create household_guardians entry:',
-            createGuardianError
-          )
-          // Continue anyway - might work with families fallback
-        }
-      }
-
-      // Check legacy families table as fallback
-      if (!guardianCheck) {
-        const { data: familyCheck } = await supabase
-          .from('families')
-          .select('id')
-          .eq('profile_id', user.id)
-          .eq('id', household.id)
-          .maybeSingle()
-
-        if (!familyCheck) {
-          setError(
-            'You are not linked to this household. Please contact support.'
-          )
-          setLoading(false)
-          return
-        }
-      }
-
-      // Create athlete - RLS ensures club_id and household_id are correct
-      const { error: insertError } = await supabase.from('athletes').insert({
-        first_name: formData.firstName,
-        last_name: formData.lastName,
-        date_of_birth: formData.dateOfBirth || null,
-        gender: formData.gender || null,
-        household_id: household.id,
-        club_id: clubId,
-      })
-
-      if (insertError) {
-        setError(insertError.message)
+      if (createError) {
+        console.error('Athlete creation error:', createError)
+        setError(createError.message)
         setLoading(false)
         return
       }
 
-      // Force refetch to ensure cache is updated before redirect
-      // Invalidate athletes cache to show new athlete immediately
+      // Athlete created successfully - redirect to athletes list
+      // Waivers will be handled during program registration (cart/checkout)
       await queryClient.invalidateQueries({ queryKey: ['athletes'] })
-      if (formData.householdId) {
-        await queryClient.invalidateQueries({ queryKey: ['athletes', 'household', formData.householdId] })
-      }
       router.push(`/clubs/${clubSlug}/parent/athletes`)
+      toast.success(`${formData.firstName} ${formData.lastName} has been added to your household!`)
     } catch (err) {
       console.error('Error creating athlete:', err)
       setError('Failed to create athlete')
@@ -165,6 +124,7 @@ export default function NewAthletePage() {
       </div>
     )
   }
+
 
   return (
     <div className="flex flex-col gap-6">
@@ -225,15 +185,23 @@ export default function NewAthletePage() {
             </div>
 
             <div>
-              <Label htmlFor="gender">Gender</Label>
-              <Input
-                id="gender"
-                value={formData.gender}
-                onChange={(e) =>
-                  setFormData({ ...formData, gender: e.target.value })
+              <Label htmlFor="gender">Gender <span className="text-muted-foreground">(Optional)</span></Label>
+              <Select
+                value={formData.gender || undefined}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, gender: value })
                 }
-                placeholder="e.g., M, F, Other"
-              />
+              >
+                <SelectTrigger id="gender">
+                  <SelectValue placeholder="Select gender" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Male">Male</SelectItem>
+                  <SelectItem value="Female">Female</SelectItem>
+                  <SelectItem value="Non-binary">Non-binary</SelectItem>
+                  <SelectItem value="Prefer not to say">Prefer not to say</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex gap-2">

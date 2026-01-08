@@ -10,11 +10,14 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { Plus, CheckCircle, XCircle, Clock, FileText } from 'lucide-react'
 import { useRequireAdmin } from '@/lib/auth-context'
 import { useAthletes } from '@/lib/hooks/use-athletes'
+import { useCurrentSeason } from '@/lib/contexts/season-context'
 import { AdminPageHeader } from '@/components/admin-page-header'
 import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
+import { createClient } from '@/lib/supabase/client'
+import { useState, useEffect } from 'react'
 
 interface Registration {
   id: string
@@ -51,6 +54,7 @@ export default function AthletesPage() {
   const clubSlug = params.clubSlug as string
   const { profile, loading: authLoading } = useRequireAdmin()
   const basePath = `/clubs/${clubSlug}/admin`
+  const [supabase] = useState(() => createClient())
 
   // PHASE 2: RLS handles club filtering automatically - no clubQuery needed!
   const {
@@ -59,6 +63,45 @@ export default function AthletesPage() {
     error,
     refetch,
   } = useAthletes()
+
+  // Get current season for waiver checks
+  const currentSeason = useCurrentSeason()
+
+  // Track waiver compliance status for each athlete
+  const [waiverStatus, setWaiverStatus] = useState<Record<string, boolean>>({})
+  const [loadingWaivers, setLoadingWaivers] = useState(false)
+
+  // Check waiver status for all athletes
+  useEffect(() => {
+    async function checkWaiverCompliance() {
+      if (athletes.length === 0 || !currentSeason?.id) {
+        setWaiverStatus({})
+        return
+      }
+
+      setLoadingWaivers(true)
+      const status: Record<string, boolean> = {}
+
+      try {
+        for (const athlete of athletes) {
+          const { data, error } = await supabase.rpc('has_signed_required_waivers', {
+            p_athlete_id: athlete.id,
+            p_season_id: currentSeason.id,
+          })
+          status[athlete.id] = data === true && !error
+        }
+      } catch (err) {
+        console.error('Error checking waiver compliance:', err)
+      } finally {
+        setWaiverStatus(status)
+        setLoadingWaivers(false)
+      }
+    }
+
+    if (athletes.length > 0 && currentSeason?.id) {
+      checkWaiverCompliance()
+    }
+  }, [athletes, currentSeason?.id])
 
   // Show loading state
   if (authLoading || isLoading) {
@@ -215,6 +258,26 @@ export default function AthletesPage() {
                           </span>
                         )}
 
+                        {/* Waiver Compliance Tag */}
+                        {loadingWaivers ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+                            <Clock className="h-3 w-3 animate-spin" />
+                            Checking...
+                          </span>
+                        ) : currentSeason?.id ? (
+                          waiverStatus[athlete.id] === true ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
+                              <CheckCircle className="h-3 w-3" />
+                              Waivers Signed
+                            </span>
+                          ) : waiverStatus[athlete.id] === false ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">
+                              <XCircle className="h-3 w-3" />
+                              Waivers Required
+                            </span>
+                          ) : null
+                        ) : null}
+
                         {/* No Registrations Message */}
                         {(!athlete.registrations || athlete.registrations.length === 0) && (
                           <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
@@ -240,5 +303,7 @@ export default function AthletesPage() {
     </div>
   )
 }
+
+
 
 

@@ -117,7 +117,7 @@ export function BulkRaceRegistrationForm({
                             {athlete.first_name} {athlete.last_name}
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            {athlete.families?.family_name}
+                            {athlete.households?.primary_email || 'N/A'}
                           </p>
                           {athlete.ussa_number && (
                             <p className="text-xs text-muted-foreground">

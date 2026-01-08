@@ -10,9 +10,10 @@ import { Textarea } from "@/components/ui/textarea";
 
 interface FamilySetupFormProps {
   userId: string;
+  clubId: string;
 }
 
-export function FamilySetupForm({ userId }: FamilySetupFormProps) {
+export function FamilySetupForm({ userId, clubId }: FamilySetupFormProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,19 +37,46 @@ export function FamilySetupForm({ userId }: FamilySetupFormProps) {
     const supabase = createBrowserSupabaseClient();
 
     try {
-      const { error } = await supabase.from("families").insert({
-        profile_id: userId,
-        family_name: formData.familyName,
-        address_line1: formData.addressLine1,
-        address_line2: formData.addressLine2 || null,
-        city: formData.city,
-        state: formData.state,
-        zip_code: formData.zipCode,
-        emergency_contact_name: formData.emergencyContactName,
-        emergency_contact_phone: formData.emergencyContactPhone,
-      });
+      // 1. Get user's email from profile for primary_email
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('email')
+        .eq('id', userId)
+        .single()
 
-      if (error) throw error;
+      if (!profile) {
+        throw new Error('Profile not found')
+      }
+
+      // 2. Create household
+      const { data: householdData, error: householdError } = await supabase
+        .from('households')
+        .insert({
+          club_id: clubId,
+          primary_email: profile.email,
+          address_line1: formData.addressLine1,
+          address_line2: formData.addressLine2 || null,
+          city: formData.city,
+          state: formData.state,
+          zip_code: formData.zipCode,
+          emergency_contact_name: formData.emergencyContactName,
+          emergency_contact_phone: formData.emergencyContactPhone,
+        })
+        .select()
+        .single()
+
+      if (householdError) throw householdError
+
+      // 3. Link user to household via household_guardians
+      const { error: guardianError } = await supabase
+        .from('household_guardians')
+        .insert({
+          household_id: householdData.id,
+          user_id: userId,
+          is_primary: true,
+        })
+
+      if (guardianError) throw guardianError
 
       router.push("/dashboard");
       router.refresh();
@@ -62,14 +90,16 @@ export function FamilySetupForm({ userId }: FamilySetupFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-2">
-        <Label htmlFor="familyName">Family Name</Label>
+        <Label htmlFor="familyName">Household Name (Optional)</Label>
         <Input
           id="familyName"
-          required
           value={formData.familyName}
           onChange={(e) => setFormData({ ...formData, familyName: e.target.value })}
           placeholder="The Smith Family"
         />
+        <p className="text-xs text-muted-foreground">
+          This is optional and for your reference only.
+        </p>
       </div>
 
       <div className="space-y-4">

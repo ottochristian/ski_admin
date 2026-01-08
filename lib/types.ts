@@ -39,8 +39,8 @@ export interface RecentRegistration {
   athletes?: {
     first_name?: string
     last_name?: string
-    families?: {
-      family_name?: string
+    households?: {
+      primary_email?: string | null
     } | null
   } | null
   sub_programs?: {

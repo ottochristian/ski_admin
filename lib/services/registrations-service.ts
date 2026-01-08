@@ -24,7 +24,7 @@ export class RegistrationsService extends BaseService {
       amount_paid,
       created_at,
       season_id,
-      athletes(id, first_name, last_name, date_of_birth, household_id, family_id),
+      athletes(id, first_name, last_name, date_of_birth, household_id),
       sub_programs(name, program_id, programs(id, name))
     `)
 
@@ -121,6 +121,40 @@ export class RegistrationsService extends BaseService {
       data: totalRevenue,
       error: null,
     }
+  }
+
+  /**
+   * Get registrations for a specific athlete
+   * RLS automatically filters by club
+   */
+  async getAthleteRegistrations(athleteId: string): Promise<QueryResult<any[]>> {
+    const result = await this.supabase
+      .from('registrations')
+      .select(`
+        id,
+        athlete_id,
+        sub_program_id,
+        status,
+        payment_status,
+        amount_paid,
+        created_at,
+        season_id,
+        sub_programs(
+          name,
+          program_id,
+          programs(id, name)
+        ),
+        seasons(
+          id,
+          name,
+          start_date,
+          end_date
+        )
+      `)
+      .eq('athlete_id', athleteId)
+      .order('created_at', { ascending: false })
+
+    return handleSupabaseError(result)
   }
 }
 
