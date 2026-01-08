@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { useParentClub } from '@/lib/use-parent-club'
 import { useCurrentSeason } from '@/lib/contexts/season-context'
 import { usePrograms } from '@/lib/hooks/use-programs'
@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Plus, ShoppingCart } from 'lucide-react'
 import { ProgramStatus } from '@/lib/programStatus'
 import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
+import { toast } from 'sonner'
 
 type Program = {
   id: string
@@ -43,6 +44,7 @@ type ProgramWithSubPrograms = Program & {
 
 export default function ParentProgramsPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const clubSlug = params.clubSlug as string
   const {
     clubId,
@@ -74,11 +76,16 @@ export default function ParentProgramsPage() {
   // Use stable athlete IDs instead of athletes array to avoid infinite loops
   const athleteIds = athletes?.map((a) => a.id).join(',') || ''
   useEffect(() => {
-    if (athletes && athletes.length > 0 && !selectedAthleteId) {
+    // Check if athleteId is in URL params (from athlete detail page)
+    const athleteIdFromUrl = searchParams.get('athleteId')
+    if (athleteIdFromUrl && athletes?.some(a => a.id === athleteIdFromUrl)) {
+      setSelectedAthleteId(athleteIdFromUrl)
+    } else if (athletes && athletes.length > 0 && !selectedAthleteId) {
+      // Default to first athlete if no athlete selected and no URL param
       setSelectedAthleteId(athletes[0].id)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [athleteIds, selectedAthleteId])
+  }, [athleteIds, selectedAthleteId, searchParams])
 
   const handleAddToCart = (
     subProgram: SubProgram,
@@ -86,17 +93,17 @@ export default function ParentProgramsPage() {
     athleteId: string
   ) => {
     if (!athleteId) {
-      alert('Please select an athlete first')
+      toast.error('Please select an athlete first')
       return
     }
 
     const athlete = athletes?.find((a) => a.id === athleteId)
     if (!athlete) {
-      alert('Athlete not found')
+      toast.error('Athlete not found')
       return
     }
 
-    addItem({
+    const cartItem = {
       id: `${subProgram.id}-${athleteId}`, // Temporary ID for cart
       athlete_id: athleteId,
       athlete_name: `${athlete.first_name} ${athlete.last_name}`,
@@ -104,7 +111,29 @@ export default function ParentProgramsPage() {
       sub_program_name: subProgram.name,
       program_name: program.name,
       price: subProgram.registration_fee ?? 0,
-    })
+    }
+
+    const wasAdded = addItem(cartItem)
+
+    // Show success toast only if item was actually added
+    if (wasAdded) {
+      toast.success(
+        `${athlete.first_name} ${athlete.last_name} added to cart`,
+        {
+          description: `${program.name} - ${subProgram.name}`,
+          duration: 3000,
+        }
+      )
+    } else {
+      // Item already in cart - show different message
+      toast.info(
+        `${athlete.first_name} ${athlete.last_name} is already in cart`,
+        {
+          description: `${program.name} - ${subProgram.name}`,
+          duration: 2000,
+        }
+      )
+    }
   }
 
   const isLoading = authLoading || programsLoading

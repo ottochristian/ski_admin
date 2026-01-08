@@ -16,8 +16,35 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ImageUpload } from '@/components/image-upload'
-import { useToast } from '@/components/ui/use-toast'
-import { ArrowLeft } from 'lucide-react'
+import { toast } from 'sonner'
+import { ArrowLeft, UserPlus, X, Mail, CheckCircle2, RefreshCw } from 'lucide-react'
+import {
+  useHouseholdGuardians,
+  usePendingGuardianInvitations,
+  useInviteGuardian,
+  useRemoveGuardian,
+  useCancelGuardianInvitation,
+  useResendGuardianInvitation,
+} from '@/lib/hooks/use-household-guardians'
+import { Badge } from '@/components/ui/badge'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Separator } from '@/components/ui/separator'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { InlineLoading } from '@/components/ui/loading-states'
 
 interface ProfileData {
   id: string
@@ -46,10 +73,29 @@ export default function ParentProfilePage() {
   const params = useParams()
   const clubSlug = params.clubSlug as string
   const { profile, household } = useParentClub()
-  const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  // Guardian management hooks
+  const { data: guardians = [], isLoading: guardiansLoading } = useHouseholdGuardians(household?.id)
+  const { data: pendingInvitations = [], isLoading: invitationsLoading } = usePendingGuardianInvitations(household?.id)
+  const inviteGuardian = useInviteGuardian()
+  const removeGuardian = useRemoveGuardian()
+  const cancelInvitation = useCancelGuardianInvitation()
+  const resendInvitation = useResendGuardianInvitation()
+  
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false)
+  
+  // Check if current user is primary guardian
+  const isPrimaryGuardian = guardians.some(
+    (g) => g.user_id === profile?.id && g.is_primary
+  )
+  
+  // Current guardian count (including pending invitations)
+  const guardianCount = guardians.length + pendingInvitations.length
+  const canInvite = isPrimaryGuardian && guardianCount < 3
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -64,9 +110,11 @@ export default function ParentProfilePage() {
     emergencyContactPhone: '',
     avatarUrl: '',
   })
+  const [isInitialized, setIsInitialized] = useState(false)
 
   useEffect(() => {
-    if (profile) {
+    // Only initialize once when profile/household data first becomes available
+    if (profile && !isInitialized) {
       setFormData({
         firstName: profile.first_name || '',
         lastName: profile.last_name || '',
@@ -82,8 +130,13 @@ export default function ParentProfilePage() {
         avatarUrl: profile.avatar_url || '',
       })
       setLoading(false)
+      setIsInitialized(true)
+    } else if (!profile) {
+      setLoading(false)
     }
-  }, [profile, household])
+    // Only depend on the actual ID values, not the entire objects
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id, household?.id, isInitialized])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -145,8 +198,7 @@ export default function ParentProfilePage() {
         throw householdError
       }
 
-      toast({
-        title: 'Profile updated',
+      toast.success('Profile updated', {
         description: 'Your profile has been updated successfully.',
       })
 
@@ -394,6 +446,292 @@ export default function ParentProfilePage() {
               </Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      {/* Household Guardians Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Household Guardians</CardTitle>
+              <CardDescription>
+                Manage secondary guardians for your household. Maximum of 3 guardians total.
+              </CardDescription>
+            </div>
+            {canInvite && (
+              <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm">
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Invite Guardian
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Invite Secondary Guardian</DialogTitle>
+                    <DialogDescription>
+                      Enter the email address of the person you want to invite as a secondary guardian.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="inviteEmail">Email Address</Label>
+                      <Input
+                        id="inviteEmail"
+                        type="email"
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                        placeholder="guardian@example.com"
+                        required
+                      />
+                    </div>
+                    {inviteGuardian.isError && (
+                      <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                        {inviteGuardian.error instanceof Error
+                          ? inviteGuardian.error.message
+                          : 'Failed to send invitation'}
+                      </div>
+                    )}
+                    <div className="flex gap-2 justify-end">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setIsInviteDialogOpen(false)
+                          setInviteEmail('')
+                        }}
+                        disabled={inviteGuardian.isPending}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={async () => {
+                          if (!inviteEmail.trim()) return
+                          
+                          try {
+                            await inviteGuardian.mutateAsync(inviteEmail.trim())
+                            toast.success('Invitation sent!', {
+                              description: `An invitation email has been sent to ${inviteEmail.trim()}`,
+                            })
+                            setInviteEmail('')
+                            setIsInviteDialogOpen(false)
+                          } catch (err) {
+                            // Error is handled by the error state
+                          }
+                        }}
+                        disabled={inviteGuardian.isPending || !inviteEmail.trim()}
+                      >
+                        {inviteGuardian.isPending ? 'Sending...' : 'Send Invitation'}
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {guardiansLoading || invitationsLoading ? (
+            <InlineLoading message="Loading guardians..." />
+          ) : (
+            <div className="space-y-4">
+              {/* Current Guardians */}
+              {guardians.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold mb-3">Current Guardians</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {guardians.map((guardian) => {
+                        const guardianProfile = guardian.profiles
+                        const isCurrentUser = guardian.user_id === profile?.id
+                        const canRemove = isPrimaryGuardian && !guardian.is_primary && !isCurrentUser
+
+                        return (
+                          <TableRow key={guardian.id}>
+                            <TableCell>
+                              {guardianProfile?.first_name || guardianProfile?.last_name
+                                ? `${guardianProfile.first_name || ''} ${guardianProfile.last_name || ''}`.trim()
+                                : 'Unknown'}
+                              {isCurrentUser && (
+                                <span className="ml-2 text-xs text-muted-foreground">(You)</span>
+                              )}
+                            </TableCell>
+                            <TableCell>{guardianProfile?.email || 'N/A'}</TableCell>
+                            <TableCell>
+                              {guardian.is_primary ? (
+                                <Badge variant="default">Primary</Badge>
+                              ) : (
+                                <Badge variant="secondary">Secondary</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {canRemove && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={async () => {
+                                    if (
+                                      confirm(
+                                        `Are you sure you want to remove ${guardianProfile?.email} as a guardian?`
+                                      )
+                                    ) {
+                                      try {
+                                        await removeGuardian.mutateAsync(guardian.id)
+                                        toast.success('Guardian removed', {
+                                          description: `${guardianProfile?.email} has been removed from your household.`,
+                                        })
+                                      } catch (err) {
+                                        toast.error('Error', {
+                                          description:
+                                            err instanceof Error
+                                              ? err.message
+                                              : 'Failed to remove guardian',
+                                        })
+                                      }
+                                    }
+                                  }}
+                                  disabled={removeGuardian.isPending}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {/* Pending Invitations */}
+              {pendingInvitations.length > 0 && (
+                <div>
+                  {guardians.length > 0 && <Separator className="my-4" />}
+                  <h3 className="text-sm font-semibold mb-3">Pending Invitations</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Sent</TableHead>
+                        <TableHead>Expires</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pendingInvitations.map((invitation) => (
+                        <TableRow key={invitation.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Mail className="h-4 w-4 text-muted-foreground" />
+                              {invitation.email}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {new Date(invitation.created_at).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell>
+                            {new Date(invitation.expires_at).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {isPrimaryGuardian && (
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={async () => {
+                                    try {
+                                      await resendInvitation.mutateAsync(invitation.id)
+                                      toast.success('Invitation resent!', {
+                                        description: `A new invitation has been sent to ${invitation.email}.`,
+                                      })
+                                    } catch (err) {
+                                      toast.error('Error', {
+                                        description:
+                                          err instanceof Error
+                                            ? err.message
+                                            : 'Failed to resend invitation',
+                                      })
+                                    }
+                                  }}
+                                  disabled={resendInvitation.isPending}
+                                  title="Resend invitation"
+                                >
+                                  <RefreshCw className={`h-4 w-4 ${resendInvitation.isPending ? 'animate-spin' : ''}`} />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={async () => {
+                                    try {
+                                      await cancelInvitation.mutateAsync(invitation.id)
+                                      toast.success('Invitation cancelled', {
+                                        description: `Invitation to ${invitation.email} has been cancelled.`,
+                                      })
+                                    } catch (err) {
+                                      toast.error('Error', {
+                                        description:
+                                          err instanceof Error
+                                            ? err.message
+                                            : 'Failed to cancel invitation',
+                                      })
+                                    }
+                                  }}
+                                  disabled={cancelInvitation.isPending}
+                                  title="Cancel invitation"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {/* Empty State */}
+              {guardians.length === 0 && pendingInvitations.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>No secondary guardians yet.</p>
+                  {isPrimaryGuardian && (
+                    <p className="text-sm mt-2">
+                      Invite a secondary guardian to share household management responsibilities.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Guardian Count Warning */}
+              {guardianCount >= 3 && (
+                <div className="rounded-md bg-yellow-50 dark:bg-yellow-900/20 p-3 text-sm text-yellow-800 dark:text-yellow-200">
+                  <p className="font-medium">Maximum guardians reached</p>
+                  <p className="text-xs mt-1">
+                    Your household has reached the maximum of 3 guardians. Remove a guardian before inviting a new one.
+                  </p>
+                </div>
+              )}
+
+              {/* Info for secondary guardians */}
+              {!isPrimaryGuardian && (
+                <div className="rounded-md bg-blue-50 dark:bg-blue-900/20 p-3 text-sm text-blue-800 dark:text-blue-200">
+                  <p>
+                    You are a secondary guardian. You have the same permissions as the primary guardian, but you cannot remove other guardians or invite new ones.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

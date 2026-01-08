@@ -159,8 +159,20 @@ export function ClubProvider({ children }: { children: ReactNode }) {
               .single()
 
             if (clubError) {
-              console.error('Error loading club:', clubError)
-              setError(`Failed to load club: ${clubError.message}`)
+              // Log the full error object for debugging
+              // Handle case where error object might be empty or malformed
+              const errorInfo = {
+                message: clubError.message || 'Unknown error',
+                code: clubError.code || 'NO_CODE',
+                details: clubError.details || null,
+                hint: clubError.hint || null,
+                fullError: clubError,
+              }
+              console.error('Error loading club:', errorInfo)
+              // Only set error if we have a meaningful error message
+              if (clubError.message) {
+                setError(`Failed to load club: ${clubError.message}`)
+              }
             } else if (clubData) {
               // Only update if club data actually changed to prevent unnecessary re-renders
               setClub(prevClub => {

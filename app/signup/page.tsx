@@ -16,6 +16,19 @@ export default function SignupPage() {
   const [supabase] = useState(() => createClient())
 
   const { club } = useClub()
+  
+  // Check if signup is coming from invitation (has redirect to accept-guardian-invitation)
+  const [isInvitationSignup, setIsInvitationSignup] = useState(false)
+  
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      const redirect = urlParams.get('redirect')
+      if (redirect && redirect.includes('accept-guardian-invitation')) {
+        setIsInvitationSignup(true)
+      }
+    }
+  }, [])
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [firstName, setFirstName] = useState('')
@@ -33,11 +46,58 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false)
   const [loadingClubs, setLoadingClubs] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Initialize showClubSelection based on URL params to avoid race condition
+  const [clubFromInvitation, setClubFromInvitation] = useState<string | null>(null)
+  const [emailFromInvitation, setEmailFromInvitation] = useState<string | null>(null)
+  // Initialize to true, will be updated in useEffect to avoid hydration mismatch
+  const [showClubSelection, setShowClubSelection] = useState(true)
+
+  // Check for club_id and email from invitation in URL
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      const clubIdParam = urlParams.get('clubId')
+      const emailParam = urlParams.get('email')
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/signup/page.tsx:56',message:'Checking URL for clubId and email params',data:{clubIdParam,emailParam,hasClubId:!!clubIdParam,hasEmail:!!emailParam},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
+      if (clubIdParam) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/signup/page.tsx:60',message:'Setting clubFromInvitation and hiding club selection',data:{clubIdParam},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        
+        setClubFromInvitation(clubIdParam)
+        setShowClubSelection(false) // Hide club selection when coming from invitation
+      }
+      
+      if (emailParam) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/signup/page.tsx:70',message:'Setting email from invitation',data:{emailParam},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        
+        setEmailFromInvitation(emailParam)
+        setEmail(emailParam) // Pre-fill email field
+      }
+    }
+  }, [])
 
   // Load available clubs
   useEffect(() => {
     async function loadClubs() {
       try {
+        // Check URL params directly to avoid race conditions
+        let urlClubId: string | null = null
+        if (typeof window !== 'undefined') {
+          const urlParams = new URLSearchParams(window.location.search)
+          urlClubId = urlParams.get('clubId')
+        }
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/signup/page.tsx:90',message:'loadClubs effect running',data:{clubFromInvitation,urlClubId,clubId:club?.id,showClubSelection},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        
         const { data, error: clubsError } = await supabase
           .from('clubs')
           .select('id, name, slug')
@@ -47,12 +107,93 @@ export default function SignupPage() {
           console.error('Error loading clubs:', clubsError)
         } else {
           setClubs(data || [])
-          // Pre-select club from URL context if available
-          if (club?.id) {
-            setSelectedClubId(club.id)
-          } else if (data && data.length > 0) {
-            // Default to first club if no club in context
-            setSelectedClubId(data[0].id)
+          
+          // Use URL clubId if available (most reliable), otherwise use state
+          const effectiveClubId = urlClubId || clubFromInvitation
+          
+          // Priority: club from invitation (URL) > club from context > first club
+          if (effectiveClubId) {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/signup/page.tsx:107',message:'Processing invitation club',data:{effectiveClubId,clubsCount:data?.length,loadingClubs},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
+            
+            // CRITICAL: If we have a clubId from URL, ALWAYS hide club selection for invitations
+            // Don't wait for clubs to load - the URL param is authoritative
+            if (urlClubId) {
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/signup/page.tsx:113',message:'URL has clubId - hiding club selection immediately',data:{urlClubId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+              // #endregion
+              
+              setSelectedClubId(effectiveClubId)
+              setShowClubSelection(false) // Always hide for invitations
+              
+              // Also update clubFromInvitation state if we got it from URL
+              if (!clubFromInvitation) {
+                setClubFromInvitation(urlClubId)
+              }
+            } else {
+              // Only verify club exists if we don't have URL param (using state)
+              const invitedClub = data?.find(c => c.id === effectiveClubId)
+              if (invitedClub) {
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/signup/page.tsx:125',message:'Invited club found, setting selectedClubId and keeping showClubSelection false',data:{clubId:effectiveClubId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+                // #endregion
+                
+                setSelectedClubId(effectiveClubId)
+                setShowClubSelection(false)
+              } else if (data && data.length > 0) {
+                // Clubs loaded but club not found - fallback
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/signup/page.tsx:133',message:'Invited club NOT found after clubs loaded, showing club selection as fallback',data:{effectiveClubId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+                // #endregion
+                
+                setShowClubSelection(true)
+                setSelectedClubId(data[0].id)
+              }
+              // If clubs haven't loaded yet (data is empty), don't change showClubSelection
+              // It should already be set to false by the URL check
+            }
+          } else {
+            // No invitation club - check if this is actually a regular signup
+            // Double-check URL params to be absolutely sure
+            let isActuallyInvitation = false
+            if (typeof window !== 'undefined') {
+              const urlParams = new URLSearchParams(window.location.search)
+              const urlClubIdCheck = urlParams.get('clubId')
+              const redirectParam = urlParams.get('redirect')
+              isActuallyInvitation = !!(urlClubIdCheck || (redirectParam && redirectParam.includes('accept-guardian-invitation')))
+            }
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/signup/page.tsx:157',message:'No invitation club in state, checking URL',data:{clubId:club?.id,isActuallyInvitation,currentShowClubSelection:showClubSelection},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
+            
+            // Only proceed with regular signup logic if NOT an invitation
+            if (!isActuallyInvitation) {
+              if (club?.id) {
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/signup/page.tsx:165',message:'Using club from context',data:{clubId:club.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+                // #endregion
+                
+                setSelectedClubId(club.id)
+                setShowClubSelection(true) // Show selection for regular signups
+              } else if (data && data.length > 0) {
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/signup/page.tsx:171',message:'Using first club as default',data:{firstClubId:data[0].id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+                // #endregion
+                
+                // Default to first club if no club in context
+                setSelectedClubId(data[0].id)
+                setShowClubSelection(true) // Show selection for regular signups
+              }
+            } else {
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/signup/page.tsx:179',message:'Detected invitation from URL, keeping club selection hidden',data:{urlClubIdCheck},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+              // #endregion
+              
+              // This is an invitation - keep club selection hidden
+              setShowClubSelection(false)
+            }
           }
         }
       } catch (err) {
@@ -63,7 +204,7 @@ export default function SignupPage() {
     }
 
     loadClubs()
-  }, [club])
+  }, [club, clubFromInvitation])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -144,8 +285,8 @@ export default function SignupPage() {
         return
       }
 
-      // 2. Get club ID (from selection, context, or default)
-      let clubId = selectedClubId || club?.id
+      // 2. Get club ID (priority: invitation > selection > context > default)
+      let clubId = clubFromInvitation || selectedClubId || club?.id
       if (!clubId) {
         const { data: defaultClub } = await supabase
           .from('clubs')
@@ -156,7 +297,12 @@ export default function SignupPage() {
       }
 
       if (!clubId) {
-        setError('Please select a club to register with.')
+        // Only show error for regular signups, not invitation signups
+        if (!clubFromInvitation) {
+          setError('Please select a club to register with.')
+        } else {
+          setError('Invalid invitation. Please contact support.')
+        }
         setLoading(false)
         return
       }
@@ -191,9 +337,65 @@ export default function SignupPage() {
         console.warn('store_signup_data function may not exist:', err)
       }
 
+      // Check if this is an invitation signup (skip email verification)
+      if (isInvitationSignup) {
+        console.log('[SIGNUP] Invitation signup detected - skipping email verification')
+        
+        // Complete signup directly (confirm email, create profile, create household)
+        try {
+          const completeResponse = await fetch('/api/auth/complete-invitation-signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: authData.user.id,
+              email: email.toLowerCase(),
+              firstName: firstName || null,
+              lastName: lastName || null,
+              phone: phone || null,
+              addressLine1: addressLine1 || null,
+              addressLine2: addressLine2 || null,
+              city: city || null,
+              state: state || null,
+              zipCode: zipCode || null,
+              emergencyContactName: emergencyContactName || null,
+              emergencyContactPhone: emergencyContactPhone || null,
+              clubId: clubId,
+            })
+          })
+
+          const completeData = await completeResponse.json()
+
+          if (!completeResponse.ok || !completeData.success) {
+            console.error('Failed to complete invitation signup:', completeData.error)
+            setError(completeData.error || 'Failed to complete account setup. Please contact support.')
+            setLoading(false)
+            return
+          }
+
+          console.log('[SIGNUP] Invitation signup completed - redirecting to accept invitation')
+          
+          // Get redirect URL from query params
+          const urlParams = new URLSearchParams(window.location.search)
+          const redirectTo = urlParams.get('redirect')
+          
+          if (redirectTo) {
+            router.push(redirectTo)
+          } else {
+            router.push('/login?message=Account created! Please log in.')
+          }
+        } catch (err) {
+          console.error('Error completing invitation signup:', err)
+          setError('Failed to complete account setup. Please contact support.')
+        }
+        
+        setLoading(false)
+        return
+      }
+
+      // Regular signup flow - send OTP for verification
       // ALWAYS send OTP for verification (regardless of Supabase confirmation settings)
       // This gives us full control over the verification flow
-      console.log('[SIGNUP] Sending OTP verification email...')
+      console.log('[SIGNUP] Regular signup - sending OTP verification email...')
       {
         // Send OTP verification email
         try {
@@ -292,35 +494,8 @@ export default function SignupPage() {
         .single()
 
       if (householdError) {
-        // Try families table as fallback
-        const { error: familyError } = await supabase.from('families').insert([
-          {
-            profile_id: authData.user.id,
-            club_id: clubId,
-            email,
-            phone: phone || null,
-            address_line1: addressLine1 || null,
-            address_line2: addressLine2 || null,
-            city: city || null,
-            state: state || null,
-            zip_code: zipCode || null,
-            emergency_contact_name: emergencyContactName || null,
-            emergency_contact_phone: emergencyContactPhone || null,
-          },
-        ])
-
-        if (familyError) {
-          setError(`Failed to create household: ${householdError.message}`)
-          setLoading(false)
-          return
-        }
-
-        // Redirect to parent dashboard
-        if (club?.slug) {
-          router.push(`/clubs/${club.slug}/parent/dashboard`)
-        } else {
-          router.push('/login?message=Account created! Please log in.')
-        }
+        setError(`Failed to create household: ${householdError.message}`)
+        setLoading(false)
         return
       }
 
@@ -370,35 +545,103 @@ export default function SignupPage() {
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-4 border-b border-slate-700 pb-4">
-            <h2 className="text-sm font-semibold text-slate-200">Club Selection</h2>
+          {/* Only show club selection for regular signups, not invitation signups */}
+          {/* Check URL params directly during render to avoid state race conditions */}
+          {(() => {
+            // Check URL params directly - most reliable way to determine if this is an invitation
+            let isInvitationFromUrl = false
+            let urlClubIdCheck: string | null = null
+            if (typeof window !== 'undefined') {
+              const urlParams = new URLSearchParams(window.location.search)
+              urlClubIdCheck = urlParams.get('clubId')
+              const redirectParam = urlParams.get('redirect')
+              // Check for both clubId param OR redirect to accept-guardian-invitation
+              isInvitationFromUrl = !!(urlClubIdCheck || (redirectParam && redirectParam.includes('accept-guardian-invitation')))
+            }
             
-            {loadingClubs ? (
-              <p className="text-sm text-slate-400">Loading clubs...</p>
-            ) : (
-              <div>
-                <Label htmlFor="club" className="text-slate-300">
-                  Select Club *
-                </Label>
-                <Select
-                  value={selectedClubId}
-                  onValueChange={setSelectedClubId}
-                  required
-                >
-                  <SelectTrigger className="mt-1 bg-slate-800 text-slate-100 border-slate-700">
-                    <SelectValue placeholder="Select a club" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clubs.map(clubOption => (
-                      <SelectItem key={clubOption.id} value={clubOption.id}>
-                        {clubOption.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/3aef41da-a86e-401e-9528-89856938cb09',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/signup/page.tsx:450',message:'Rendering club selection check',data:{showClubSelection,clubFromInvitation,urlClubIdCheck,isInvitationFromUrl,isInvitationSignup},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
+            
+            // CRITICAL: If URL has clubId or redirect to invitation, NEVER show club selection
+            // This check happens during render, so it's always accurate
+            const shouldShowClubSelection = !isInvitationFromUrl && showClubSelection
+            
+            return shouldShowClubSelection ? (
+              <div className="space-y-4 border-b border-slate-700 pb-4">
+                <h2 className="text-sm font-semibold text-slate-200">Club Selection</h2>
+                
+                {loadingClubs ? (
+                  <p className="text-sm text-slate-400">Loading clubs...</p>
+                ) : (
+                  <div>
+                    <Label htmlFor="club" className="text-slate-300">
+                      Select Club *
+                    </Label>
+                    <Select
+                      value={selectedClubId}
+                      onValueChange={setSelectedClubId}
+                      required
+                    >
+                      <SelectTrigger className="mt-1 bg-slate-800 text-slate-100 border-slate-700">
+                        <SelectValue placeholder="Select a club" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-800 border-slate-700">
+                        {clubs.map(clubOption => (
+                          <SelectItem 
+                            key={clubOption.id} 
+                            value={clubOption.id}
+                            className="text-slate-100 focus:bg-slate-700 focus:text-slate-50"
+                          >
+                            {clubOption.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            ) : null
+          })()}
+          
+          {/* Legacy code - keeping for reference but should not render */}
+          {false && showClubSelection && (
+            <div className="space-y-4 border-b border-slate-700 pb-4">
+              <h2 className="text-sm font-semibold text-slate-200">Club Selection</h2>
+              
+              {loadingClubs ? (
+                <p className="text-sm text-slate-400">Loading clubs...</p>
+              ) : (
+                <div>
+                  <Label htmlFor="club" className="text-slate-300">
+                    Select Club *
+                  </Label>
+                  <Select
+                    value={selectedClubId}
+                    onValueChange={setSelectedClubId}
+                    required
+                  >
+                    <SelectTrigger className="mt-1 bg-slate-800 text-slate-100 border-slate-700">
+                      <SelectValue placeholder="Select a club" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-800 border-slate-700">
+                      {clubs.map(clubOption => (
+                        <SelectItem 
+                          key={clubOption.id} 
+                          value={clubOption.id}
+                          className="text-slate-100 focus:bg-slate-700 focus:text-slate-50"
+                        >
+                          {clubOption.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Club info is hidden for invitation signups - set automatically in background */}
 
           <div className="space-y-4 border-b border-slate-700 pb-4">
             <h2 className="text-sm font-semibold text-slate-200">Account Information</h2>
@@ -431,19 +674,40 @@ export default function SignupPage() {
               />
             </div>
 
-            <div>
-              <Label htmlFor="email" className="text-slate-300">
-                Email
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-                className="mt-1 bg-slate-800 text-slate-100 border-slate-700"
-              />
-            </div>
+            {/* Hide email field for invitation signups - we already have it */}
+            {!emailFromInvitation && (
+              <div>
+                <Label htmlFor="email" className="text-slate-300">
+                  Email
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                  className="mt-1 bg-slate-800 text-slate-100 border-slate-700"
+                />
+              </div>
+            )}
+            {/* Show read-only email for invitation signups */}
+            {emailFromInvitation && (
+              <div>
+                <Label htmlFor="email" className="text-slate-300">
+                  Email
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  disabled
+                  className="mt-1 bg-slate-800/50 text-slate-400 cursor-not-allowed"
+                />
+                <p className="text-xs text-slate-400 mt-1">
+                  This email address is from your invitation.
+                </p>
+              </div>
+            )}
 
             <div>
               <Label htmlFor="password" className="text-slate-300">
