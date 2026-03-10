@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 import { validateEnv } from "./lib/env";
 
 // Validate environment variables at build time
@@ -58,4 +59,27 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Wrap with Sentry config for error monitoring and source maps
+export default withSentryConfig(nextConfig, {
+  // Sentry organization and project
+  org: "skiadmin-9z",
+  project: "javascript-nextjs",
+
+  // Source map upload auth token
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+
+  // Upload wider set of client source files for better stack trace resolution
+  widenClientFileUpload: true,
+
+  // Create a proxy API route to bypass ad-blockers
+  tunnelRoute: "/monitoring-tunnel",
+
+  // Suppress non-CI output
+  silent: !process.env.CI,
+
+  // Hide source maps from generated client bundles (security)
+  hideSourceMaps: true,
+
+  // Disable telemetry
+  telemetry: false,
+});
