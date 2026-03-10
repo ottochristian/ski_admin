@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Profile } from '@/lib/types'
-import { LayoutDashboard, Building2, Users, CreditCard } from 'lucide-react'
+import { LayoutDashboard, Building2, Users, CreditCard, Activity } from 'lucide-react'
 
 interface SystemAdminSidebarProps {
   profile: Profile
@@ -17,6 +17,11 @@ export function SystemAdminSidebar({ profile }: SystemAdminSidebarProps) {
       label: 'Dashboard',
       href: '/system-admin',
       icon: LayoutDashboard,
+    },
+    {
+      label: 'Monitoring',
+      href: '/system-admin/monitoring',
+      icon: Activity,
     },
     {
       label: 'Clubs',
