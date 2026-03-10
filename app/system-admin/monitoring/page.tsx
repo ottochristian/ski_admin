@@ -99,6 +99,8 @@ export default function MonitoringDashboard() {
       case 'connected':
       case 'active':
         return 'bg-green-500'
+      case 'ready':
+        return 'bg-blue-500'
       case 'degraded':
       case 'warning':
         return 'bg-yellow-500'
@@ -107,6 +109,8 @@ export default function MonitoringDashboard() {
       case 'critical':
       case 'down':
         return 'bg-red-500'
+      case 'not_configured':
+        return 'bg-gray-400'
       default:
         return 'bg-gray-500'
     }
@@ -118,6 +122,8 @@ export default function MonitoringDashboard() {
       case 'connected':
       case 'active':
         return '🟢'
+      case 'ready':
+        return '🔵'
       case 'degraded':
       case 'warning':
         return '⚠️'
@@ -126,9 +132,17 @@ export default function MonitoringDashboard() {
       case 'critical':
       case 'down':
         return '🔴'
+      case 'not_configured':
+        return '⚙️'
       default:
         return '⚪'
     }
+  }
+
+  const getStatusLabel = (status: string, configured?: boolean) => {
+    if (status === 'not_configured') return 'Not Configured'
+    if (status === 'ready') return 'Ready'
+    return status.charAt(0).toUpperCase() + status.slice(1)
   }
 
   const formatTimestamp = (date: Date) => {
@@ -219,7 +233,7 @@ export default function MonitoringDashboard() {
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Status</span>
                   <Badge className={getStatusColor(health.checks.database.status)}>
-                    {health.checks.database.status}
+                    {getStatusLabel(health.checks.database.status)}
                   </Badge>
                 </div>
                 {health.checks.database.responseTime && (
@@ -232,6 +246,11 @@ export default function MonitoringDashboard() {
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">RLS</span>
                     <span className="font-medium">{health.checks.database.rlsActive ? 'Active' : 'Inactive'}</span>
+                  </div>
+                )}
+                {health.checks.database.message && (
+                  <div className="text-xs text-gray-600 mt-2">
+                    {health.checks.database.message}
                   </div>
                 )}
                 {health.checks.database.error && (
@@ -261,7 +280,7 @@ export default function MonitoringDashboard() {
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Status</span>
                   <Badge className={getStatusColor(health.checks.stripe.status)}>
-                    {health.checks.stripe.status}
+                    {getStatusLabel(health.checks.stripe.status)}
                   </Badge>
                 </div>
                 {health.checks.stripe.mode && (
@@ -274,6 +293,11 @@ export default function MonitoringDashboard() {
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Response Time</span>
                     <span className="font-medium">{health.checks.stripe.responseTime}ms</span>
+                  </div>
+                )}
+                {health.checks.stripe.message && (
+                  <div className="text-xs text-gray-600 mt-2">
+                    {health.checks.stripe.message}
                   </div>
                 )}
                 {health.checks.stripe.error && (
@@ -303,9 +327,14 @@ export default function MonitoringDashboard() {
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Status</span>
                   <Badge className={getStatusColor(health.checks.email.status)}>
-                    {health.checks.email.status}
+                    {getStatusLabel(health.checks.email.status)}
                   </Badge>
                 </div>
+                {health.checks.email.message && (
+                  <div className="text-xs text-gray-600 mt-2 italic">
+                    {health.checks.email.message}
+                  </div>
+                )}
                 {health.checks.email.successRate !== undefined && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Success Rate</span>
@@ -346,9 +375,14 @@ export default function MonitoringDashboard() {
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Status</span>
                   <Badge className={getStatusColor(health.checks.sms.status)}>
-                    {health.checks.sms.status}
+                    {getStatusLabel(health.checks.sms.status)}
                   </Badge>
                 </div>
+                {health.checks.sms.message && (
+                  <div className="text-xs text-gray-600 mt-2 italic">
+                    {health.checks.sms.message}
+                  </div>
+                )}
                 {health.checks.sms.sent24h !== undefined && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Sent (24h)</span>
@@ -383,9 +417,14 @@ export default function MonitoringDashboard() {
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Status</span>
                   <Badge className={getStatusColor(health.checks.webhooks.status)}>
-                    {health.checks.webhooks.status}
+                    {getStatusLabel(health.checks.webhooks.status)}
                   </Badge>
                 </div>
+                {health.checks.webhooks.message && (
+                  <div className="text-xs text-gray-600 mt-2 italic">
+                    {health.checks.webhooks.message}
+                  </div>
+                )}
                 {health.checks.webhooks.successRate !== undefined && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Success Rate</span>
@@ -426,9 +465,14 @@ export default function MonitoringDashboard() {
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Status</span>
                   <Badge className={getStatusColor(health.checks.errors.status)}>
-                    {health.checks.errors.status}
+                    {getStatusLabel(health.checks.errors.status)}
                   </Badge>
                 </div>
+                {health.checks.errors.message && (
+                  <div className="text-xs text-gray-600 mt-2 italic">
+                    {health.checks.errors.message}
+                  </div>
+                )}
                 {health.checks.errors.lastHour !== undefined && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Last Hour</span>
