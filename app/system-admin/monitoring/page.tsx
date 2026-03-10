@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -34,12 +34,18 @@ export default function MonitoringDashboard() {
   const [errors, setErrors] = useState<any[]>([])
   const [performance, setPerformance] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [sentryConfigured, setSentryConfigured] = useState(true)
 
-  const fetchAllData = async () => {
+  const fetchAllData = useCallback(async () => {
+    const startTime = Date.now()
+    setRefreshing(true)
+    
     try {
+      console.log('[Monitoring] Starting refresh...')
+      
       // Fetch health, metrics, errors, and performance in parallel
       const [healthRes, metricsRes, errorsRes, perfRes] = await Promise.all([
         fetch('/api/monitoring/health').catch(() => null),
@@ -74,15 +80,14 @@ export default function MonitoringDashboard() {
       // Force state update with new Date
       const now = new Date()
       setLastUpdate(now)
-      console.log(`[Monitoring] Updated at ${now.toISOString()}`)
+      console.log(`[Monitoring] Refresh complete in ${Date.now() - startTime}ms`)
     } catch (error) {
       console.error('Failed to fetch monitoring data:', error)
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
-  }
-
-  const fetchHealth = fetchAllData
+  }, [])
 
   useEffect(() => {
     fetchAllData()
@@ -92,6 +97,7 @@ export default function MonitoringDashboard() {
     if (!autoRefresh) return
 
     const interval = setInterval(() => {
+      console.log('[Monitoring] Auto-refresh triggered')
       fetchAllData()
     }, 30000) // Refresh every 30 seconds
 
@@ -191,12 +197,16 @@ export default function MonitoringDashboard() {
             Last updated: {formatTimestamp(lastUpdate)}
           </div>
           <Button
-            onClick={() => fetchHealth()}
+            onClick={() => {
+              console.log('[Monitoring] Manual refresh clicked')
+              fetchAllData()
+            }}
             variant="outline"
             size="sm"
+            disabled={refreshing}
           >
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Refresh
+            <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Refreshing...' : 'Refresh'}
           </Button>
         </div>
       </div>
