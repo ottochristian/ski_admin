@@ -79,7 +79,7 @@ export default function SignupPage() {
         return
       }
 
-      const nameComplete = profile.first_name.trim() !== '' && profile.last_name.trim() !== ''
+      const nameComplete = profile.first_name?.trim() !== '' && profile.last_name?.trim() !== ''
 
       setUserId(user.id)
       setEmail(user.email ?? '')
@@ -179,20 +179,20 @@ export default function SignupPage() {
     const clubId = invitedClubId ?? selectedClubId
 
     try {
-      // Store signup data (updates the profile stub created by the trigger)
-      try {
-        await supabase.rpc('store_signup_data', {
-          p_user_id: uid,
-          p_email: email.toLowerCase(),
-          p_first_name: firstName,
-          p_last_name: lastName,
-          p_phone: phone || null,
-          p_address_line1: null, p_address_line2: null,
-          p_city: null, p_state: null, p_zip_code: null,
-          p_emergency_contact_name: null, p_emergency_contact_phone: null,
-          p_club_id: clubId,
+      // Update profile directly with real name and club
+      const { error: profileUpdateError } = await supabase
+        .from('profiles')
+        .update({
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          phone: phone || null,
+          club_id: clubId,
         })
-      } catch { /* non-fatal */ }
+        .eq('id', uid)
+
+      if (profileUpdateError) {
+        throw new Error('Failed to save profile. Please try again.')
+      }
 
       // OAuth users (Google etc.) — email already verified, create household directly
       const { data: { user: currentUser } } = await supabase.auth.getUser()

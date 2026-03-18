@@ -114,17 +114,16 @@ export async function POST(request: NextRequest) {
           userEmail: updateData?.user?.email
         })
         
-        // STEP 2: Fetch signup data
-        log.info('[OTP VERIFY] STEP 2: Fetching signup data...')
-        const { data: signupData, error: signupDataError } = await supabase
-          .from('signup_data')
-          .select('*')
-          .eq('user_id', userId)
+        // STEP 2: Fetch profile (already updated with real name before OTP was sent)
+        log.info('[OTP VERIFY] STEP 2: Fetching profile...')
+        const { data: profile, error: profileFetchError } = await supabase
+          .from('profiles')
+          .select('id, email, first_name, last_name, phone, club_id')
+          .eq('id', userId)
           .single()
-        
-        if (!signupData) {
-          log.warn('[OTP VERIFY] No signup data found - user cannot complete setup')
-          // Still return success for OTP verification, but user will need manual setup
+
+        if (!profile || profileFetchError) {
+          log.warn('[OTP VERIFY] No profile found')
           return NextResponse.json({
             success: true,
             message: result.message,
@@ -132,70 +131,29 @@ export async function POST(request: NextRequest) {
           })
         }
 
-        // Validate required profile fields
-        if (!signupData.first_name || !signupData.last_name) {
-          log.warn('[OTP VERIFY] Missing required profile fields')
-          return NextResponse.json({
-            success: false,
-            message: 'First name and last name are required'
-          }, { status: 400 })
-        }
-        
-        // STEP 3: Check/Create Profile
-        log.info('[OTP VERIFY] STEP 3: Checking if profile exists...')
-        const { data: existingProfile, error: profileCheckError } = await supabase
+        // Mark email as verified on the profile
+        await supabase
           .from('profiles')
-          .select('id, role')
+          .update({ email_verified_at: new Date().toISOString() })
           .eq('id', userId)
-          .single()
-        
-        log.info('[OTP VERIFY] Profile check', {
-          exists: !!existingProfile,
-          role: existingProfile?.role,
-          error: profileCheckError?.message
-        })
-        
-        if (!existingProfile) {
-          log.info('[OTP VERIFY] Creating profile...')
-          const { error: profileError } = await supabase.rpc('create_user_profile', {
-            p_user_id: userId,
-            p_email: signupData.email,
-            p_first_name: signupData.first_name,
-            p_last_name: signupData.last_name,
-            p_role: 'parent', // Always parent for public signup
-            p_club_id: signupData.club_id,
-          })
-          
-          if (profileError) {
-            console.error('[OTP VERIFY] ❌ Profile creation failed:', profileError.message)
-            return NextResponse.json({
-              success: true,
-              message: result.message,
-              warning: 'Profile creation failed - please contact support'
-            })
-          }
-          
-          log.info('[OTP VERIFY] Profile created')
-        } else {
-          // Profile exists (created by trigger stub) — update it with real name/club
-          log.info('[OTP VERIFY] Updating existing profile with signup data...')
-          const { error: profileUpdateError } = await supabase
-            .from('profiles')
-            .update({
-              first_name: signupData.first_name,
-              last_name: signupData.last_name,
-              club_id: signupData.club_id,
-            })
-            .eq('id', userId)
 
-          if (profileUpdateError) {
-            log.warn('[OTP VERIFY] Profile update failed', { error: profileUpdateError.message })
-          } else {
-            log.info('[OTP VERIFY] Profile updated with real name')
-          }
+        // Use profile data as signupData alias for household creation below
+        const signupData = {
+          email: profile.email,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          phone: profile.phone,
+          club_id: profile.club_id,
+          address_line1: null,
+          address_line2: null,
+          city: null,
+          state: null,
+          zip_code: null,
+          emergency_contact_name: null,
+          emergency_contact_phone: null,
         }
         
-        // STEP 4: Check/Create Household (for parent role only)
+        // STEP 3: Check/Create Household (for parent role only)
         // Note: Households don't have parent_id - we use household_guardians join table
         log.info('[OTP VERIFY] STEP 4: Checking if household exists via household_guardians...')
         const { data: existingGuardian, error: guardianCheckError } = await supabase
@@ -234,7 +192,7 @@ export async function POST(request: NextRequest) {
           
           log.info('[OTP VERIFY] Household created', { householdId: household?.id })
           
-          // STEP 5: Link user to household via household_guardians
+          // STEP 4: Link user to household via household_guardians
           log.info('[OTP VERIFY] STEP 5: Creating household_guardian link...')
           const { error: guardianLinkError } = await supabase
             .from('household_guardians')
@@ -258,13 +216,6 @@ export async function POST(request: NextRequest) {
         } else {
           log.info('[OTP VERIFY] Household already exists via guardian link')
         }
-        
-        // STEP 6: Clean up signup data
-        log.info('[OTP VERIFY] STEP 6: Cleaning up signup_data...')
-        await supabase
-          .from('signup_data')
-          .delete()
-          .eq('user_id', userId)
         
         log.info('[OTP VERIFY] ===== Setup Complete =====')
         
