@@ -177,7 +177,22 @@ export async function POST(request: NextRequest) {
           
           log.info('[OTP VERIFY] Profile created')
         } else {
-          log.info('[OTP VERIFY] Profile already exists')
+          // Profile exists (created by trigger stub) — update it with real name/club
+          log.info('[OTP VERIFY] Updating existing profile with signup data...')
+          const { error: profileUpdateError } = await supabase
+            .from('profiles')
+            .update({
+              first_name: signupData.first_name,
+              last_name: signupData.last_name,
+              club_id: signupData.club_id,
+            })
+            .eq('id', userId)
+
+          if (profileUpdateError) {
+            log.warn('[OTP VERIFY] Profile update failed', { error: profileUpdateError.message })
+          } else {
+            log.info('[OTP VERIFY] Profile updated with real name')
+          }
         }
         
         // STEP 4: Check/Create Household (for parent role only)
