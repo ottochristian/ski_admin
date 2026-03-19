@@ -127,7 +127,14 @@ export function ProfileMenu({ profile }: ProfileMenuProps) {
       // Fallback to legacy admin profile route
       return '/admin/profile'
     } else if (profile.role === 'coach') {
-      return '/coach/profile'
+      if (typeof window !== 'undefined') {
+        const pathParts = window.location.pathname.split('/')
+        const clubSlugIndex = pathParts.indexOf('clubs')
+        if (clubSlugIndex !== -1 && pathParts[clubSlugIndex + 1]) {
+          return `/clubs/${pathParts[clubSlugIndex + 1]}/coach/profile`
+        }
+      }
+      return '/coach/profile' // Fallback for old routes
     } else if (profile.role === 'parent') {
       // For parents, we need the club slug from the current URL
       if (typeof window !== 'undefined') {

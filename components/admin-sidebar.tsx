@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Profile } from '@/lib/types'
-import { LayoutDashboard, BookOpen, FileText, Users, Settings, BarChart3 } from 'lucide-react'
+import { LayoutDashboard, BookOpen, FileText, Users, Settings, BarChart3, MessageSquare } from 'lucide-react'
 import { useClub } from '@/lib/club-context'
 import { colors } from '@/lib/colors'
 
@@ -27,6 +27,7 @@ export function AdminSidebar({ profile, clubSlug }: AdminSidebarProps) {
     { label: 'Registrations', href: `${basePath}/registrations`, icon: FileText },
     { label: 'Athletes', href: `${basePath}/athletes`, icon: Users },
     { label: 'Coaches', href: `${basePath}/coaches`, icon: Users },
+    { label: 'Messages', href: `${basePath}/messages`, icon: MessageSquare },
     { label: 'Settings', href: `${basePath}/settings`, icon: Settings },
   ]
 

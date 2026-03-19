@@ -474,7 +474,7 @@ export default function AdminDashboard() {
       try {
         const { data, error } = await supabase
           .from('waiver_signatures')
-          .select('athlete_id, waivers!inner(club_id, season_id, is_required)')
+          .select('athlete_id, waivers!inner(club_id, season_id, required)')
           .eq('waivers.club_id', profile.club_id)
           .eq('waivers.season_id', selectedSeason.id)
           .eq('waivers.required', true)

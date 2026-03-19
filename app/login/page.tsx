@@ -134,9 +134,14 @@ export default function LoginPage() {
           }
         }
 
-        if (profileData.role === 'coach') {
-          router.push('/coach')
-          return
+        if (profileData.role === 'coach' && clubIdToUse) {
+          const resp = await fetch(`/api/clubs/public?id=${encodeURIComponent(clubIdToUse)}`)
+          const json = await resp.json()
+
+          if (resp.ok && json?.club?.slug) {
+            router.push(`/clubs/${json.club.slug}/coach`)
+            return
+          }
         }
 
         if (profileData.role === 'parent' && clubIdToUse) {
@@ -266,8 +271,16 @@ export default function LoginPage() {
         return
       }
 
-      if (profileData.role === 'coach') {
-        router.push('/coach')
+      if (profileData.role === 'coach' && clubIdToUse) {
+        const resp = await fetch(`/api/clubs/public?id=${encodeURIComponent(clubIdToUse)}`)
+        const json = await resp.json()
+
+        if (resp.ok && json?.club?.slug) {
+          router.push(`/clubs/${json.club.slug}/coach`)
+        } else {
+          setError('Club not found. Please contact support.')
+          setLoading(false)
+        }
         return
       }
 

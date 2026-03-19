@@ -4,13 +4,11 @@ import type React from 'react'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { CoachSidebar } from '@/components/coach-sidebar'
-import { UnifiedSeasonSelector } from '@/components/unified-season-selector'
-import { ProfileMenu } from '@/components/profile-menu'
-import { Profile } from '@/lib/types'
-import { useClub } from '@/lib/club-context'
-import { SeasonProvider } from '@/lib/contexts/season-context'
 
+/**
+ * Legacy coach layout — redirects to the club-scoped coach portal.
+ * All coach routes now live at /clubs/[clubSlug]/coach/...
+ */
 export default function CoachLayout({
   children,
 }: {
@@ -18,99 +16,41 @@ export default function CoachLayout({
 }) {
   const [supabase] = useState(() => createClient())
   const router = useRouter()
-  const { club, loading: clubLoading } = useClub()
-  const [isLoading, setIsLoading] = useState(true)
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    async function checkAuth() {
-      try {
-        // Get current user
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser()
+    async function redirect() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.replace('/login'); return }
 
-        if (userError || !user) {
-          router.replace('/login')
-          return
-        }
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('role, club_id')
+        .eq('id', user.id)
+        .single()
 
-        // Fetch profile and check if coach
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single()
-
-        if (profileError) {
-          setError('Failed to load profile')
-          setIsLoading(false)
-          return
-        }
-
-        if (!profileData || profileData.role !== 'coach') {
-          router.replace('/login')
-          return
-        }
-
-        setProfile(profileData as Profile)
-
-        // Verify user has a club_id
-        if (!profileData.club_id) {
-          setError(
-            'No club associated with your account. Please contact an administrator.'
-          )
-          setIsLoading(false)
-          return
-        }
-
-        setIsLoading(false)
-      } catch (err) {
-        console.error('Layout auth check error:', err)
-        setError('An error occurred')
-        setIsLoading(false)
+      if (!profileData || profileData.role !== 'coach') {
+        router.replace('/login')
+        return
       }
+
+      if (profileData.club_id) {
+        const resp = await fetch(`/api/clubs/public?id=${encodeURIComponent(profileData.club_id)}`)
+        const json = await resp.json()
+        if (resp.ok && json?.club?.slug) {
+          router.replace(`/clubs/${json.club.slug}/coach`)
+          return
+        }
+      }
+
+      router.replace('/login')
     }
 
-    checkAuth()
-  }, [router, club, clubLoading])
-
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
-      </div>
-    )
-  }
-
-  if (error || !profile) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-destructive">{error || 'Access denied'}</p>
-      </div>
-    )
-  }
+    redirect()
+  }, [router])
 
   return (
-    <SeasonProvider>
-      <div className="flex min-h-screen">
-        <CoachSidebar profile={profile} />
-        <main className="flex-1 ml-64 flex flex-col">
-          <div className="fixed top-0 right-0 left-64 border-b border-orange-800/40 bg-background/80 backdrop-blur-sm px-8 py-3 z-10">
-            <div className="flex items-center justify-end gap-4">
-              <UnifiedSeasonSelector />
-              <ProfileMenu profile={profile} />
-            </div>
-          </div>
-          <div className="flex-1 overflow-auto pt-16">
-            <div className="p-8">{children}</div>
-          </div>
-        </main>
-      </div>
-    </SeasonProvider>
+    <div className="flex min-h-screen items-center justify-center bg-zinc-950">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
+    </div>
   )
 }
-
-
