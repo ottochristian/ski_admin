@@ -201,8 +201,9 @@ export default function HomePage() {
             <p className="mt-5 text-sm text-zinc-500">
               Already have an account?{' '}
               <Link href="/login" className="text-zinc-400 hover:text-foreground underline underline-offset-2 transition-colors">Sign in</Link>
-              {' · '}
-              <Link href="/signup/new-club" className="text-zinc-400 hover:text-foreground underline underline-offset-2 transition-colors">Setting up a new club?</Link>
+            </p>
+            <p className="mt-2 text-sm text-zinc-600">
+              <Link href="/signup/new-club" className="text-zinc-500 hover:text-foreground underline underline-offset-2 transition-colors">Setting up a new club?</Link>
             </p>
           </div>
 
@@ -249,16 +250,31 @@ export default function HomePage() {
         </section>
 
         {/* CTA strip */}
-        <section className="border-t border-zinc-800 py-20 px-6 text-center">
-          <div className="mx-auto max-w-xl">
-            <h2 className="text-3xl font-bold mb-4">Ready to get started?</h2>
-            <p className="text-zinc-400 mb-8 text-sm">Create your account and register in minutes.</p>
-            <Link
-              href="/signup"
-              className="inline-flex items-center justify-center rounded-lg bg-orange-600 hover:bg-orange-500 text-foreground font-semibold px-8 py-3 text-sm transition-colors"
-            >
-              Register your child
-            </Link>
+        <section className="border-t border-zinc-800 py-20 px-6">
+          <div className="mx-auto max-w-4xl">
+            <h2 className="text-3xl font-bold mb-12 text-center">Ready to get started?</h2>
+            <div className="grid gap-6 md:grid-cols-2">
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 flex flex-col">
+                <h3 className="text-lg font-semibold text-foreground mb-2">Registering your child?</h3>
+                <p className="text-sm text-zinc-400 mb-8 flex-1">Create an account, pick a program, and pay — all in one place. Takes about 5 minutes.</p>
+                <Link
+                  href="/signup"
+                  className="inline-flex items-center justify-center rounded-lg bg-orange-600 hover:bg-orange-500 text-foreground font-semibold px-6 py-2.5 text-sm transition-colors"
+                >
+                  Sign up as a parent
+                </Link>
+              </div>
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 flex flex-col">
+                <h3 className="text-lg font-semibold text-foreground mb-2">Running a ski club?</h3>
+                <p className="text-sm text-zinc-400 mb-8 flex-1">Submit your details and we'll have your club set up and ready to go within 24 hours.</p>
+                <Link
+                  href="/signup/new-club"
+                  className="inline-flex items-center justify-center rounded-lg border border-zinc-700 hover:border-zinc-500 text-zinc-300 hover:text-foreground font-semibold px-6 py-2.5 text-sm transition-colors"
+                >
+                  Set up your club
+                </Link>
+              </div>
+            </div>
           </div>
         </section>
       </main>
