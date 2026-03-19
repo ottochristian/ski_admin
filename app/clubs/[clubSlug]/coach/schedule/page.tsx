@@ -197,12 +197,10 @@ function MiniCalendar({
               key={i}
               type="button"
               onClick={() => onDayClick(day)}
-              className={`flex flex-col items-center py-1 rounded-md transition-colors text-xs font-medium
-                ${inWeek ? 'bg-zinc-800' : 'hover:bg-zinc-800/50'}
-              `}
+              className="flex flex-col items-center py-1 rounded-md transition-colors text-xs font-medium hover:bg-zinc-800/50"
             >
               <span className={`w-6 h-6 flex items-center justify-center rounded-full leading-none
-                ${isToday ? 'bg-blue-600 text-white' : inWeek ? 'text-zinc-100' : 'text-zinc-400'}
+                ${isToday ? 'bg-blue-600 text-white' : inWeek ? 'text-zinc-200 font-semibold' : 'text-zinc-400'}
               `}>
                 {day.getDate()}
               </span>

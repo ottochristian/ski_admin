@@ -275,9 +275,7 @@ export default function HomePage() {
 
       <footer className="border-t border-zinc-800 py-8 px-6">
         <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="bg-foreground/10 rounded px-2 py-0.5">
-            <img src="/w110-logo-dark.svg" alt="W110" className="h-5 w-auto opacity-60" />
-          </div>
+          <img src="/w110-logo-dark.svg" alt="W110" className="h-5 w-auto opacity-60" />
           <p className="text-xs text-zinc-600">© {new Date().getFullYear()} West 110. All rights reserved.</p>
         </div>
       </footer>
