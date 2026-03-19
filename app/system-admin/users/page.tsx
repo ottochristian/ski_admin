@@ -91,6 +91,7 @@ export default function UsersPage() {
     const { data: { session } } = await supabase.auth.getSession()
     const resp = await fetch('/api/system-admin/impersonate', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
       body: JSON.stringify({ userId }),
     })

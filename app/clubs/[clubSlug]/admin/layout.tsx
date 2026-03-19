@@ -32,7 +32,11 @@ export default function AdminLayout({
       if (profile?.role === 'system_admin') {
         return
       }
-      
+      // Also skip redirect when impersonating (imp cookie present)
+      if (typeof document !== 'undefined' && /(?:^|;\s*)imp=/.test(document.cookie)) {
+        return
+      }
+
       // Club slug doesn't match - redirect to user's club
       router.replace(`/clubs/${club.slug}/admin`)
     }

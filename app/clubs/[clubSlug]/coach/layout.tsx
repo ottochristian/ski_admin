@@ -28,9 +28,14 @@ export default function CoachLayout({
   // Verify club slug matches the coach's club
   useEffect(() => {
     if (!authLoading && !clubLoading && club && club.slug !== clubSlug) {
+      // System admins can access any club - don't redirect
+      if (profile?.role === 'system_admin') return
+      // Also skip when impersonating
+      if (typeof document !== 'undefined' && /(?:^|;\s*)imp=/.test(document.cookie)) return
+
       router.replace(`/clubs/${club.slug}/coach`)
     }
-  }, [club, clubSlug, authLoading, clubLoading, router])
+  }, [club, clubSlug, authLoading, clubLoading, router, profile])
 
   if (authLoading || !profile) {
     return (

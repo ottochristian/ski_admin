@@ -353,35 +353,15 @@ export function useRequireAdmin() {
 }
 
 /**
- * Hook for parent-only routes - redirects if not parent
+ * Hook for parent-only routes - redirects if not parent or system_admin
  */
 export function useRequireParent() {
   const { profile, loading } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    if (!loading && profile && profile.role !== 'parent') {
-      router.replace('/login')
-    }
-  }, [profile, loading, router])
-
-  return {
-    profile,
-    loading,
-    isParent: profile?.role === 'parent',
-  }
-}
-
-/**
- * Hook for coach-only routes - redirects if not coach
- */
-export function useRequireCoach() {
-  const { profile, loading } = useAuth()
-  const router = useRouter()
-
-  useEffect(() => {
     if (!loading && profile) {
-      if (profile.role !== 'coach') {
+      if (profile.role !== 'parent' && profile.role !== 'system_admin') {
         router.replace('/login')
       }
     }
@@ -390,7 +370,29 @@ export function useRequireCoach() {
   return {
     profile,
     loading,
-    isCoach: profile?.role === 'coach',
+    isParent: profile?.role === 'parent' || profile?.role === 'system_admin',
+  }
+}
+
+/**
+ * Hook for coach-only routes - redirects if not coach or system_admin
+ */
+export function useRequireCoach() {
+  const { profile, loading } = useAuth()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (!loading && profile) {
+      if (profile.role !== 'coach' && profile.role !== 'system_admin') {
+        router.replace('/login')
+      }
+    }
+  }, [profile, loading, router])
+
+  return {
+    profile,
+    loading,
+    isCoach: profile?.role === 'coach' || profile?.role === 'system_admin',
   }
 }
 

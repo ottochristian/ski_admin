@@ -5,6 +5,7 @@ import { usePathname, useSearchParams, useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '../supabase/client'
 import { useAuth } from '../auth-context'
+import { useClub } from '../club-context'
 
 /**
  * Season Context - Unified season management across all portals
@@ -63,7 +64,10 @@ export function SeasonProvider({ children }: SeasonProviderProps) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { profile } = useAuth()
-  
+  // Use URL club (not profile.club_id) so impersonation shows the correct club's seasons
+  const { club } = useClub()
+  const clubId = club?.id ?? profile?.club_id ?? null
+
   // Detect portal type from URL structure
   const portalType = useMemo((): PortalType => {
     if (pathname.includes('/admin')) return 'admin'
@@ -71,28 +75,29 @@ export function SeasonProvider({ children }: SeasonProviderProps) {
     if (pathname.includes('/parent')) return 'parent'
     return 'public'
   }, [pathname])
-  
-  // Fetch all seasons for this club (RLS handles club filtering)
+
+  // Fetch all seasons for this club
   const {
     data: seasons = [],
     isLoading,
     error: queryError,
   } = useQuery({
-    queryKey: ['seasons', profile?.club_id],
+    queryKey: ['seasons', clubId],
     queryFn: async () => {
-      if (!profile?.club_id) {
+      if (!clubId) {
         throw new Error('No club associated with your account')
       }
 
-      // RLS automatically filters by club
+      // Filter explicitly by club ID (supports impersonation where URL club ≠ profile club)
       const { data, error } = await supabase.from('seasons')
         .select('*')
+        .eq('club_id', clubId)
         .order('start_date', { ascending: false })
 
       if (error) throw error
       return (data || []) as Season[]
     },
-    enabled: !!profile?.club_id,
+    enabled: !!clubId,
     staleTime: 5 * 60 * 1000, // 5 minutes
   })
   

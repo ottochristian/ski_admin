@@ -29,7 +29,8 @@ function ParentLayoutContent({
     if (loading) return
     if (!profile) {
       router.replace('/login')
-    } else if (!household) {
+    } else if (!household && profile.role !== 'system_admin') {
+      // System admins have no household — don't redirect when impersonating
       router.replace('/signup')
     }
   }, [loading, profile, household, router])
