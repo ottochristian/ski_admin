@@ -1,8 +1,10 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, Suspense } from 'react'
 import { useParams } from 'next/navigation'
-import { Award, DollarSign, FileText, Settings2, Target, TrendingUp, Users, UserPlus, Home } from 'lucide-react'
+import RevenuePage from '../analytics/revenue/page'
+import WaiversPage from '../analytics/waivers/page'
+import { Award, DollarSign, Settings2, Target, TrendingUp, Users, UserPlus, Home } from 'lucide-react'
 import { AdminPageHeader } from '@/components/admin-page-header'
 import { ClubIntelligenceWidget } from '@/components/club-intelligence-widget'
 import { useRequireAdmin } from '@/lib/auth-context'
@@ -456,19 +458,15 @@ export default function AdminInsightsPage() {
         )}
 
         {activeTab === 'revenue' && (
-          <ComingSoonTab
-            icon={DollarSign}
-            title="Revenue Analytics"
-            description="Revenue by program, revenue by month, outstanding payments, and failed payment tracking. Coming soon."
-          />
+          <Suspense fallback={<div className="py-12 text-center text-sm text-zinc-500 animate-pulse">Loading revenue…</div>}>
+            <RevenuePage />
+          </Suspense>
         )}
 
         {activeTab === 'waivers' && (
-          <ComingSoonTab
-            icon={FileText}
-            title="Waiver Analytics"
-            description="Completion rate by program, outstanding athletes, and unsigned waiver list. Coming soon."
-          />
+          <Suspense fallback={<div className="py-12 text-center text-sm text-zinc-500 animate-pulse">Loading waivers…</div>}>
+            <WaiversPage />
+          </Suspense>
         )}
 
         {activeTab === 'custom' && (
