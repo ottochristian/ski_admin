@@ -200,7 +200,7 @@ function MiniCalendar({
               className="flex flex-col items-center py-1 rounded-md transition-colors text-xs font-medium hover:bg-zinc-800/50"
             >
               <span className={`w-6 h-6 flex items-center justify-center rounded-full leading-none
-                ${isToday ? 'bg-blue-600 text-white' : inWeek ? 'text-white font-semibold' : 'text-zinc-500'}
+                ${isToday ? 'bg-blue-600 text-white' : inWeek ? 'text-zinc-100 font-semibold' : 'text-zinc-600'}
               `}>
                 {day.getDate()}
               </span>
