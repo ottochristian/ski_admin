@@ -168,12 +168,6 @@ export default function HomePage() {
             <Link href="/login" className="text-sm text-zinc-400 hover:text-foreground transition-colors px-3 py-1.5">
               Log in
             </Link>
-            <Link
-              href="/signup"
-              className="text-sm font-medium bg-orange-600 hover:bg-orange-500 text-foreground px-4 py-1.5 rounded-md transition-colors"
-            >
-              Get started
-            </Link>
           </div>
         </div>
       </header>
@@ -200,25 +194,19 @@ export default function HomePage() {
               Registrations, payments, athlete management, AI-powered coaching tools — everything your ski program needs in one platform.
             </p>
 
-            <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:justify-center">
+            <div className="mt-10 flex justify-center">
               <Link
                 href="/signup/new-club"
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-foreground font-semibold px-8 py-3 text-sm transition-colors"
               >
                 Set up your club
               </Link>
-              <Link
-                href="/login"
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-700 hover:border-zinc-500 text-zinc-300 hover:text-foreground font-medium px-8 py-3 text-sm transition-colors"
-              >
-                Sign in to your club
-              </Link>
             </div>
-            <p className="mt-4 text-xs text-zinc-600">
+            <p className="mt-5 text-sm text-zinc-500">
               Already a member?{' '}
-              <Link href="/signup" className="text-zinc-500 hover:text-zinc-400 underline underline-offset-2">
-                Join your club here
-              </Link>
+              <Link href="/login" className="text-zinc-400 hover:text-foreground underline underline-offset-2 transition-colors">Sign in</Link>
+              {' · '}
+              <Link href="/signup" className="text-zinc-400 hover:text-foreground underline underline-offset-2 transition-colors">Create a parent account</Link>
             </p>
           </div>
 
