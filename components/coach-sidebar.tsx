@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Profile } from '@/lib/types'
@@ -10,20 +10,31 @@ import { colors } from '@/lib/colors'
 
 interface CoachSidebarProps {
   profile: Profile
+  clubSlug?: string
 }
 
-export function CoachSidebar({ profile }: CoachSidebarProps) {
+export function CoachSidebar({ profile, clubSlug }: CoachSidebarProps) {
   const pathname = usePathname()
   const { club, loading: clubLoading } = useClub()
   const [logoError, setLogoError] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  const basePath = clubSlug ? `/clubs/${clubSlug}/coach` : '/coach'
 
   const menuItems = [
-    { label: 'Dashboard', href: '/coach', icon: LayoutDashboard },
-    { label: 'Schedule', href: '/coach/schedule', icon: Calendar },
-    { label: 'Athletes', href: '/coach/athletes', icon: Users },
-    { label: 'AI Training Plan', href: '/coach/training-plan', icon: Sparkles },
-    { label: 'Messages', href: '/coach/messages', icon: MessageSquare },
+    { label: 'Dashboard', href: basePath, icon: LayoutDashboard },
+    { label: 'Schedule', href: `${basePath}/schedule`, icon: Calendar },
+    { label: 'Athletes', href: `${basePath}/athletes`, icon: Users },
+    { label: 'AI Training Plan', href: `${basePath}/training-plan`, icon: Sparkles },
+    { label: 'Messages', href: `${basePath}/messages`, icon: MessageSquare, badge: unreadCount },
   ]
+
+  useEffect(() => {
+    fetch('/api/messages/unread-count')
+      .then((r) => r.json())
+      .then((d) => setUnreadCount(d.unread_count ?? 0))
+      .catch(() => {})
+  }, [pathname]) // Re-fetch when navigating (marks read clears badge)
 
   const initial = club?.name?.charAt(0).toUpperCase() || 'C'
 
@@ -65,7 +76,7 @@ export function CoachSidebar({ profile }: CoachSidebarProps) {
           const Icon = item.icon
           const isActive =
             pathname === item.href ||
-            (item.href !== '/coach' && pathname.startsWith(item.href))
+            (item.href !== basePath && pathname.startsWith(item.href))
           return (
             <Link
               key={item.href}
@@ -77,7 +88,12 @@ export function CoachSidebar({ profile }: CoachSidebarProps) {
               }`}
             >
               <Icon className="h-4 w-4 shrink-0" />
-              {item.label}
+              <span className="flex-1">{item.label}</span>
+              {item.badge ? (
+                <span className="bg-orange-600 text-white text-xs font-medium rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center">
+                  {item.badge > 99 ? '99+' : item.badge}
+                </span>
+              ) : null}
             </Link>
           )
         })}
