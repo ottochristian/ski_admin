@@ -202,10 +202,10 @@ export default function HomePage() {
 
             <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:justify-center">
               <Link
-                href="/signup"
+                href="/signup/new-club"
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-foreground font-semibold px-8 py-3 text-sm transition-colors"
               >
-                Start free trial
+                Set up your club
               </Link>
               <Link
                 href="/login"
@@ -214,6 +214,12 @@ export default function HomePage() {
                 Sign in to your club
               </Link>
             </div>
+            <p className="mt-4 text-xs text-zinc-600">
+              Already a member?{' '}
+              <Link href="/signup" className="text-zinc-500 hover:text-zinc-400 underline underline-offset-2">
+                Join your club here
+              </Link>
+            </p>
           </div>
 
           {/* Scroll hint */}
@@ -264,10 +270,10 @@ export default function HomePage() {
             <h2 className="text-3xl font-bold mb-4">Ready to get started?</h2>
             <p className="text-zinc-400 mb-8 text-sm">Set up your club in minutes. No credit card required.</p>
             <Link
-              href="/signup"
+              href="/signup/new-club"
               className="inline-flex items-center justify-center rounded-lg bg-orange-600 hover:bg-orange-500 text-foreground font-semibold px-8 py-3 text-sm transition-colors"
             >
-              Create your club
+              Set up your club
             </Link>
           </div>
         </section>

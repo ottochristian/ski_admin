@@ -260,6 +260,90 @@ The ${options.clubName} Team
   }
 
   /**
+   * Send "club request received" email to the requester
+   */
+  async sendClubRequestReceived(
+    email: string,
+    options: { firstName: string; clubName: string }
+  ): Promise<NotificationResult> {
+    const message = `Hi ${options.firstName},
+
+Thanks for your interest in W110! We've received your request to set up ${options.clubName}.
+
+We'll review your request and have your club ready within 24 hours. You'll get another email as soon as everything is set up and you can log in.
+
+If you have any questions in the meantime, just reply to this email.
+
+Thanks,
+The W110 Team`.trim()
+
+    return this.send({
+      method: 'email',
+      recipient: email,
+      subject: `We received your club request — ${options.clubName}`,
+      message,
+    })
+  }
+
+  /**
+   * Send new club request notification to the system admin (Otti)
+   */
+  async sendClubRequestNotification(
+    adminEmail: string,
+    options: {
+      contactName: string
+      contactEmail: string
+      clubName: string
+      athleteCount?: string
+      notes?: string
+      reviewUrl: string
+    }
+  ): Promise<NotificationResult> {
+    const message = `New club request submitted.
+
+Club name: ${options.clubName}
+Contact: ${options.contactName} (${options.contactEmail})
+Estimated athletes: ${options.athleteCount || 'Not provided'}
+Notes: ${options.notes || 'None'}
+
+Review and approve: ${options.reviewUrl}`.trim()
+
+    return this.send({
+      method: 'email',
+      recipient: adminEmail,
+      subject: `New club request: ${options.clubName}`,
+      message,
+    })
+  }
+
+  /**
+   * Send "club is ready" email to the club admin after approval
+   */
+  async sendClubReady(
+    email: string,
+    options: { firstName: string; clubName: string; clubUrl: string }
+  ): Promise<NotificationResult> {
+    const message = `Hi ${options.firstName},
+
+Great news — ${options.clubName} is ready on W110!
+
+You can log in to your admin dashboard here:
+${options.clubUrl}
+
+From there you can set up your seasons, programs, and invite coaches and families.
+
+Welcome aboard,
+The W110 Team`.trim()
+
+    return this.send({
+      method: 'email',
+      recipient: email,
+      subject: `Your club is ready — ${options.clubName}`,
+      message,
+    })
+  }
+
+  /**
    * Send email via Resend
    */
   private async sendEmail(options: NotificationOptions): Promise<void> {
