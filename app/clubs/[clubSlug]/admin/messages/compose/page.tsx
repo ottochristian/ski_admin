@@ -1,19 +1,18 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { ArrowLeft, Send, Users } from 'lucide-react'
 import { AdminPageHeader } from '@/components/admin-page-header'
 import { useSelectedSeason } from '@/lib/contexts/season-context'
+import { SearchSelect } from '@/components/search-select'
+import { MultiSearchSelect } from '@/components/multi-search-select'
 
-type TargetOption = {
-  id: string
-  type: 'program' | 'sub_program' | 'group'
-  label: string       // short name
-  breadcrumb: string  // e.g. "Alpine Racing › Moguls A › Group 1"
-}
+type Group = { id: string; name: string }
+type SubProgram = { id: string; name: string; groups: Group[] }
+type Program = { id: string; name: string; sub_programs: SubProgram[] }
 
 export default function AdminComposeMessagePage() {
   const params = useParams()
@@ -23,10 +22,16 @@ export default function AdminComposeMessagePage() {
 
   const [supabase] = useState(() => createClient())
   const selectedSeason = useSelectedSeason()
-  const [targets, setTargets] = useState<TargetOption[]>([])
-  const [loadingTargets, setLoadingTargets] = useState(true)
 
-  const [targetId, setTargetId] = useState('')
+  const [programs, setPrograms] = useState<Program[]>([])
+  const [loadingPrograms, setLoadingPrograms] = useState(true)
+
+  // Cascade state
+  const [programId, setProgramId] = useState('')
+  const [subProgramIds, setSubProgramIds] = useState<string[]>([])
+  const [groupIds, setGroupIds] = useState<string[]>([])
+
+  // Form state
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [additionalEmails, setAdditionalEmails] = useState('')
@@ -37,112 +42,96 @@ export default function AdminComposeMessagePage() {
   const [error, setError] = useState<string | null>(null)
 
   const parsedAdditionalEmails = additionalEmails
-    .split(/[,\s]+/)
-    .map((e) => e.trim().toLowerCase())
-    .filter((e) => e.length > 0)
-
+    .split(/[,\s]+/).map((e) => e.trim().toLowerCase()).filter(Boolean)
   const invalidEmails = parsedAdditionalEmails.filter(
     (e) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)
   )
 
-  // Load all programs → sub-programs → groups for this club
+  // Derived options for each level
+  const selectedProgram = programs.find((p) => p.id === programId)
+  const subProgramOptions = selectedProgram?.sub_programs ?? []
+  const groupOptions = subProgramIds.length > 0
+    ? subProgramOptions
+        .filter((sp) => subProgramIds.includes(sp.id))
+        .flatMap((sp) => sp.groups)
+    : subProgramOptions.flatMap((sp) => sp.groups)
+
+  // Reset downstream when upstream changes
+  function handleProgramChange(id: string) {
+    setProgramId(id)
+    setSubProgramIds([])
+    setGroupIds([])
+  }
+  function handleSubProgramChange(ids: string[]) {
+    setSubProgramIds(ids)
+    setGroupIds([])
+  }
+
+  // Build targets array for API
+  const targets = (() => {
+    if (groupIds.length > 0) return groupIds.map((id) => ({ type: 'group' as const, id }))
+    if (subProgramIds.length > 0) return subProgramIds.map((id) => ({ type: 'sub_program' as const, id }))
+    if (programId) return [{ type: 'program' as const, id: programId }]
+    return []
+  })()
+
+  // Load programs
   useEffect(() => {
-    async function loadTargets() {
-      setLoadingTargets(true)
+    async function load() {
+      setLoadingPrograms(true)
+      const { data: club } = await supabase.from('clubs').select('id').eq('slug', clubSlug).single()
+      if (!club) { setLoadingPrograms(false); return }
 
-      // Get club id from slug
-      const { data: club } = await supabase
-        .from('clubs')
-        .select('id')
-        .eq('slug', clubSlug)
-        .single()
-
-      if (!club) { setLoadingTargets(false); return }
-
-      let programsQuery = supabase
+      let q = supabase
         .from('programs')
-        .select(`
-          id, name,
-          sub_programs(
-            id, name,
-            groups(id, name)
-          )
-        `)
+        .select('id, name, sub_programs(id, name, groups(id, name))')
         .eq('club_id', club.id)
         .order('name')
+      if (selectedSeason?.id) q = q.eq('season_id', selectedSeason.id)
 
-      if (selectedSeason?.id) {
-        programsQuery = programsQuery.eq('season_id', selectedSeason.id)
-      }
-
-      const { data: programs } = await programsQuery
-
-      const options: TargetOption[] = []
-
-      for (const p of programs ?? []) {
-        options.push({ id: p.id, type: 'program', label: p.name, breadcrumb: p.name })
-
-        const sps = (p as any).sub_programs ?? []
-        for (const sp of sps) {
-          options.push({
-            id: sp.id,
-            type: 'sub_program',
-            label: sp.name,
-            breadcrumb: `${p.name} › ${sp.name}`,
-          })
-
-          const groups = (sp as any).groups ?? []
-          for (const g of groups) {
-            options.push({
-              id: g.id,
-              type: 'group',
-              label: g.name,
-              breadcrumb: `${p.name} › ${sp.name} › ${g.name}`,
-            })
-          }
-        }
-      }
-
-      setTargets(options)
-      setLoadingTargets(false)
+      const { data } = await q
+      setPrograms((data as any) ?? [])
+      setLoadingPrograms(false)
     }
-
-    loadTargets()
+    load()
   }, [supabase, clubSlug, selectedSeason?.id])
 
-  // Fetch recipient count + family preview on target change
-  useEffect(() => {
-    if (!targetId) {
-      setRecipientCount(null)
-      setFamilyPreview([])
-      return
-    }
-
-    const selected = targets.find((t) => t.id === targetId)
-    if (!selected) return
+  // Fetch recipient count + preview whenever targets change
+  const fetchCount = useCallback(async () => {
+    if (targets.length === 0) { setRecipientCount(null); setFamilyPreview([]); return }
 
     setLoadingCount(true)
     setFamilyPreview([])
 
-    Promise.all([
-      fetch(`/api/messages/recipient-count?target_type=${selected.type}&target_id=${targetId}`).then((r) => r.json()),
-      fetch(`/api/messages/family-preview?target_type=${selected.type}&target_id=${targetId}`).then((r) => r.json()),
-    ])
-      .then(([countData, previewData]) => {
-        setRecipientCount(countData.count ?? null)
-        setFamilyPreview(previewData.families ?? [])
-      })
-      .catch(() => { setRecipientCount(null); setFamilyPreview([]) })
-      .finally(() => setLoadingCount(false))
-  }, [targetId, targets])
+    try {
+      // Sum counts across all targets
+      const counts = await Promise.all(
+        targets.map((t) =>
+          fetch(`/api/messages/recipient-count?target_type=${t.type}&target_id=${t.id}`).then((r) => r.json())
+        )
+      )
+      // Use the first target for family preview (representative sample)
+      const preview = await fetch(
+        `/api/messages/family-preview?target_type=${targets[0].type}&target_id=${targets[0].id}`
+      ).then((r) => r.json())
+
+      const total = counts.reduce((sum, c) => sum + (c.count ?? 0), 0)
+      setRecipientCount(total)
+      setFamilyPreview(preview.families ?? [])
+    } catch {
+      setRecipientCount(null)
+      setFamilyPreview([])
+    } finally {
+      setLoadingCount(false)
+    }
+  }, [JSON.stringify(targets)])
+
+  useEffect(() => { fetchCount() }, [fetchCount])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!targetId || !subject.trim() || !body.trim()) return
+    if (targets.length === 0 || !subject.trim() || !body.trim()) return
     if (invalidEmails.length > 0) return
-
-    const selected = targets.find((t) => t.id === targetId)
-    if (!selected) return
 
     setSending(true)
     setError(null)
@@ -154,8 +143,7 @@ export default function AdminComposeMessagePage() {
         clubSlug,
         subject: subject.trim(),
         body: body.trim(),
-        target_type: selected.type,
-        target_id: selected.id,
+        targets,
         additional_emails: parsedAdditionalEmails,
         season_id: selectedSeason?.id ?? undefined,
       }),
@@ -170,68 +158,84 @@ export default function AdminComposeMessagePage() {
     }
   }
 
-  const selectedTarget = targets.find((t) => t.id === targetId)
-
   return (
     <div className="max-w-2xl">
-      <Link
-        href={`${basePath}/messages`}
-        className="flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-300 mb-6"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to messages
+      <Link href={`${basePath}/messages`} className="flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-300 mb-6">
+        <ArrowLeft className="h-4 w-4" /> Back to messages
       </Link>
 
       <AdminPageHeader title="New Message" description="Send a message to families across your programs." />
 
       <form onSubmit={handleSubmit} className="mt-6 space-y-5">
-        {/* Target */}
-        <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-zinc-300">Send to</label>
-          {loadingTargets ? (
-            <div className="h-10 rounded-lg bg-zinc-800 animate-pulse" />
-          ) : targets.length === 0 ? (
-            <p className="text-sm text-zinc-500">No programs found. Create a program first.</p>
-          ) : (
-            <select
-              value={targetId}
-              onChange={(e) => setTargetId(e.target.value)}
-              required
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            >
-              <option value="">Select a target…</option>
-              {targets.map((t) => (
-                <option key={`${t.type}-${t.id}`} value={t.id}>
-                  {t.type === 'program' ? '' : t.type === 'sub_program' ? '  › ' : '    › › '}
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          )}
 
-          {/* Breadcrumb + count + preview */}
-          {targetId && selectedTarget && (
-            <div className="mt-1.5 space-y-1">
-              <p className="text-xs text-zinc-500 font-medium">{selectedTarget.breadcrumb}</p>
-              <p className="text-xs text-zinc-500 flex items-center gap-1.5">
-                <Users className="h-3 w-3" />
-                {loadingCount
-                  ? 'Counting families…'
-                  : recipientCount === null
-                  ? ''
-                  : `Will reach ${recipientCount} ${recipientCount === 1 ? 'family' : 'families'}`}
-              </p>
-              {familyPreview.length > 0 && (
-                <p className="text-xs text-zinc-600 pl-4">
-                  {familyPreview.join(', ')}
-                  {recipientCount !== null && recipientCount > familyPreview.length && (
-                    <span className="text-zinc-700"> +{recipientCount - familyPreview.length} more</span>
-                  )}
-                </p>
-              )}
-            </div>
+        {/* Step 1 — Program */}
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium text-zinc-300">Program</label>
+          {loadingPrograms ? (
+            <div className="h-10 rounded-lg bg-zinc-800 animate-pulse" />
+          ) : (
+            <SearchSelect
+              options={programs.map((p) => ({ id: p.id, label: p.name }))}
+              value={programId}
+              onChange={handleProgramChange}
+              placeholder="Search programs…"
+              clearable
+            />
           )}
         </div>
+
+        {/* Step 2 — Sub-programs (optional) */}
+        {selectedProgram && subProgramOptions.length > 0 && (
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-zinc-300">
+              Sub-program <span className="text-zinc-500 font-normal">(optional — leave empty to send to whole program)</span>
+            </label>
+            <MultiSearchSelect
+              options={subProgramOptions.map((sp) => ({ id: sp.id, label: sp.name }))}
+              selected={subProgramIds}
+              onChange={handleSubProgramChange}
+              placeholder="Search sub-programs…"
+            />
+          </div>
+        )}
+
+        {/* Step 3 — Groups (optional) */}
+        {(subProgramIds.length > 0 || (selectedProgram && subProgramIds.length === 0)) && groupOptions.length > 0 && (
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-zinc-300">
+              Group <span className="text-zinc-500 font-normal">(optional — leave empty to send to selected sub-programs)</span>
+            </label>
+            <MultiSearchSelect
+              options={groupOptions.map((g) => ({ id: g.id, label: g.name }))}
+              selected={groupIds}
+              onChange={setGroupIds}
+              placeholder="Search groups…"
+            />
+          </div>
+        )}
+
+        {/* Recipient count + preview */}
+        {targets.length > 0 && (
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3 space-y-1">
+            <p className="text-xs text-zinc-400 flex items-center gap-1.5">
+              <Users className="h-3.5 w-3.5" />
+              {loadingCount
+                ? 'Counting families…'
+                : recipientCount === null
+                ? 'No registrations found'
+                : <><span className="font-semibold text-foreground">{recipientCount}</span> {recipientCount === 1 ? 'family' : 'families'} will receive this message</>
+              }
+            </p>
+            {familyPreview.length > 0 && (
+              <p className="text-xs text-zinc-600 pl-5">
+                {familyPreview.join(', ')}
+                {recipientCount !== null && recipientCount > familyPreview.length && (
+                  <span> +{recipientCount - familyPreview.length} more</span>
+                )}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Subject */}
         <div className="space-y-1.5">
@@ -262,8 +266,7 @@ export default function AdminComposeMessagePage() {
         {/* Additional recipients */}
         <div className="space-y-1.5">
           <label className="block text-sm font-medium text-zinc-300">
-            Additional recipients{' '}
-            <span className="text-zinc-500 font-normal">(optional)</span>
+            Additional recipients <span className="text-zinc-500 font-normal">(optional)</span>
           </label>
           <input
             type="text"
@@ -272,23 +275,17 @@ export default function AdminComposeMessagePage() {
             placeholder="jane@example.com, partner@org.com"
             className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-foreground placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
           />
-          <p className="text-xs text-zinc-600">
-            Comma-separated. Each address gets its own individual email — no one sees the others.
-          </p>
-          {invalidEmails.length > 0 && (
-            <p className="text-xs text-red-400">Invalid: {invalidEmails.join(', ')}</p>
-          )}
+          <p className="text-xs text-zinc-600">Comma-separated. Each address gets its own individual email.</p>
+          {invalidEmails.length > 0 && <p className="text-xs text-red-400">Invalid: {invalidEmails.join(', ')}</p>}
         </div>
 
         {error && (
-          <div className="rounded-lg border border-red-800 bg-red-900/30 px-4 py-3 text-sm text-red-400">
-            {error}
-          </div>
+          <div className="rounded-lg border border-red-800 bg-red-900/30 px-4 py-3 text-sm text-red-400">{error}</div>
         )}
 
         <button
           type="submit"
-          disabled={sending || !targetId || !subject.trim() || !body.trim() || invalidEmails.length > 0}
+          disabled={sending || targets.length === 0 || !subject.trim() || !body.trim() || invalidEmails.length > 0}
           className="flex items-center gap-2 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition-colors"
         >
           <Send className="h-4 w-4" />

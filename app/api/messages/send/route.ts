@@ -6,12 +6,16 @@ import { z } from 'zod'
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+const targetSchema = z.object({
+  type: z.enum(['program', 'sub_program', 'group']),
+  id: z.string().uuid(),
+})
+
 const sendSchema = z.object({
   clubSlug: z.string().min(1),
   subject: z.string().min(1).max(200),
   body: z.string().min(1).max(10000),
-  target_type: z.enum(['program', 'sub_program', 'group']),
-  target_id: z.string().uuid(),
+  targets: z.array(targetSchema).min(1, 'At least one target required'),
   season_id: z.string().uuid().optional(),
   additional_emails: z
     .array(z.string().regex(emailRegex, 'Invalid email'))
@@ -61,18 +65,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  // Resolve target name for email footer
-  let targetName = ''
-  if (body.target_type === 'program') {
-    const { data } = await admin.from('programs').select('name').eq('id', body.target_id).single()
-    targetName = data?.name ?? ''
-  } else if (body.target_type === 'sub_program') {
-    const { data } = await admin.from('sub_programs').select('name').eq('id', body.target_id).single()
-    targetName = data?.name ?? ''
-  } else {
-    const { data } = await admin.from('groups').select('name').eq('id', body.target_id).single()
-    targetName = data?.name ?? ''
+  // Resolve target names for email footer
+  const targetNames: string[] = []
+  for (const t of body.targets) {
+    if (t.type === 'program') {
+      const { data } = await admin.from('programs').select('name').eq('id', t.id).single()
+      if (data?.name) targetNames.push(data.name)
+    } else if (t.type === 'sub_program') {
+      const { data } = await admin.from('sub_programs').select('name').eq('id', t.id).single()
+      if (data?.name) targetNames.push(data.name)
+    } else {
+      const { data } = await admin.from('groups').select('name').eq('id', t.id).single()
+      if (data?.name) targetNames.push(data.name)
+    }
   }
+  const targetName = targetNames.join(', ')
+
+  // For DB storage, record the first target (primary) — multi-target stored in targets array
+  const primaryTarget = body.targets[0]
 
   // Insert message
   const { data: message, error: msgError } = await admin
@@ -84,9 +94,9 @@ export async function POST(request: NextRequest) {
       club_id: club.id,
       season_id: body.season_id ?? null,
       message_type: 'broadcast',
-      program_id: body.target_type === 'program' ? body.target_id : null,
-      sub_program_id: body.target_type === 'sub_program' ? body.target_id : null,
-      group_id: body.target_type === 'group' ? body.target_id : null,
+      program_id: primaryTarget.type === 'program' ? primaryTarget.id : null,
+      sub_program_id: primaryTarget.type === 'sub_program' ? primaryTarget.id : null,
+      group_id: primaryTarget.type === 'group' ? primaryTarget.id : null,
     })
     .select('id')
     .single()
@@ -95,36 +105,46 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to save message' }, { status: 500 })
   }
 
-  // Resolve household_ids from registrations
-  let householdIds: string[] = []
+  // Resolve household_ids from all targets (union, deduped)
+  const householdSet = new Set<string>()
 
-  if (body.target_type === 'group') {
-    const { data: regs } = await admin
-      .from('registrations')
-      .select('athletes(household_id)')
-      .eq('group_id', body.target_id)
-    householdIds = extractHouseholdIds(regs)
-  } else if (body.target_type === 'sub_program') {
-    const { data: regs } = await admin
-      .from('registrations')
-      .select('athletes(household_id)')
-      .eq('sub_program_id', body.target_id)
-    householdIds = extractHouseholdIds(regs)
-  } else {
-    // program — get all sub_programs first
-    const { data: sps } = await admin
-      .from('sub_programs')
-      .select('id')
-      .eq('program_id', body.target_id)
-    const spIds = sps?.map((s: { id: string }) => s.id) ?? []
-    if (spIds.length > 0) {
-      const { data: regs } = await admin
+  for (const t of body.targets) {
+    let regs: any[] | null = null
+
+    if (t.type === 'group') {
+      const { data } = await admin
         .from('registrations')
         .select('athletes(household_id)')
-        .in('sub_program_id', spIds)
-      householdIds = extractHouseholdIds(regs)
+        .eq('group_id', t.id)
+      regs = data
+    } else if (t.type === 'sub_program') {
+      const { data } = await admin
+        .from('registrations')
+        .select('athletes(household_id)')
+        .eq('sub_program_id', t.id)
+      regs = data
+    } else {
+      // program — expand to sub_programs
+      const { data: sps } = await admin
+        .from('sub_programs')
+        .select('id')
+        .eq('program_id', t.id)
+      const spIds = sps?.map((s: { id: string }) => s.id) ?? []
+      if (spIds.length > 0) {
+        const { data } = await admin
+          .from('registrations')
+          .select('athletes(household_id)')
+          .in('sub_program_id', spIds)
+        regs = data
+      }
+    }
+
+    for (const id of extractHouseholdIds(regs)) {
+      householdSet.add(id)
     }
   }
+
+  const householdIds = [...householdSet]
 
   // Resolve user_ids from household_guardians
   let userIds: string[] = []
