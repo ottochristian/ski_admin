@@ -362,7 +362,7 @@ The W110 Team`.trim()
       return
     }
 
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@skioutfitters.com'
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@w110.io'
     const fromName = process.env.RESEND_FROM_NAME || 'W110'
 
     try {
