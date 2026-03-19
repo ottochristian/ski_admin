@@ -182,12 +182,12 @@ export default function HomePage() {
 
           <div className="relative max-w-4xl">
             <h1 className="text-5xl font-bold tracking-tight md:text-6xl lg:text-7xl text-balance leading-[1.05]">
-              The smarter way to<br />
-              <span className="text-orange-500">run your ski club.</span>
+              The ski club platform<br />
+              <span className="text-orange-500">built for the AI era.</span>
             </h1>
 
             <p className="mt-6 text-lg text-zinc-400 max-w-2xl mx-auto text-balance">
-              Registrations, payments, waivers, and AI-powered coaching tools — built specifically for ski clubs.
+              Registrations, payments, waivers, and AI-powered tools that help you coach smarter, communicate faster, and grow your program.
             </p>
 
             <div className="mt-10 flex justify-center">
@@ -216,8 +216,11 @@ export default function HomePage() {
         {/* Features */}
         <section className="border-t border-zinc-800 py-24 px-6">
           <div className="mx-auto max-w-6xl">
-            <p className="text-center text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-16">
-              Everything your program needs
+            <p className="text-center text-3xl font-bold text-foreground mb-3">
+              Run your club.<br className="sm:hidden" /> <span className="text-orange-500">Not spreadsheets.</span>
+            </p>
+            <p className="text-center text-sm text-zinc-400 mb-16 max-w-xl mx-auto">
+              Everything you need to manage your program, in one place.
             </p>
             <div className="grid gap-6 md:grid-cols-3">
               {[
