@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url)
   const clubSlug = searchParams.get('clubSlug')
+  const seasonId = searchParams.get('seasonId')
   const page = parseInt(searchParams.get('page') ?? '1', 10)
   const limit = Math.min(parseInt(searchParams.get('limit') ?? '20', 10), 100)
   const offset = (page - 1) * limit
@@ -50,6 +51,10 @@ export async function GET(request: NextRequest) {
 
   if (profile.role === 'coach') {
     query = query.eq('sender_id', user.id)
+  }
+
+  if (seasonId) {
+    query = query.eq('season_id', seasonId)
   }
 
   const { data: messages, error, count } = await query
