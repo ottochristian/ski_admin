@@ -182,20 +182,20 @@ export default function HomePage() {
 
           <div className="relative max-w-4xl">
             <h1 className="text-5xl font-bold tracking-tight md:text-6xl lg:text-7xl text-balance leading-[1.05]">
-              Register your child.<br />
-              <span className="text-orange-500">In minutes.</span>
+              The smarter way to<br />
+              <span className="text-orange-500">run your ski club.</span>
             </h1>
 
             <p className="mt-6 text-lg text-zinc-400 max-w-2xl mx-auto text-balance">
-              Sign up, pick a program, and pay — all in one place. No paperwork, no back-and-forth emails.
+              Registrations, payments, waivers, and AI-powered coaching tools — built specifically for ski clubs.
             </p>
 
             <div className="mt-10 flex justify-center">
               <Link
-                href="/signup"
+                href="/signup/new-club"
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-foreground font-semibold px-8 py-3 text-sm transition-colors"
               >
-                Register your child
+                Set up your club
               </Link>
             </div>
             <p className="mt-5 text-sm text-zinc-500">
@@ -255,7 +255,7 @@ export default function HomePage() {
             <h2 className="text-3xl font-bold mb-12 text-center">Ready to get started?</h2>
             <div className="grid gap-6 md:grid-cols-2">
               <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 flex flex-col">
-                <h3 className="text-lg font-semibold text-foreground mb-2">Registering your child?</h3>
+                <h3 className="text-lg font-semibold text-foreground mb-2">Registering your child for ski club?</h3>
                 <p className="text-sm text-zinc-400 mb-8 flex-1">Create an account, pick a program, and pay — all in one place. Takes about 5 minutes.</p>
                 <Link
                   href="/signup"
@@ -266,7 +266,7 @@ export default function HomePage() {
               </div>
               <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 flex flex-col">
                 <h3 className="text-lg font-semibold text-foreground mb-2">Running a ski club?</h3>
-                <p className="text-sm text-zinc-400 mb-8 flex-1">Submit your details and we'll have your club set up and ready to go within 24 hours.</p>
+                <p className="text-sm text-zinc-400 mb-8 flex-1">Built for alpine, freestyle, and snowboard programs. Submit your details and we'll have you set up within 24 hours.</p>
                 <Link
                   href="/signup/new-club"
                   className="inline-flex items-center justify-center rounded-lg bg-orange-600 hover:bg-orange-500 text-foreground font-semibold px-6 py-2.5 text-sm transition-colors"
