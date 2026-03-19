@@ -24,56 +24,80 @@ export async function POST(request: NextRequest) {
 
   const { data: club } = await admin.from('clubs').select('name').eq('id', profile.club_id).single()
   const clubName = club?.name ?? 'the club'
+  const senderName =
+    [profile.first_name, profile.last_name].filter(Boolean).join(' ') || 'Your Coach'
 
   const body = await request.json()
-  const { type, title, detail, target_name, recipient_count, preview_names } = body
+  const { type, title, detail, target_name, recipient_count } = body
 
-  const senderName = [profile.first_name, profile.last_name].filter(Boolean).join(' ') || 'Your Coach'
-  const previewList = (preview_names ?? []).slice(0, 4).join(', ')
+  const systemPrompt = `You are a communication assistant helping a ski coach at ${clubName} write emails to individual athlete families.
 
-  const systemPrompt = `You are a communication assistant helping a ski coach at ${clubName} write emails to athlete families.
-Always return a JSON object with exactly two fields: "subject" (string, concise) and "body" (string, plain text, 3-5 sentences, warm and friendly).
-No markdown in the body. No {{ }} placeholders. Write to the group collectively (not individually personalized).`
+Output format — two parts separated by a blank line:
+1. The email subject (one line, no label)
+2. The email body (plain text, 3-5 sentences, warm and friendly)
+
+Personalise every email using these merge fields exactly as written:
+- {{parent_first_name}} — always open with "Hi {{parent_first_name}},"
+- {{athlete_first_name}} — the athlete's first name
+- {{club_name}} — the club name
+- {{program_name}} — the group or program name
+
+No JSON, no markdown, no extra labels. Just subject, blank line, body.`
 
   const userPrompt = `Write an email for this situation:
 Type: ${type}
 Situation: ${title}
 Detail: ${detail}
 Group: ${target_name}
-Affected families (example names): ${previewList || 'several families'}
-Total: ${recipient_count ?? 'some'} families
-Coach name: ${senderName}
-Club: ${clubName}
+Families: ${recipient_count ?? 'some'}
+Coach: ${senderName} at ${clubName}
 
-For waiver reminders: explain why signing is important for athlete safety and participation.
-For payment reminders: be warm but clear about the deadline.
-For event reminders: build excitement and share any logistics.`
+For waiver reminders: explain why signing matters for {{athlete_first_name}}'s safety and participation.
+For payment reminders: be warm but clear.
+For event reminders: build excitement.
+Always address {{parent_first_name}} personally.`
 
-  try {
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 600,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-    })
+  admin.from('ai_usage').insert({
+    club_id: profile.club_id,
+    user_id: profile.id,
+    feature: 'coach_nudge_draft',
+    model: 'claude-sonnet-4-6',
+  }).then(({ error }: { error: unknown }) => {
+    if (error) console.error('[coach nudge draft] usage:', error)
+  })
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : ''
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) throw new Error('No JSON in response')
-    const parsed = JSON.parse(jsonMatch[0])
+  const encoder = new TextEncoder()
+  const readable = new ReadableStream({
+    async start(controller) {
+      try {
+        const stream = await anthropic.messages.create({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 600,
+          stream: true,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userPrompt }],
+        })
+        for await (const event of stream) {
+          if (
+            event.type === 'content_block_delta' &&
+            event.delta.type === 'text_delta'
+          ) {
+            controller.enqueue(encoder.encode(event.delta.text))
+          }
+        }
+      } catch (err) {
+        console.error('[coach nudge draft] stream error:', err)
+      } finally {
+        controller.close()
+      }
+    },
+  })
 
-    admin.from('ai_usage').insert({
-      club_id: profile.club_id,
-      user_id: profile.id,
-      feature: 'coach_nudge_draft',
-      prompt_tokens: response.usage.input_tokens,
-      completion_tokens: response.usage.output_tokens,
-      model: 'claude-sonnet-4-6',
-    }).then(({ error }: { error: unknown }) => { if (error) console.error('[coach nudge draft] usage:', error) })
-
-    return NextResponse.json({ subject: parsed.subject, body: parsed.body })
-  } catch (err) {
-    console.error('[coach nudge draft] error:', err)
-    return NextResponse.json({ error: 'Failed to generate draft' }, { status: 500 })
-  }
+  return new Response(readable, {
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'no-cache',
+      'X-Accel-Buffering': 'no',
+    },
+  })
 }

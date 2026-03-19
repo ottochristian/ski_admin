@@ -7,6 +7,7 @@ import { useRequireCoach } from '@/lib/auth-context'
 import { CoachSidebar } from '@/components/coach-sidebar'
 import { UnifiedSeasonSelector } from '@/components/unified-season-selector'
 import { ProfileMenu } from '@/components/profile-menu'
+import { NotificationBell } from '@/components/notification-bell'
 import { useClub } from '@/lib/club-context'
 import { SeasonProvider } from '@/lib/contexts/season-context'
 import { InlineLoading } from '@/components/ui/loading-states'
@@ -50,6 +51,12 @@ export default function CoachLayout({
               ) : (
                 <>
                   <UnifiedSeasonSelector />
+                  <NotificationBell
+                    nudgesEndpoint="/api/coach/nudges"
+                    draftEndpoint="/api/coach/nudges/draft"
+                    clubSlug={clubSlug}
+                    composeHref={`/clubs/${clubSlug}/coach/messages/compose`}
+                  />
                   <ProfileMenu profile={profile} />
                 </>
               )}

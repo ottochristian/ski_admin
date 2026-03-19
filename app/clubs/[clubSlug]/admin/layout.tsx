@@ -7,6 +7,7 @@ import { useRequireAdmin } from '@/lib/auth-context'
 import { AdminSidebar } from '@/components/admin-sidebar'
 import { UnifiedSeasonSelector } from '@/components/unified-season-selector'
 import { ProfileMenu } from '@/components/profile-menu'
+import { NotificationBell } from '@/components/notification-bell'
 import { useClub } from '@/lib/club-context'
 import { SeasonProvider } from '@/lib/contexts/season-context'
 import { InlineLoading } from '@/components/ui/loading-states'
@@ -60,6 +61,12 @@ export default function AdminLayout({
               ) : (
                 <>
                   <UnifiedSeasonSelector />
+                  <NotificationBell
+                    nudgesEndpoint="/api/admin/nudges"
+                    draftEndpoint="/api/admin/nudges/draft"
+                    clubSlug={clubSlug}
+                    composeHref={`/clubs/${clubSlug}/admin/messages/compose`}
+                  />
                   <ProfileMenu profile={profile} />
                 </>
               )}

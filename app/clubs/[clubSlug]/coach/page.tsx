@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button'
 import { Users, Calendar, MessageSquare, ArrowRight, Clock, MapPin, Sparkles, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 import { AdminPageHeader } from '@/components/admin-page-header'
-import { NudgesWidget } from '@/components/nudges-widget'
 import { cn } from '@/lib/utils'
 
 type Profile = {
@@ -334,16 +333,6 @@ export default function CoachDashboardPage() {
 
       {/* 2. Coach Briefing Widget */}
       <CoachBriefingWidget date={date} aiEnabled={aiEnabled} />
-
-      {/* 3. Nudges */}
-      {aiEnabled && (
-        <NudgesWidget
-          nudgesEndpoint="/api/coach/nudges"
-          draftEndpoint="/api/coach/nudges/draft"
-          sendEndpoint="/api/messages/send"
-          clubSlug={clubSlug}
-        />
-      )}
 
       {/* 3. Today's schedule */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-900 overflow-hidden">

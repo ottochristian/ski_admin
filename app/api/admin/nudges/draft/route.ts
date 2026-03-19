@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
   if (!clubId) return NextResponse.json({ error: 'No club' }, { status: 403 })
 
   const body = await request.json()
-  const { type, title, detail, target_name, recipient_count } = body
+  const { type, title, detail, target_name, recipient_count, preview_names } = body
 
   const admin = createSupabaseAdminClient()
   const [{ data: club }, { data: fullProfile }] = await Promise.all([
@@ -22,11 +22,22 @@ export async function POST(request: NextRequest) {
     admin.from('profiles').select('first_name, last_name').eq('id', profile.id).single(),
   ])
   const clubName = club?.name ?? 'the club'
-  const senderName = [fullProfile?.first_name, fullProfile?.last_name].filter(Boolean).join(' ') || 'The Admin Team'
+  const senderName =
+    [fullProfile?.first_name, fullProfile?.last_name].filter(Boolean).join(' ') || 'The Admin Team'
 
-  const systemPrompt = `You are a communication assistant for ${clubName}, a ski club. Write a short, warm, professional email from the admin team to families.
-Always return a JSON object with exactly two fields: "subject" (string, concise) and "body" (string, plain text, 3-5 sentences).
-No markdown, no placeholders, no {{ }} fields. Write directly to the families as a group.`
+  const systemPrompt = `You are a communication assistant for ${clubName}, a ski club. Write a short, warm, professional email from the admin team to individual families.
+
+Output format — two parts separated by a blank line:
+1. The email subject (one line, no label)
+2. The email body (plain text, 3-5 sentences)
+
+Personalise every email using these merge fields exactly as written:
+- {{parent_first_name}} — always open with "Hi {{parent_first_name}},"
+- {{athlete_first_name}} — the athlete's first name
+- {{club_name}} — the club name
+- {{program_name}} — the program or group name
+
+No JSON, no markdown, no extra labels. Just subject, blank line, body.`
 
   const userPrompt = `Write an email for this situation:
 Type: ${type}
@@ -36,36 +47,53 @@ Target group: ${target_name}
 Number of affected families: ${recipient_count}
 Sender: ${senderName} at ${clubName}
 
-Keep it friendly but clear. For waiver reminders, explain why it matters. For payment reminders, be polite but firm.`
+For payment reminders: be polite but firm, mention {{athlete_first_name}}'s spot may be at risk.
+For waiver reminders: explain why the waiver matters for {{athlete_first_name}}'s participation.
+Always address {{parent_first_name}} personally.`
 
-  try {
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 600,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-    })
+  // Log usage fire-and-forget (estimate tokens, exact count not available for streams easily)
+  admin.from('ai_usage').insert({
+    club_id: clubId,
+    user_id: profile.id,
+    feature: 'nudge_draft',
+    model: 'claude-sonnet-4-6',
+  }).then(({ error }: { error: unknown }) => {
+    if (error) console.error('[nudge draft] usage log:', error)
+  })
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : ''
+  // Stream the response
+  const encoder = new TextEncoder()
+  const readable = new ReadableStream({
+    async start(controller) {
+      try {
+        const stream = await anthropic.messages.create({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 600,
+          stream: true,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userPrompt }],
+        })
+        for await (const event of stream) {
+          if (
+            event.type === 'content_block_delta' &&
+            event.delta.type === 'text_delta'
+          ) {
+            controller.enqueue(encoder.encode(event.delta.text))
+          }
+        }
+      } catch (err) {
+        console.error('[nudge draft] stream error:', err)
+      } finally {
+        controller.close()
+      }
+    },
+  })
 
-    // Parse JSON from response
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) throw new Error('No JSON in response')
-    const parsed = JSON.parse(jsonMatch[0])
-
-    // Log usage
-    admin.from('ai_usage').insert({
-      club_id: clubId,
-      user_id: profile.id,
-      feature: 'nudge_draft',
-      prompt_tokens: response.usage.input_tokens,
-      completion_tokens: response.usage.output_tokens,
-      model: 'claude-sonnet-4-6',
-    }).then(({ error }: { error: unknown }) => { if (error) console.error('[nudge draft] usage log:', error) })
-
-    return NextResponse.json({ subject: parsed.subject, body: parsed.body })
-  } catch (err) {
-    console.error('[nudge draft] error:', err)
-    return NextResponse.json({ error: 'Failed to generate draft' }, { status: 500 })
-  }
+  return new Response(readable, {
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'no-cache',
+      'X-Accel-Buffering': 'no',
+    },
+  })
 }

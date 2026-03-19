@@ -39,14 +39,20 @@ export async function GET(request: NextRequest) {
     if (subPrograms && subPrograms.length > 0) {
       const spIds = subPrograms.map((sp: any) => sp.id)
 
-      // Count enrolled (non-cancelled) athletes per sub_program
+      // Include household_id so we can target specific families
       const { data: regCounts } = await admin
         .from('registrations')
-        .select('sub_program_id, athlete_id')
+        .select('sub_program_id, athlete_id, athletes(household_id)')
         .in('sub_program_id', spIds)
         .neq('status', 'cancelled')
 
-      // Get required waivers for this season
+      // Build athlete_id → household_id map
+      const athleteToHousehold: Record<string, string> = {}
+      for (const reg of regCounts ?? []) {
+        const a = Array.isArray(reg.athletes) ? reg.athletes[0] : reg.athletes
+        if (a?.household_id) athleteToHousehold[reg.athlete_id] = a.household_id
+      }
+
       const { data: requiredWaivers } = await admin
         .from('waivers')
         .select('id')
@@ -74,11 +80,15 @@ export async function GET(request: NextRequest) {
 
         for (const sp of subPrograms) {
           const athletes = bySubProgram[sp.id] ?? []
-          if (athletes.length < 3) continue // skip tiny groups
+          if (athletes.length < 3) continue
           const signed = athletes.filter((id: string) => signedSet.has(id)).length
           const rate = Math.round((signed / athletes.length) * 100)
           if (rate < 60) {
             const missing = athletes.length - signed
+            const unsignedAthleteIds = athletes.filter((id: string) => !signedSet.has(id))
+            const householdIds = [...new Set(
+              unsignedAthleteIds.map(id => athleteToHousehold[id]).filter(Boolean)
+            )]
             const progName = (sp.programs as any)?.name ?? 'Unknown Program'
             nudges.push({
               id: `low-waiver-compliance-${sp.id}`,
@@ -86,8 +96,9 @@ export async function GET(request: NextRequest) {
               severity: rate < 30 ? 'red' : 'amber',
               title: `${progName} › ${sp.name} has ${rate}% waiver compliance`,
               detail: `${missing} of ${athletes.length} athletes haven't signed required waivers.`,
-              send_target: { type: 'sub_program', id: sp.id, name: sp.name },
-              recipient_count: missing,
+              send_target: { type: 'sub_program', id: sp.id, name: `${progName} › ${sp.name}` },
+              recipient_count: householdIds.length,
+              household_ids: householdIds,
               preview_names: [],
             })
           }
@@ -99,7 +110,7 @@ export async function GET(request: NextRequest) {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
     const { data: unpaidRegs } = await admin
       .from('registrations')
-      .select('id, athlete_id, sub_program_id, athletes(first_name, last_name), sub_programs(id, name, programs(name))')
+      .select('id, athlete_id, sub_program_id, athletes(first_name, household_id), sub_programs(id, name, programs(name))')
       .eq('club_id', clubId)
       .eq('season_id', seasonId)
       .neq('payment_status', 'paid')
@@ -122,18 +133,28 @@ export async function GET(request: NextRequest) {
         const prog = sp?.programs
         const spName = sp?.name ?? 'Unknown'
         const progName = prog?.name ?? 'Unknown'
+
+        const householdIds = [...new Set(
+          regs.map((r: any) => {
+            const a = Array.isArray(r.athletes) ? r.athletes[0] : r.athletes
+            return a?.household_id
+          }).filter(Boolean) as string[]
+        )]
+
         const previewNames = regs.slice(0, 4).map((r: any) => {
           const a = Array.isArray(r.athletes) ? r.athletes[0] : r.athletes
           return a?.first_name ?? 'Family'
         })
+
         nudges.push({
           id: `outstanding-payments-${spId}`,
           type: 'outstanding_payments',
-          severity: regs.length >= 5 ? 'red' : 'amber',
-          title: `${regs.length} families in ${progName} › ${spName} haven't paid`,
+          severity: householdIds.length >= 5 ? 'red' : 'amber',
+          title: `${householdIds.length} ${householdIds.length === 1 ? 'family' : 'families'} in ${progName} › ${spName} haven't paid`,
           detail: `These registrations have been unpaid for over 7 days.`,
-          send_target: { type: 'sub_program', id: spId, name: spName },
-          recipient_count: regs.length,
+          send_target: { type: 'sub_program', id: spId, name: `${progName} › ${spName}` },
+          recipient_count: householdIds.length,
+          household_ids: householdIds,
           preview_names: previewNames,
         })
       }
@@ -153,7 +174,6 @@ export async function GET(request: NextRequest) {
       const profile_data = Array.isArray(coach.profiles) ? coach.profiles[0] : coach.profiles as any
       if (!profile_data) continue
 
-      // Check if they have active assignments
       const { count: assignmentCount } = await admin
         .from('coach_assignments')
         .select('id', { count: 'exact', head: true })
@@ -161,7 +181,6 @@ export async function GET(request: NextRequest) {
 
       if (!assignmentCount || assignmentCount === 0) continue
 
-      // Check last message sent
       const { count: recentMessages } = await admin
         .from('messages')
         .select('id', { count: 'exact', head: true })
@@ -177,8 +196,9 @@ export async function GET(request: NextRequest) {
           severity: 'amber',
           title: `${coachName} hasn't sent any messages in 14+ days`,
           detail: `This coach has active assignments but hasn't communicated with families recently.`,
-          send_target: null, // informational only
+          send_target: null,
           recipient_count: 0,
+          household_ids: [],
           preview_names: [],
           coach_name: coachName,
         })

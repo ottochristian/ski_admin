@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
 
         const { data: regs } = await admin
           .from('registrations')
-          .select('athlete_id, athletes(first_name, last_name)')
+          .select('athlete_id, athletes(first_name, last_name, household_id)')
           .eq('group_id', assignment.group_id)
           .neq('status', 'cancelled')
 
@@ -91,6 +91,13 @@ export async function GET(request: NextRequest) {
 
         const unsigned = regs.filter((r: any) => !signedSet.has(r.athlete_id))
         if (unsigned.length === 0) continue
+
+        const householdIds = [...new Set(
+          unsigned.map((r: any) => {
+            const a = Array.isArray(r.athletes) ? r.athletes[0] : r.athletes
+            return a?.household_id
+          }).filter(Boolean) as string[]
+        )]
 
         const previewNames = unsigned.slice(0, 4).map((r: any) => {
           const a = Array.isArray(r.athletes) ? r.athletes[0] : r.athletes
@@ -104,7 +111,8 @@ export async function GET(request: NextRequest) {
           title: `${unsigned.length} athlete${unsigned.length === 1 ? '' : 's'} in ${group.name} haven't signed waivers`,
           detail: `These athletes need to sign required waivers before participating.`,
           send_target: { type: 'group', id: assignment.group_id, name: group.name },
-          recipient_count: unsigned.length,
+          recipient_count: householdIds.length,
+          household_ids: householdIds,
           preview_names: previewNames,
         })
       }
@@ -121,13 +129,20 @@ export async function GET(request: NextRequest) {
 
     const { data: unpaid } = await admin
       .from('registrations')
-      .select('athlete_id, athletes(first_name)')
+      .select('athlete_id, athletes(first_name, household_id)')
       .eq('group_id', assignment.group_id)
       .neq('payment_status', 'paid')
       .lte('created_at', sevenDaysAgo)
       .neq('status', 'cancelled')
 
     if (!unpaid || unpaid.length < 2) continue
+
+    const householdIds = [...new Set(
+      unpaid.map((r: any) => {
+        const a = Array.isArray(r.athletes) ? r.athletes[0] : r.athletes
+        return a?.household_id
+      }).filter(Boolean) as string[]
+    )]
 
     const previewNames = unpaid.slice(0, 4).map((r: any) => {
       const a = Array.isArray(r.athletes) ? r.athletes[0] : r.athletes
@@ -137,11 +152,12 @@ export async function GET(request: NextRequest) {
     nudges.push({
       id: `unpaid-${assignment.group_id}`,
       type: 'outstanding_payments',
-      severity: unpaid.length >= 5 ? 'red' : 'amber',
-      title: `${unpaid.length} families in ${group.name} have outstanding payments`,
+      severity: householdIds.length >= 5 ? 'red' : 'amber',
+      title: `${householdIds.length} ${householdIds.length === 1 ? 'family' : 'families'} in ${group.name} have outstanding payments`,
       detail: `These registrations have been unpaid for over 7 days.`,
       send_target: { type: 'group', id: assignment.group_id, name: group.name },
-      recipient_count: unpaid.length,
+      recipient_count: householdIds.length,
+      household_ids: householdIds,
       preview_names: previewNames,
     })
   }
@@ -166,13 +182,26 @@ export async function GET(request: NextRequest) {
         hour: 'numeric', minute: '2-digit',
       })
 
-      // Find a matching group for this event's sub_program
       const matchingAssignment = (assignments ?? []).find((a: any) =>
         a.sub_program_id === event.sub_program_id
       )
       if (!matchingAssignment?.group_id) continue
 
       const group = matchingAssignment.groups as any
+
+      // Fetch households in this group for the To: field pre-population
+      const { data: eventRegs } = await admin
+        .from('registrations')
+        .select('athletes(household_id)')
+        .eq('group_id', matchingAssignment.group_id)
+        .neq('status', 'cancelled')
+
+      const eventHouseholdIds = [...new Set(
+        (eventRegs ?? []).map((r: any) => {
+          const a = Array.isArray(r.athletes) ? r.athletes[0] : r.athletes
+          return a?.household_id
+        }).filter(Boolean) as string[]
+      )]
 
       nudges.push({
         id: `event-${event.id}`,
@@ -181,7 +210,8 @@ export async function GET(request: NextRequest) {
         title: `${event.title} is coming up`,
         detail: `Scheduled for ${dt}. Consider sending a reminder to families in ${group?.name ?? 'your group'}.`,
         send_target: { type: 'group', id: matchingAssignment.group_id, name: group?.name ?? 'Group' },
-        recipient_count: null,
+        recipient_count: eventHouseholdIds.length,
+        household_ids: eventHouseholdIds,
         preview_names: [],
       })
     }
