@@ -5,10 +5,12 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { ArrowLeft, Send, Sparkles, Loader2, Eye, EyeOff, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { AdminPageHeader } from '@/components/admin-page-header'
 import { useSelectedSeason } from '@/lib/contexts/season-context'
 import { FamilyAudienceSelector, SelectedRecipient, Program } from '@/components/family-audience-selector'
 import { getNudgeContext, clearNudgeContext, type NudgeContextPayload } from '@/lib/nudge-context-store'
+import { RichTextEditor, isRichTextEmpty, plainTextToHtml, type RichTextEditorHandle } from '@/components/rich-text-editor'
 
 const MERGE_FIELDS = [
   { token: '{{parent_first_name}}', label: 'Parent name', example: 'Sarah' },
@@ -32,7 +34,10 @@ export default function AdminComposeMessagePage() {
 
   const [recipients, setRecipients] = useState<SelectedRecipient[]>([])
   const [subject, setSubject] = useState('')
-  const [body, setBody] = useState('')
+  // bodyHtml: what the rich text editor stores (HTML)
+  const [bodyHtml, setBodyHtml] = useState('')
+  // streamingText: plain text accumulator while AI is streaming
+  const [streamingText, setStreamingText] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -47,10 +52,9 @@ export default function AdminComposeMessagePage() {
   const [preview, setPreview] = useState<{ subject: string; body: string; sample_name: string | null } | null>(null)
   const [loadingPreview, setLoadingPreview] = useState(false)
 
-  const bodyRef = useRef<HTMLTextAreaElement>(null)
+  const editorRef = useRef<RichTextEditorHandle>(null)
 
-  // Read nudge context ONCE at render time — persists across StrictMode double-mount
-  // because module-level store survives the unmount/remount cycle.
+  // Read nudge context ONCE at render time
   const [nudgeCtx] = useState<NudgeContextPayload | null>(() => getNudgeContext())
 
   const householdIds = recipients.filter(r => r.kind === 'household').map(r => r.id)
@@ -85,8 +89,15 @@ export default function AdminComposeMessagePage() {
       .catch(() => {})
   }, [])
 
-  // Process nudge context — AbortController handles StrictMode double-mount:
-  // mount #1 starts fetch+stream, cleanup aborts both, mount #2 reruns cleanly.
+  // When streaming completes, convert accumulated plain text to HTML and put it in the editor
+  useEffect(() => {
+    if (!isStreaming && streamingText) {
+      setBodyHtml(plainTextToHtml(streamingText))
+      setStreamingText('')
+    }
+  }, [isStreaming, streamingText])
+
+  // Process nudge context
   useEffect(() => {
     if (!nudgeCtx) return
     clearNudgeContext()
@@ -123,7 +134,7 @@ export default function AdminComposeMessagePage() {
     return () => controller.abort()
   }, [nudgeCtx]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Legacy message_prefill (from other flows)
+  // Legacy message_prefill
   useEffect(() => {
     const prefillRaw = sessionStorage.getItem('message_prefill')
     if (!prefillRaw) return
@@ -131,7 +142,7 @@ export default function AdminComposeMessagePage() {
     try {
       const prefill = JSON.parse(prefillRaw)
       if (prefill.subject) setSubject(prefill.subject)
-      if (prefill.body) setBody(prefill.body)
+      if (prefill.body) setBodyHtml(plainTextToHtml(prefill.body))
       if (prefill.household_ids?.length) {
         fetch('/api/messages/households', {
           method: 'POST',
@@ -155,7 +166,8 @@ export default function AdminComposeMessagePage() {
     if (signal.aborted) return
     setIsStreaming(true)
     setSubject('')
-    setBody('')
+    setStreamingText('')
+    setBodyHtml('')
 
     try {
       const res = await fetch(ctx.draft_endpoint, {
@@ -194,11 +206,11 @@ export default function AdminComposeMessagePage() {
             setSubject(accumulated.slice(0, sepIdx).trim())
             subjectDone = true
             bodyText = accumulated.slice(sepIdx + 2)
-            setBody(bodyText)
+            setStreamingText(bodyText)
           }
         } else {
           bodyText += chunk
-          setBody(bodyText)
+          setStreamingText(bodyText)
         }
       }
     } catch (err: any) {
@@ -209,20 +221,10 @@ export default function AdminComposeMessagePage() {
     }
   }
 
-  useEffect(() => { setPreview(null); setShowPreview(false) }, [body, subject])
+  useEffect(() => { setPreview(null); setShowPreview(false) }, [bodyHtml, subject])
 
   function insertMergeField(token: string) {
-    const el = bodyRef.current
-    if (!el) { setBody(prev => prev + token); return }
-    const start = el.selectionStart
-    const end = el.selectionEnd
-    const newBody = body.slice(0, start) + token + body.slice(end)
-    setBody(newBody)
-    requestAnimationFrame(() => {
-      el.focus()
-      el.selectionStart = start + token.length
-      el.selectionEnd = start + token.length
-    })
+    editorRef.current?.insertText(token)
   }
 
   async function handleAiDraft() {
@@ -242,7 +244,7 @@ export default function AdminComposeMessagePage() {
       if (!res.ok) throw new Error()
       const data = await res.json()
       setSubject(data.subject ?? '')
-      setBody(data.body ?? '')
+      setBodyHtml(plainTextToHtml(data.body ?? ''))
       setShowAiPanel(false)
       setAiPrompt('')
     } catch {
@@ -255,13 +257,13 @@ export default function AdminComposeMessagePage() {
   async function handlePreview() {
     const firstHousehold = recipients.find(r => r.kind === 'household') as
       Extract<SelectedRecipient, { kind: 'household' }> | undefined
-    if (!body.trim() || !firstHousehold) return
+    if (!bodyHtml || !firstHousehold) return
     setLoadingPreview(true)
     try {
       const res = await fetch('/api/messages/merge-preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ household_id: firstHousehold.id, subject: subject.trim(), body: body.trim() }),
+        body: JSON.stringify({ household_id: firstHousehold.id, subject: subject.trim(), body: bodyHtml }),
       })
       if (!res.ok) throw new Error()
       const data = await res.json()
@@ -276,7 +278,7 @@ export default function AdminComposeMessagePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!hasAudience || !subject.trim() || !body.trim()) return
+    if (!hasAudience || !subject.trim() || isRichTextEmpty(bodyHtml)) return
 
     setSending(true)
     setError(null)
@@ -287,7 +289,7 @@ export default function AdminComposeMessagePage() {
       body: JSON.stringify({
         clubSlug,
         subject: subject.trim(),
-        body: body.trim(),
+        body: bodyHtml,
         targets: [],
         household_ids: householdIds,
         additional_emails: directEmails,
@@ -296,6 +298,7 @@ export default function AdminComposeMessagePage() {
     })
 
     if (res.ok) {
+      toast.success('Message sent successfully')
       router.push(`${basePath}/messages`)
     } else {
       const data = await res.json()
@@ -304,8 +307,13 @@ export default function AdminComposeMessagePage() {
     }
   }
 
-  const hasMergeFields = /\{\{[^}]+\}\}/.test(body)
+  const hasMergeFields = /\{\{[^}]+\}\}/.test(bodyHtml)
   const canPreview = recipients.some(r => r.kind === 'household')
+
+  // During streaming show plain text with cursor
+  const streamingDisplay = isStreaming
+    ? plainTextToHtml(streamingText + '▊')
+    : bodyHtml
 
   return (
     <div className="max-w-2xl">
@@ -405,15 +413,13 @@ export default function AdminComposeMessagePage() {
             </div>
           )}
 
-          <textarea
-            ref={bodyRef}
-            value={isStreaming ? body + '▊' : body}
-            onChange={e => { if (!isStreaming) setBody(e.target.value) }}
+          <RichTextEditor
+            ref={editorRef}
+            value={streamingDisplay}
+            onChange={setBodyHtml}
             readOnly={isStreaming}
-            required
-            rows={10}
-            placeholder={isStreaming ? '' : 'Type your message here…'}
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-foreground placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 resize-y"
+            placeholder="Type your message here…"
+            minHeight="220px"
           />
 
           {!isStreaming && (
@@ -433,7 +439,7 @@ export default function AdminComposeMessagePage() {
             </div>
           )}
 
-          {!isStreaming && (hasMergeFields || body.trim()) && canPreview && (
+          {!isStreaming && (hasMergeFields || !isRichTextEmpty(bodyHtml)) && canPreview && (
             <div>
               {!showPreview ? (
                 <button
@@ -456,7 +462,10 @@ export default function AdminComposeMessagePage() {
                     </button>
                   </div>
                   {preview.subject && <p className="text-xs font-semibold text-zinc-300">{preview.subject}</p>}
-                  <p className="text-xs text-zinc-400 whitespace-pre-wrap leading-relaxed">{preview.body}</p>
+                  <div
+                    className="text-xs text-zinc-400 leading-relaxed [&_p]:mb-1 [&_a]:text-orange-400 [&_a]:underline"
+                    dangerouslySetInnerHTML={{ __html: preview.body }}
+                  />
                 </div>
               )}
             </div>
@@ -469,7 +478,7 @@ export default function AdminComposeMessagePage() {
 
         <button
           type="submit"
-          disabled={isStreaming || sending || !hasAudience || !subject.trim() || !body.trim()}
+          disabled={isStreaming || sending || !hasAudience || !subject.trim() || isRichTextEmpty(bodyHtml)}
           className="flex items-center gap-2 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition-colors"
         >
           <Send className="h-4 w-4" />

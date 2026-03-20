@@ -93,7 +93,7 @@ export default function AdminMessageDetailPage() {
             <span>{senderName(message.sender)}</span>
             <span className="text-zinc-700">·</span>
             <span>
-              {message.recipient_count} {message.recipient_count === 1 ? 'family' : 'families'}
+              {message.recipient_count} {message.recipient_count === 1 ? 'recipient' : 'recipients'}
             </span>
             <span className="text-zinc-700">·</span>
             <span>
@@ -113,7 +113,14 @@ export default function AdminMessageDetailPage() {
           </div>
         </div>
         <div className="px-6 py-5">
-          <p className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed">{message.body}</p>
+          {/<[a-z][\s\S]*>/i.test(message.body) ? (
+            <div
+              className="text-sm text-zinc-300 leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_em]:italic [&_u]:underline [&_a]:text-orange-400 [&_a]:underline"
+              dangerouslySetInnerHTML={{ __html: message.body }}
+            />
+          ) : (
+            <p className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed">{message.body}</p>
+          )}
         </div>
       </div>
     </div>

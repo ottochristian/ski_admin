@@ -92,14 +92,15 @@ export class RegistrationsService extends BaseService {
   }
 
   /**
-   * Get total revenue from confirmed registrations
-   * RLS automatically filters by club
+   * Get total revenue from paid orders.
+   * Uses orders.total_amount WHERE status = 'paid' — the authoritative Stripe-backed figure.
+   * RLS automatically filters by club.
    */
   async getTotalRevenue(seasonId?: string): Promise<QueryResult<number>> {
     let query = this.supabase
-      .from('registrations')
-      .select('amount_paid, status')
-      .eq('status', 'confirmed')
+      .from('orders')
+      .select('total_amount')
+      .eq('status', 'paid')
 
     if (seasonId) {
       query = query.eq('season_id', seasonId)
@@ -114,11 +115,10 @@ export class RegistrationsService extends BaseService {
       }
     }
 
-    const totalRevenue =
-      (result.data || []).reduce(
-        (sum: number, reg: any) => sum + Number(reg.amount_paid || 0),
-        0
-      ) || 0
+    const totalRevenue = (result.data || []).reduce(
+      (sum: number, order: any) => sum + Number(order.total_amount || 0),
+      0
+    )
 
     return {
       data: totalRevenue,

@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from('messages')
     .select(`
-      id, subject, body, sent_at, email_sent_at, program_id, sub_program_id, group_id,
+      id, subject, body, sent_at, email_sent_at, program_id, sub_program_id, group_id, direct_email_count,
       sender:profiles!messages_sender_id_fkey(id, first_name, last_name, email)
     `)
     .eq('club_id', clubId)
@@ -76,9 +76,9 @@ export async function GET(request: NextRequest) {
       countMap[row.message_id] = (countMap[row.message_id] ?? 0) + 1
     }
 
-    const result = messages.map((m) => ({
+    const result = messages.map((m: any) => ({
       ...m,
-      recipient_count: countMap[m.id] ?? 0,
+      recipient_count: (countMap[m.id] ?? 0) + (m.direct_email_count ?? 0),
     }))
 
     return NextResponse.json({ messages: result, total: count ?? result.length })

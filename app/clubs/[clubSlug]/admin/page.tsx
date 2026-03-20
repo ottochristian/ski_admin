@@ -29,6 +29,7 @@ import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { GreetingWidget } from '@/components/greeting-widget'
 import { DashboardHeroChat } from '@/components/dashboard-hero-chat'
+import { useImpersonation } from '@/lib/use-impersonation'
 
 function statusDot(status: string) {
   switch (status?.toLowerCase()) {
@@ -55,6 +56,8 @@ export default function AdminDashboard() {
   const clubSlug = params.clubSlug as string
   const { profile, loading: authLoading } = useRequireAdmin()
   const selectedSeason = useSelectedSeason()
+  const impCtx = useImpersonation()
+  const displayFirstName = impCtx ? (impCtx.userName.split(' ')[0] || impCtx.userName) : (profile?.first_name ?? '')
   const [aiEnabled, setAiEnabled] = useState(false)
 
   const [weeklyDeltas, setWeeklyDeltas] = useState<{
@@ -94,11 +97,13 @@ export default function AdminDashboard() {
         supabase
           .from('registrations')
           .select('id', { count: 'exact', head: true })
+          .eq('club_id', profile!.club_id)
           .eq('season_id', selectedSeason!.id)
           .gte('created_at', weekAgo.toISOString()),
         supabase
           .from('registrations')
           .select('id', { count: 'exact', head: true })
+          .eq('club_id', profile!.club_id)
           .eq('season_id', selectedSeason!.id)
           .gte('created_at', twoWeeksAgo.toISOString())
           .lt('created_at', weekAgo.toISOString()),
@@ -106,12 +111,14 @@ export default function AdminDashboard() {
           .from('orders')
           .select('total_amount')
           .eq('club_id', profile!.club_id)
+          .eq('season_id', selectedSeason!.id)
           .eq('status', 'paid')
           .gte('created_at', weekAgo.toISOString()),
         supabase
           .from('orders')
           .select('total_amount')
           .eq('club_id', profile!.club_id)
+          .eq('season_id', selectedSeason!.id)
           .eq('status', 'paid')
           .gte('created_at', twoWeeksAgo.toISOString())
           .lt('created_at', weekAgo.toISOString()),
@@ -163,6 +170,7 @@ export default function AdminDashboard() {
         supabase
           .from('registrations')
           .select('id', { count: 'exact', head: true })
+          .eq('club_id', profile!.club_id)
           .eq('season_id', selectedSeason!.id)
           .neq('payment_status', 'paid'),
       ])
@@ -333,11 +341,11 @@ export default function AdminDashboard() {
       {/* 1. Hero — AI chat when enabled, plain greeting otherwise */}
       {aiEnabled ? (
         <DashboardHeroChat
-          firstName={profile?.first_name ?? ''}
+          firstName={displayFirstName}
           chatEndpoint="/api/admin/ai/insights/chat"
         />
       ) : (
-        <GreetingWidget firstName={profile?.first_name ?? ''} />
+        <GreetingWidget firstName={displayFirstName} />
       )}
 
       {/* 2. Season Setup Banner — only when draft + incomplete */}

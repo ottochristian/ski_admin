@@ -5,10 +5,12 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { ArrowLeft, Send } from 'lucide-react'
+import { toast } from 'sonner'
 import { AdminPageHeader } from '@/components/admin-page-header'
 import { useSelectedSeason } from '@/lib/contexts/season-context'
 import { FamilyAudienceSelector, SelectedRecipient, Program } from '@/components/family-audience-selector'
 import { getNudgeContext, clearNudgeContext, type NudgeContextPayload } from '@/lib/nudge-context-store'
+import { RichTextEditor, isRichTextEmpty, plainTextToHtml, type RichTextEditorHandle } from '@/components/rich-text-editor'
 
 export default function CoachComposeMessagePage() {
   const params = useParams()
@@ -24,15 +26,16 @@ export default function CoachComposeMessagePage() {
 
   const [recipients, setRecipients] = useState<SelectedRecipient[]>([])
   const [subject, setSubject] = useState('')
-  const [body, setBody] = useState('')
+  const [bodyHtml, setBodyHtml] = useState('')
+  const [streamingText, setStreamingText] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [isStreaming, setIsStreaming] = useState(false)
 
-  const bodyRef = useRef<HTMLTextAreaElement>(null)
+  const editorRef = useRef<RichTextEditorHandle>(null)
 
-  // Read nudge context once at render time — persists across StrictMode double-mount
+  // Read nudge context once at render time
   const [nudgeCtx] = useState<NudgeContextPayload | null>(() => getNudgeContext())
 
   const householdIds = recipients.filter(r => r.kind === 'household').map(r => r.id)
@@ -108,7 +111,15 @@ export default function CoachComposeMessagePage() {
     load()
   }, [supabase, selectedSeason?.id])
 
-  // Process nudge context — AbortController handles StrictMode double-mount
+  // When streaming completes, convert plain text to HTML
+  useEffect(() => {
+    if (!isStreaming && streamingText) {
+      setBodyHtml(plainTextToHtml(streamingText))
+      setStreamingText('')
+    }
+  }, [isStreaming, streamingText])
+
+  // Process nudge context
   useEffect(() => {
     if (!nudgeCtx) return
     clearNudgeContext()
@@ -149,7 +160,8 @@ export default function CoachComposeMessagePage() {
     if (signal.aborted) return
     setIsStreaming(true)
     setSubject('')
-    setBody('')
+    setStreamingText('')
+    setBodyHtml('')
 
     try {
       const res = await fetch(ctx.draft_endpoint, {
@@ -188,11 +200,11 @@ export default function CoachComposeMessagePage() {
             setSubject(accumulated.slice(0, sepIdx).trim())
             subjectDone = true
             bodyText = accumulated.slice(sepIdx + 2)
-            setBody(bodyText)
+            setStreamingText(bodyText)
           }
         } else {
           bodyText += chunk
-          setBody(bodyText)
+          setStreamingText(bodyText)
         }
       }
     } catch (err: any) {
@@ -205,7 +217,7 @@ export default function CoachComposeMessagePage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!hasAudience || !subject.trim() || !body.trim()) return
+    if (!hasAudience || !subject.trim() || isRichTextEmpty(bodyHtml)) return
 
     setSending(true)
     setError(null)
@@ -216,7 +228,7 @@ export default function CoachComposeMessagePage() {
       body: JSON.stringify({
         clubSlug,
         subject: subject.trim(),
-        body: body.trim(),
+        body: bodyHtml,
         targets: [],
         household_ids: householdIds,
         additional_emails: directEmails,
@@ -225,6 +237,7 @@ export default function CoachComposeMessagePage() {
     })
 
     if (res.ok) {
+      toast.success('Message sent successfully')
       router.push(`${basePath}/messages`)
     } else {
       const data = await res.json()
@@ -232,6 +245,8 @@ export default function CoachComposeMessagePage() {
       setSending(false)
     }
   }
+
+  const streamingDisplay = isStreaming ? plainTextToHtml(streamingText + '▊') : bodyHtml
 
   return (
     <div className="max-w-2xl">
@@ -286,15 +301,13 @@ export default function CoachComposeMessagePage() {
               <span className="ml-2 text-xs font-normal text-orange-400 animate-pulse">AI is writing…</span>
             )}
           </label>
-          <textarea
-            ref={bodyRef}
-            value={isStreaming ? body + '▊' : body}
-            onChange={e => { if (!isStreaming) setBody(e.target.value) }}
+          <RichTextEditor
+            ref={editorRef}
+            value={streamingDisplay}
+            onChange={setBodyHtml}
             readOnly={isStreaming}
-            required
-            rows={10}
-            placeholder={isStreaming ? '' : 'Type your message here…'}
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-foreground placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 resize-y"
+            placeholder="Type your message here…"
+            minHeight="220px"
           />
         </div>
 
@@ -304,7 +317,7 @@ export default function CoachComposeMessagePage() {
 
         <button
           type="submit"
-          disabled={isStreaming || sending || !hasAudience || !subject.trim() || !body.trim()}
+          disabled={isStreaming || sending || !hasAudience || !subject.trim() || isRichTextEmpty(bodyHtml)}
           className="flex items-center gap-2 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition-colors"
         >
           <Send className="h-4 w-4" />

@@ -66,13 +66,12 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient()
 
   try {
-    // 1. Get all registrations with their programs and payment details
+    // 1. Get all registrations with their programs
     const { data: registrations, error: registrationsError } = await admin
       .from('registrations')
       .select(`
         id,
         athlete_id,
-        amount_paid,
         payment_status,
         sub_programs!inner(
           id,
@@ -92,6 +91,25 @@ export async function GET(req: NextRequest) {
     if (registrationsError) {
       console.error('Registrations error:', registrationsError)
       throw registrationsError
+    }
+
+    // 1b. Get order items for authoritative revenue per registration
+    const regIds = (registrations || []).map((r: any) => r.id)
+    let revenueByReg: Record<string, number> = {}
+
+    if (regIds.length > 0) {
+      const { data: itemsData } = await admin
+        .from('order_items')
+        .select('registration_id, amount, orders!inner(status, club_id, season_id)')
+        .in('registration_id', regIds)
+        .eq('orders.club_id', clubIdToUse)
+        .eq('orders.season_id', seasonId)
+        .eq('orders.status', 'paid')
+
+      for (const oi of itemsData ?? []) {
+        const rid = (oi as any).registration_id
+        revenueByReg[rid] = (revenueByReg[rid] || 0) + Number((oi as any).amount || 0)
+      }
     }
 
     log.info('Programs Analytics - Found registrations', { count: registrations?.length || 0, clubId: clubIdToUse, seasonId })
@@ -176,7 +194,7 @@ export async function GET(req: NextRequest) {
         : null
 
       const revenue = programData.registrations.reduce(
-        (sum: number, reg: any) => sum + Number(reg.amount_paid || 0),
+        (sum: number, reg: any) => sum + (revenueByReg[reg.id] || 0),
         0
       )
 

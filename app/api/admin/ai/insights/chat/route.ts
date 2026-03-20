@@ -7,291 +7,96 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 type MessageParam = { role: 'user' | 'assistant'; content: string }
 
+// ─── Security validator ────────────────────────────────────────────────────────
+// Defence-in-depth before the query reaches Postgres.
+// Primary isolation is the CTE wrapper in execute_club_scoped_query().
+function validateSql(sql: string): string | null {
+  const s = sql.trim()
+
+  // Must be a SELECT or a CTE (WITH ... SELECT)
+  if (!/^(WITH\s|SELECT\s)/i.test(s)) {
+    return 'Only SELECT statements are allowed'
+  }
+
+  // No semicolons — prevents statement chaining
+  if (s.includes(';')) {
+    return 'Semicolons are not allowed'
+  }
+
+  // Block mutation / DDL keywords
+  if (/\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|GRANT|REVOKE|COPY|EXECUTE|DO)\b/i.test(s)) {
+    return 'Data modification statements are not allowed'
+  }
+
+  // Block schema-qualified refs — would bypass the CTE shadows
+  if (/\b(public|pg_catalog|information_schema|auth|storage|vault|extensions)\s*\./i.test(s)) {
+    return 'Schema-qualified table references are not allowed'
+  }
+
+  // Block dangerous Postgres functions
+  if (/\b(pg_read_file|pg_ls_dir|pg_stat_file|pg_sleep|set_config|pg_reload_conf|dblink|lo_export|lo_import|pg_cancel_backend|pg_terminate_backend)\b/i.test(s)) {
+    return 'Unsafe function references are not allowed'
+  }
+
+  return null
+}
+
+// ─── Schema context for Claude ────────────────────────────────────────────────
+// Only expose columns that exist in the CTE-scoped views.
+// club_id is intentionally omitted — it's handled automatically.
+const SCHEMA_CONTEXT = `
+Available tables and their columns (all automatically scoped to this club):
+
+athletes(id, first_name, last_name, date_of_birth, gender, ussa_number, fis_license, household_id, created_at)
+registrations(id, athlete_id, sub_program_id, season_id, status, payment_status, registration_date, created_at)
+  -- status: 'active'|'pending'|'cancelled'  payment_status: 'paid'|'pending'|'unpaid'
+seasons(id, name, start_date, end_date, status, is_current)
+  -- status: 'active'|'draft'|'archived'
+programs(id, name, season_id, status, is_active)
+sub_programs(id, name, program_id, season_id, registration_fee, max_capacity, status, is_active)
+households(id, primary_email, phone, city, state, created_at)
+household_guardians(id, household_id, user_id, is_primary)
+profiles(id, email, first_name, last_name, phone, role)
+  -- role: 'family'|'coach'|'admin'
+orders(id, household_id, season_id, total_amount, status, created_at)
+  -- status: 'unpaid'|'paid'|'refunded'  total_amount is in dollars (not cents)
+payments(id, order_id, amount, status, method, processed_at)
+  -- status: 'pending'|'succeeded'|'failed'  amount is in dollars
+order_items(id, order_id, registration_id, description, amount)
+waivers(id, title, required, season_id, status)
+waiver_signatures(id, waiver_id, athlete_id, guardian_id, signed_at)
+events(id, title, event_type, start_at, end_at, location, season_id, program_id)
+messages(id, subject, sender_id, season_id, sent_at, direct_email_count)
+message_recipients(id, message_id, recipient_id, read_at)
+coaches(id, first_name, last_name, email, phone, is_active)
+groups(id, name, sub_program_id, age_min, age_max)
+`.trim()
+
+// ─── Tool definition ──────────────────────────────────────────────────────────
 const tools: Anthropic.Tool[] = [
   {
-    name: 'get_registrations',
-    description: 'Get registration counts and details. Can filter by days back (default 30) and optionally by program name.',
+    name: 'execute_sql',
+    description: `Execute a read-only PostgreSQL SELECT query against this club's database.
+All tables are automatically scoped to this club — do NOT add club_id filters.
+Results are capped at 500 rows. Use the explanation field to describe what you're fetching.`,
     input_schema: {
       type: 'object' as const,
       properties: {
-        days: { type: 'number', description: 'How many days back to look (default 30)' },
-        program_name: { type: 'string', description: 'Optional: filter by program name (partial match)' },
+        sql: {
+          type: 'string',
+          description: 'A PostgreSQL SELECT query. No club_id filters needed — scoping is automatic. No schema-qualified table names (e.g. use "athletes" not "public.athletes").',
+        },
+        explanation: {
+          type: 'string',
+          description: 'One sentence describing what this query fetches',
+        },
       },
-    },
-  },
-  {
-    name: 'get_payment_summary',
-    description: 'Get payment totals, success/failure counts, and any failed payments with athlete info.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        days: { type: 'number', description: 'How many days back to look (default 30)' },
-      },
-    },
-  },
-  {
-    name: 'get_athletes_by_program',
-    description: 'Get athlete counts and names broken down by program and sub-program for the current season.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        program_name: { type: 'string', description: 'Optional: filter by program name (partial match)' },
-      },
-    },
-  },
-  {
-    name: 'get_waiver_status',
-    description: 'Get waiver completion status — how many athletes have signed required waivers vs outstanding.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {},
-    },
-  },
-  {
-    name: 'get_upcoming_events',
-    description: 'Get upcoming scheduled events and training sessions.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        days: { type: 'number', description: 'How many days forward to look (default 14)' },
-      },
+      required: ['sql'],
     },
   },
 ]
 
-async function executeTool(
-  name: string,
-  input: Record<string, unknown>,
-  clubId: string,
-  seasonId: string | null
-): Promise<string> {
-  const admin = createSupabaseAdminClient()
-  const now = new Date()
-
-  if (name === 'get_registrations') {
-    const days = typeof input.days === 'number' ? input.days : 30
-    const programName = typeof input.program_name === 'string' ? input.program_name : null
-    const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString()
-
-    let query = admin
-      .from('registrations')
-      .select('id, status, payment_status, created_at, athletes(first_name, last_name), sub_programs(name, programs(name))')
-      .eq('club_id', clubId)
-      .gte('created_at', since)
-
-    const { data } = await query
-    const regs: any[] = data ?? []
-
-    let filtered: any[] = regs
-    if (programName) {
-      filtered = regs.filter((r: any) => {
-        const prog = (r.sub_programs as { programs?: { name?: string } } | null)?.programs?.name ?? ''
-        const sub = (r.sub_programs as { name?: string } | null)?.name ?? ''
-        const search = programName.toLowerCase()
-        return prog.toLowerCase().includes(search) || sub.toLowerCase().includes(search)
-      })
-    }
-
-    const byStatus: Record<string, number> = {}
-    const byProgram: Record<string, number> = {}
-    for (const r of filtered) {
-      byStatus[(r as { status: string }).status] = (byStatus[(r as { status: string }).status] ?? 0) + 1
-      const prog = (r.sub_programs as { programs?: { name?: string } } | null)?.programs?.name ?? 'Unknown'
-      byProgram[prog] = (byProgram[prog] ?? 0) + 1
-    }
-
-    return JSON.stringify({
-      total: filtered.length,
-      days_back: days,
-      program_filter: programName,
-      by_status: byStatus,
-      by_program: byProgram,
-      sample: filtered.slice(0, 10).map((r) => ({
-        athlete: `${(r.athletes as { first_name?: string; last_name?: string } | null)?.first_name ?? ''} ${(r.athletes as { first_name?: string; last_name?: string } | null)?.last_name ?? ''}`.trim(),
-        program: (r.sub_programs as { programs?: { name?: string } } | null)?.programs?.name,
-        sub_program: (r.sub_programs as { name?: string } | null)?.name,
-        status: (r as { status: string }).status,
-        created_at: (r as { created_at: string }).created_at,
-      })),
-    })
-  }
-
-  if (name === 'get_payment_summary') {
-    const days = typeof input.days === 'number' ? input.days : 30
-    const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString()
-
-    const { data: orders } = await admin
-      .from('orders')
-      .select('id, total_amount, status, created_at')
-      .eq('club_id', clubId)
-      .gte('created_at', since)
-
-    const ordersData = orders ?? []
-    const orderIds = ordersData.map((o: { id: string }) => o.id)
-
-    const { data: payments } = orderIds.length > 0
-      ? await admin
-          .from('payments')
-          .select('id, amount, status, order_id, processed_at')
-          .in('order_id', orderIds)
-      : { data: [] }
-
-    const paymentsData = payments ?? []
-    const succeeded = paymentsData.filter((p: { status: string }) => p.status === 'succeeded' || p.status === 'paid')
-    const failed = paymentsData.filter((p: { status: string }) => p.status === 'failed')
-    const totalCollected = succeeded.reduce((sum: number, p: { amount: number }) => sum + (p.amount ?? 0), 0)
-    const totalOrders = ordersData.reduce((sum: number, o: { total_amount: number }) => sum + (o.total_amount ?? 0), 0)
-
-    return JSON.stringify({
-      days_back: days,
-      orders: {
-        total: ordersData.length,
-        total_value_cents: totalOrders,
-        total_value_dollars: (totalOrders / 100).toFixed(2),
-      },
-      payments: {
-        total: paymentsData.length,
-        succeeded: succeeded.length,
-        failed: failed.length,
-        collected_cents: totalCollected,
-        collected_dollars: (totalCollected / 100).toFixed(2),
-      },
-    })
-  }
-
-  if (name === 'get_athletes_by_program') {
-    const programName = typeof input.program_name === 'string' ? input.program_name : null
-
-    let query = admin
-      .from('registrations')
-      .select('id, athletes(first_name, last_name), sub_programs(name, programs(name))')
-      .eq('club_id', clubId)
-      .neq('status', 'cancelled')
-
-    if (seasonId) {
-      query = query.eq('season_id', seasonId)
-    }
-
-    const { data } = await query
-    const regs: any[] = data ?? []
-
-    let filtered: any[] = regs
-    if (programName) {
-      filtered = regs.filter((r: any) => {
-        const prog = (r.sub_programs as { programs?: { name?: string } } | null)?.programs?.name ?? ''
-        const sub = (r.sub_programs as { name?: string } | null)?.name ?? ''
-        const search = programName.toLowerCase()
-        return prog.toLowerCase().includes(search) || sub.toLowerCase().includes(search)
-      })
-    }
-
-    // Group by program > sub_program
-    const grouped: Record<string, Record<string, string[]>> = {}
-    for (const r of filtered) {
-      const prog = (r.sub_programs as { programs?: { name?: string } } | null)?.programs?.name ?? 'Unknown'
-      const sub = (r.sub_programs as { name?: string } | null)?.name ?? 'Unknown'
-      const athlete = `${(r.athletes as { first_name?: string; last_name?: string } | null)?.first_name ?? ''} ${(r.athletes as { first_name?: string; last_name?: string } | null)?.last_name ?? ''}`.trim()
-      if (!grouped[prog]) grouped[prog] = {}
-      if (!grouped[prog][sub]) grouped[prog][sub] = []
-      grouped[prog][sub].push(athlete)
-    }
-
-    // Summarise (cap names at 10 per group)
-    const summary: Record<string, { total: number; sub_programs: Record<string, { count: number; athletes: string[] }> }> = {}
-    for (const [prog, subs] of Object.entries(grouped)) {
-      summary[prog] = { total: 0, sub_programs: {} }
-      for (const [sub, names] of Object.entries(subs)) {
-        summary[prog].sub_programs[sub] = { count: names.length, athletes: names.slice(0, 10) }
-        summary[prog].total += names.length
-      }
-    }
-
-    return JSON.stringify({ total_athletes: filtered.length, by_program: summary })
-  }
-
-  if (name === 'get_waiver_status') {
-    if (!seasonId) {
-      return JSON.stringify({ error: 'No active season found' })
-    }
-
-    const { data: waivers } = await admin
-      .from('waivers')
-      .select('id, title, is_required')
-      .eq('club_id', clubId)
-      .eq('season_id', seasonId)
-      .eq('is_required', true)
-
-    const waiversData = waivers ?? []
-    const waiverIds = waiversData.map((w: { id: string }) => w.id)
-
-    const { data: signatures } = waiverIds.length > 0
-      ? await admin
-          .from('waiver_signatures')
-          .select('id, waiver_id, athlete_id')
-          .in('waiver_id', waiverIds)
-      : { data: [] }
-
-    const sigsData = signatures ?? []
-    const signedAthletes = new Set(sigsData.map((s: { athlete_id: string }) => s.athlete_id))
-
-    // Total active athletes
-    const { count: activeCount } = await admin
-      .from('registrations')
-      .select('*', { count: 'exact', head: true })
-      .eq('club_id', clubId)
-      .eq('season_id', seasonId)
-      .neq('status', 'cancelled')
-
-    const totalAthletes = activeCount ?? 0
-    const signed = signedAthletes.size
-    const outstanding = Math.max(0, totalAthletes - signed)
-
-    return JSON.stringify({
-      required_waivers: waiversData.map((w: { id: string; title: string }) => ({ id: w.id, title: w.title })),
-      total_active_athletes: totalAthletes,
-      athletes_signed: signed,
-      athletes_outstanding: outstanding,
-      total_signatures: sigsData.length,
-    })
-  }
-
-  if (name === 'get_upcoming_events') {
-    const days = typeof input.days === 'number' ? input.days : 14
-    const until = new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString()
-
-    let query = admin
-      .from('events')
-      .select('id, title, event_type, start_at, end_at')
-      .eq('club_id', clubId)
-      .gte('start_at', now.toISOString())
-      .lte('start_at', until)
-      .order('start_at', { ascending: true })
-
-    if (seasonId) {
-      query = query.eq('season_id', seasonId)
-    }
-
-    const { data } = await query
-    const events = data ?? []
-
-    return JSON.stringify({
-      days_forward: days,
-      total: events.length,
-      events: events.map((ev: { title: string; event_type: string; start_at: string; end_at: string | null }) => ({
-        title: ev.title,
-        type: ev.event_type,
-        start: ev.start_at,
-        end: ev.end_at,
-        formatted: new Date(ev.start_at).toLocaleDateString('en-US', {
-          weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-        }),
-      })),
-    })
-  }
-
-  return JSON.stringify({ error: `Unknown tool: ${name}` })
-}
-
+// ─── Route handler ─────────────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   const authResult = await requireAdmin(request)
   if (authResult instanceof NextResponse) return authResult
@@ -315,7 +120,7 @@ export async function POST(request: NextRequest) {
 
   const admin = createSupabaseAdminClient()
 
-  // Verify ai_enabled and ai_insights_enabled
+  // Verify AI is enabled for this club
   const { data: club } = await admin
     .from('clubs')
     .select('name, ai_enabled, ai_insights_enabled')
@@ -326,12 +131,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Club Intelligence is not enabled.' }, { status: 403 })
   }
 
-  // Resolve season_id: prefer explicit param, fall back to active season
+  // Resolve active season
   let seasonId: string | null = body.season_id ?? null
   if (!seasonId) {
     const { data: season } = await admin
       .from('seasons')
-      .select('id')
+      .select('id, name')
       .eq('club_id', clubId)
       .eq('status', 'active')
       .order('start_date', { ascending: false })
@@ -340,11 +145,25 @@ export async function POST(request: NextRequest) {
     seasonId = season?.id ?? null
   }
 
+  const today = new Date().toISOString().split('T')[0]
+
   const systemPrompt = `You are a club intelligence assistant for ${club.name}, a ski club.
-You have access to tools that can query the club's data including registrations, payments, athletes, waivers, and events.
-Give concise, factual answers. Never make up data — always use the tools to look things up.
-When answering questions, be specific with numbers and names where relevant.
-Keep responses professional and suited for a club administrator.`
+Today's date: ${today}
+Active season ID: ${seasonId ?? 'none — no active season found'}
+
+You have one tool: execute_sql. Use it to answer any question about the club's data.
+Write standard PostgreSQL SELECT queries. You may use JOINs, CTEs, aggregates, window functions — anything read-only.
+
+IMPORTANT rules:
+- Never filter by club_id — all tables are already scoped to this club automatically
+- Use the active season_id (${seasonId ?? 'N/A'}) when filtering to the current season
+- Never make up or assume data — always query first
+- If a query returns no rows, say so clearly
+- Keep answers concise and factual, suited for a club administrator
+- Format numbers nicely (e.g. "$1,234.00" for money, "42 athletes")
+- When listing people, include names; when showing counts, be specific
+
+${SCHEMA_CONTEXT}`
 
   const messages: Anthropic.MessageParam[] = body.messages.map((m) => ({
     role: m.role,
@@ -352,7 +171,7 @@ Keep responses professional and suited for a club administrator.`
   }))
 
   let iteration = 0
-  const maxIterations = 5
+  const maxIterations = 10
   let finalText = ''
 
   while (iteration < maxIterations) {
@@ -360,50 +179,73 @@ Keep responses professional and suited for a club administrator.`
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1500,
+      max_tokens: 2000,
       system: systemPrompt,
       tools,
       messages,
     })
 
     if (response.stop_reason === 'end_turn') {
-      // Extract text from response
       for (const block of response.content) {
-        if (block.type === 'text') {
-          finalText += block.text
-        }
+        if (block.type === 'text') finalText += block.text
       }
       break
     }
 
     if (response.stop_reason === 'tool_use') {
-      // Add assistant's response (including tool_use blocks) to messages
       messages.push({ role: 'assistant', content: response.content })
 
-      // Execute all tool calls and collect results
       const toolResults: Anthropic.ToolResultBlockParam[] = []
+
       for (const block of response.content) {
-        if (block.type === 'tool_use') {
-          const result = await executeTool(
-            block.name,
-            block.input as Record<string, unknown>,
-            clubId,
-            seasonId
-          )
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: block.id,
-            content: result,
+        if (block.type !== 'tool_use') continue
+
+        if (block.name === 'execute_sql') {
+          const input = block.input as { sql?: string; explanation?: string }
+          const sql = input.sql?.trim() ?? ''
+
+          // TypeScript-level validation
+          const validationError = validateSql(sql)
+          if (validationError) {
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: block.id,
+              content: JSON.stringify({ error: validationError }),
+              is_error: true,
+            })
+            continue
+          }
+
+          // Execute via the secure Postgres function (CTE-wrapped, club-scoped, read-only)
+          const { data, error } = await admin.rpc('execute_club_scoped_query', {
+            p_club_id: clubId,
+            p_sql: sql,
           })
+
+          if (error) {
+            console.error('[insights/chat] query error:', error.message, '\nSQL:', sql)
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: block.id,
+              content: JSON.stringify({ error: error.message }),
+              is_error: true,
+            })
+          } else {
+            const rows = Array.isArray(data) ? data : (data ?? [])
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: block.id,
+              content: JSON.stringify({ rows, row_count: rows.length }),
+            })
+          }
         }
       }
 
-      // Add tool results as user message
       messages.push({ role: 'user', content: toolResults })
       continue
     }
 
-    // Unexpected stop reason — extract whatever text is there
+    // Unexpected stop reason
     for (const block of response.content) {
       if (block.type === 'text') finalText += block.text
     }
@@ -426,7 +268,9 @@ Keep responses professional and suited for a club administrator.`
       model: 'claude-sonnet-4-6',
       metadata: { season_id: seasonId, iterations: iteration },
     })
-    .then(({ error }: { error: unknown }) => { if (error) console.error('[insights/chat] ai_usage insert:', error) })
+    .then(({ error }: { error: unknown }) => {
+      if (error) console.error('[insights/chat] ai_usage insert:', error)
+    })
 
   return NextResponse.json({ message: finalText })
 }

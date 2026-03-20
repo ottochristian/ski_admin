@@ -25,8 +25,8 @@ const sendSchema = z.object({
     .max(20, 'Max 20 additional recipients')
     .optional()
     .default([]),
-}).refine(d => d.targets.length > 0 || (d.household_ids && d.household_ids.length > 0), {
-  message: 'At least one target or household_ids required',
+}).refine(d => d.targets.length > 0 || (d.household_ids && d.household_ids.length > 0) || d.additional_emails.length > 0, {
+  message: 'At least one recipient required',
 })
 
 export async function POST(request: NextRequest) {
@@ -102,6 +102,7 @@ export async function POST(request: NextRequest) {
       program_id: primaryTarget?.type === 'program' ? primaryTarget.id : null,
       sub_program_id: primaryTarget?.type === 'sub_program' ? primaryTarget.id : null,
       group_id: primaryTarget?.type === 'group' ? primaryTarget.id : null,
+      direct_email_count: (body.additional_emails ?? []).length,
     })
     .select('id')
     .single()
@@ -226,6 +227,8 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  const isHtml = /<[a-z][\s\S]*>/i.test(body.body)
+
   function resolveMerge(template: string, vars: { parent_first_name: string; athlete_first_name: string }): string {
     return template
       .replace(/\{\{parent_first_name\}\}/g, vars.parent_first_name)
@@ -234,12 +237,25 @@ export async function POST(request: NextRequest) {
       .replace(/\{\{program_name\}\}/g, targetName)
   }
 
+  function htmlToText(html: string): string {
+    return html
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>/gi, '\n\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  }
+
   // Send emails via Resend (registered + additional, each gets their own email)
   const resendKey = process.env.RESEND_API_KEY
   const additionalEmails = body.additional_emails ?? []
   const allEmails = [
     ...registeredEmails,
-    // Dedupe additional against registered
     ...additionalEmails.filter((e) => !registeredEmails.includes(e)),
   ]
 
@@ -250,9 +266,9 @@ export async function POST(request: NextRequest) {
         [senderProfile.first_name, senderProfile.last_name].filter(Boolean).join(' ') ||
         senderProfile.email
 
-      const footer = `\n\n---\nThis message was sent to families in ${targetName} at ${club.name} by ${senderName}.`
+      const htmlFooter = `<hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0"><p style="font-size:12px;color:#6b7280">This message was sent to families in ${targetName} at ${club.name} by ${senderName}.</p>`
+      const textFooter = `\n\n---\nThis message was sent to families in ${targetName} at ${club.name} by ${senderName}.`
 
-      // Batch in chunks of 50
       const BATCH = 50
       for (let i = 0; i < allEmails.length; i += BATCH) {
         const chunk = allEmails.slice(i, i + BATCH)
@@ -262,15 +278,29 @@ export async function POST(request: NextRequest) {
               parent_first_name: 'there',
               athlete_first_name: 'your athlete',
             }
-            const personalizedBody = resolveMerge(body.body, mergeVars) + footer
             const personalizedSubject = resolveMerge(body.subject, mergeVars)
-            return resend.emails.send({
-              from: `${club.name} <noreply@west110.com>`,
-              replyTo: senderProfile.email,
-              to: email,
-              subject: `[${club.name}] ${personalizedSubject}`,
-              text: personalizedBody,
-            })
+            const resolvedBody = resolveMerge(body.body, mergeVars)
+
+            if (isHtml) {
+              const htmlBody = resolvedBody + htmlFooter
+              const textBody = htmlToText(resolvedBody) + textFooter
+              return resend.emails.send({
+                from: `${club.name} <${process.env.RESEND_FROM_EMAIL ?? 'noreply@w110.io'}>`,
+                replyTo: senderProfile.email,
+                to: email,
+                subject: `[${club.name}] ${personalizedSubject}`,
+                html: htmlBody,
+                text: textBody,
+              })
+            } else {
+              return resend.emails.send({
+                from: `${club.name} <${process.env.RESEND_FROM_EMAIL ?? 'noreply@w110.io'}>`,
+                replyTo: senderProfile.email,
+                to: email,
+                subject: `[${club.name}] ${personalizedSubject}`,
+                text: resolvedBody + textFooter,
+              })
+            }
           })
         )
       }
