@@ -27,7 +27,7 @@ export function AdminSidebar({ profile, clubSlug }: AdminSidebarProps) {
     { label: 'Registrations', href: `${basePath}/registrations`, icon: FileText },
     { label: 'Athletes', href: `${basePath}/athletes`, icon: Users },
     { label: 'Coaches', href: `${basePath}/coaches`, icon: Users },
-    { label: 'Messages', href: `${basePath}/messages`, icon: MessageSquare },
+    { label: 'Messages', href: `${basePath}/messages/compose`, icon: MessageSquare },
     { label: 'Settings', href: `${basePath}/settings`, icon: Settings },
   ]
 
@@ -69,9 +69,13 @@ export function AdminSidebar({ profile, clubSlug }: AdminSidebarProps) {
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
         {menuItems.map((item) => {
           const Icon = item.icon
+          // For Messages, highlight whenever anywhere under /messages
+          const messagesBase = `${basePath}/messages`
           const isActive =
             pathname === item.href ||
-            (item.href !== basePath && pathname.startsWith(item.href))
+            (item.href === `${basePath}/messages/compose`
+              ? pathname.startsWith(messagesBase)
+              : item.href !== basePath && pathname.startsWith(item.href))
           return (
             <Link
               key={item.href}

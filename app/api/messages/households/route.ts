@@ -37,21 +37,62 @@ export async function GET(request: NextRequest) {
 
   if (clubHouseholdIds.length === 0) return NextResponse.json({ households: [] })
 
-  // Then: search by last_name within those households
-  const { data: rows } = await admin
-    .from('households')
-    .select('id, last_name')
-    .in('id', clubHouseholdIds)
-    .ilike('last_name', `%${q}%`)
-    .order('last_name')
-    .limit(10)
+  // Search by last_name OR guardian email, scoped to club households
+  const [{ data: nameRows }, { data: emailGuardianRows }] = await Promise.all([
+    // Match by household last_name
+    admin
+      .from('households')
+      .select('id, last_name')
+      .in('id', clubHouseholdIds)
+      .ilike('last_name', `%${q}%`)
+      .order('last_name')
+      .limit(10),
+    // Match by guardian profile email
+    admin
+      .from('profiles')
+      .select('id, email, first_name, last_name, household_guardians!inner(household_id)')
+      .ilike('email', `%${q}%`)
+      .limit(20),
+  ])
 
-  const households = (rows ?? []).map((h: { id: string; last_name: string | null }) => ({
-    id: h.id,
-    name: h.last_name ? `${h.last_name} family` : 'Unknown family',
-  }))
+  // Collect household IDs matched by email, filtered to club scope
+  const emailMatchedHouseholdIds = new Set<string>()
+  for (const p of emailGuardianRows ?? []) {
+    const hgs = Array.isArray(p.household_guardians) ? p.household_guardians : [p.household_guardians]
+    for (const hg of hgs) {
+      if (hg?.household_id && clubHouseholdIds.includes(hg.household_id)) {
+        emailMatchedHouseholdIds.add(hg.household_id)
+      }
+    }
+  }
 
-  return NextResponse.json({ households })
+  // Merge: start with name matches, add email matches not already included
+  const seen = new Set<string>()
+  const households: { id: string; name: string }[] = []
+
+  for (const h of nameRows ?? []) {
+    if (seen.has(h.id)) continue
+    seen.add(h.id)
+    households.push({ id: h.id, name: h.last_name ? `${h.last_name} family` : 'Unknown family' })
+  }
+
+  if (emailMatchedHouseholdIds.size > 0) {
+    const extraIds = [...emailMatchedHouseholdIds].filter(id => !seen.has(id))
+    if (extraIds.length > 0) {
+      const { data: extraRows } = await admin
+        .from('households')
+        .select('id, last_name')
+        .in('id', extraIds)
+        .order('last_name')
+      for (const h of extraRows ?? []) {
+        if (seen.has(h.id)) continue
+        seen.add(h.id)
+        households.push({ id: h.id, name: h.last_name ? `${h.last_name} family` : 'Unknown family' })
+      }
+    }
+  }
+
+  return NextResponse.json({ households: households.slice(0, 10) })
 }
 
 function extractHouseholdIds(regs: any[] | null): string[] {

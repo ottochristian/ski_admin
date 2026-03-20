@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
 
   const redirectUrl = redirectUrlForRole(profile.role, clubSlug)
 
-  const response = NextResponse.json({ success: true, redirectUrl })
+  const response = NextResponse.json({ success: true, redirectUrl, ctx })
   response.cookies.set(IMP_COOKIE, encodeURIComponent(JSON.stringify(ctx)), {
     path: '/',
     httpOnly: false, // readable by client for banner display

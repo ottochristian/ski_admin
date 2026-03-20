@@ -26,3 +26,4 @@ export function redirectUrlForRole(role: string, clubSlug: string | null): strin
   if (role === 'parent' && clubSlug) return `/clubs/${clubSlug}/parent/dashboard`
   return '/system-admin'
 }
+

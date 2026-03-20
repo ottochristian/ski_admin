@@ -29,6 +29,8 @@ import {
   ArrowLeft,
   PenLine,
   Lock,
+  Tag,
+  X,
 } from 'lucide-react'
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
@@ -49,6 +51,17 @@ export default function CartPage() {
 
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Discount code state
+  const [discountInput, setDiscountInput] = useState('')
+  const [validatingCode, setValidatingCode] = useState(false)
+  const [discountError, setDiscountError] = useState<string | null>(null)
+  const [appliedDiscount, setAppliedDiscount] = useState<{
+    codeId: string
+    code: string
+    discountCents: number
+    description: string
+  } | null>(null)
 
   // Stripe embedded checkout state
   const [checkoutClientSecret, setCheckoutClientSecret] = useState<string | null>(null)
@@ -113,6 +126,49 @@ export default function CartPage() {
     acc[item.athlete_id].push(item)
     return acc
   }, {})
+
+  const discountedTotal = appliedDiscount
+    ? Math.max(0, total - appliedDiscount.discountCents / 100)
+    : total
+
+  async function handleApplyCode() {
+    if (!discountInput.trim() || !clubId || !household) return
+    setDiscountError(null)
+    setValidatingCode(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/discount-codes/validate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          code: discountInput.trim(),
+          clubId,
+          householdId: household.id,
+          orderAmountCents: Math.round(total * 100),
+          athleteIds: [...new Set(items.map((i) => i.athlete_id))],
+        }),
+      })
+      const json = await res.json()
+      if (json.valid) {
+        setAppliedDiscount({
+          codeId: json.codeId,
+          code: discountInput.trim().toUpperCase(),
+          discountCents: json.discountCents,
+          description: json.description,
+        })
+        setDiscountInput('')
+      } else {
+        setDiscountError(json.reason || 'Invalid code')
+      }
+    } catch {
+      setDiscountError('Failed to validate code')
+    } finally {
+      setValidatingCode(false)
+    }
+  }
 
   async function handleCheckout() {
     if (!clubId || !household || !currentSeason || items.length === 0) {
@@ -215,17 +271,38 @@ export default function CartPage() {
         throw new Error(`Failed to create order items: ${itemsError.message}`)
       }
 
-      // 5. Invalidate cache
+      // 5. Apply discount code if one is set
+      let finalTotal = total
+      if (appliedDiscount) {
+        const applyRes = await fetch('/api/discount-codes/apply', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            codeId: appliedDiscount.codeId,
+            orderId: order.id,
+            householdId: household.id,
+            discountCents: appliedDiscount.discountCents,
+            codeText: appliedDiscount.code,
+          }),
+        })
+        if (applyRes.ok) {
+          const applyJson = await applyRes.json()
+          finalTotal = applyJson.newTotalCents / 100
+        }
+        // If apply fails (e.g. code just expired), continue at full price
+      }
+
+      // 6. Invalidate cache
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['orders', household.id, currentSeason.id] }),
         queryClient.invalidateQueries({ queryKey: ['registrations', currentSeason.id] }),
       ])
 
-      // 6. Fetch Stripe clientSecret — show embedded checkout in this page
+      // 7. Fetch Stripe clientSecret — show embedded checkout in this page
       const checkoutResponse = await fetch('/api/checkout', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ orderId: order.id, amount: total, clubSlug }),
+        body: JSON.stringify({ orderId: order.id, amount: finalTotal, clubSlug }),
       })
 
       if (!checkoutResponse.ok) {
@@ -441,9 +518,70 @@ export default function CartPage() {
 
               <Separator />
 
+              {/* Promo code */}
+              {appliedDiscount ? (
+                <div className="flex items-center justify-between gap-2 rounded-md border border-green-800/40 bg-green-950/20 px-3 py-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Tag className="h-3.5 w-3.5 text-green-400 shrink-0" />
+                    <div>
+                      <span className="font-mono font-semibold text-green-400">{appliedDiscount.code}</span>
+                      <p className="text-xs text-green-600">{appliedDiscount.description}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-green-400 font-semibold">
+                      −${(appliedDiscount.discountCents / 100).toFixed(2)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setAppliedDiscount(null)}
+                      className="text-zinc-500 hover:text-zinc-300"
+                      title="Remove code"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="flex gap-2">
+                    <input
+                      className="flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-sm font-mono uppercase tracking-widest placeholder:normal-case placeholder:tracking-normal placeholder:font-sans focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      placeholder="Promo code"
+                      value={discountInput}
+                      onChange={(e) => {
+                        setDiscountInput(e.target.value.toUpperCase())
+                        setDiscountError(null)
+                      }}
+                      onKeyDown={(e) => e.key === 'Enter' && handleApplyCode()}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleApplyCode}
+                      disabled={!discountInput.trim() || validatingCode}
+                      className="shrink-0"
+                    >
+                      {validatingCode ? '…' : 'Apply'}
+                    </Button>
+                  </div>
+                  {discountError && (
+                    <p className="text-xs text-red-400">{discountError}</p>
+                  )}
+                </div>
+              )}
+
+              <Separator />
+
               <div className="flex items-center justify-between font-semibold">
                 <span>Total</span>
-                <span className="text-xl">${total.toFixed(2)}</span>
+                <div className="text-right">
+                  {appliedDiscount && (
+                    <p className="text-xs text-muted-foreground line-through">${total.toFixed(2)}</p>
+                  )}
+                  <span className="text-xl">${discountedTotal.toFixed(2)}</span>
+                </div>
               </div>
 
               {/* Waiver warning — non-blocking but prominent */}

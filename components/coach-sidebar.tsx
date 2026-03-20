@@ -26,7 +26,7 @@ export function CoachSidebar({ profile, clubSlug }: CoachSidebarProps) {
     { label: 'Schedule', href: `${basePath}/schedule`, icon: Calendar },
     { label: 'Athletes', href: `${basePath}/athletes`, icon: Users },
     { label: 'AI Training Plan', href: `${basePath}/training-plan`, icon: Sparkles },
-    { label: 'Messages', href: `${basePath}/messages`, icon: MessageSquare },
+    { label: 'Messages', href: `${basePath}/messages/compose`, icon: MessageSquare },
   ]
 
   const initial = club?.name?.charAt(0).toUpperCase() || 'C'
@@ -66,9 +66,12 @@ export function CoachSidebar({ profile, clubSlug }: CoachSidebarProps) {
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
         {menuItems.map((item) => {
           const Icon = item.icon
+          const messagesBase = `${basePath}/messages`
           const isActive =
             pathname === item.href ||
-            (item.href !== basePath && pathname.startsWith(item.href))
+            (item.href === `${basePath}/messages/compose`
+              ? pathname.startsWith(messagesBase)
+              : item.href !== basePath && pathname.startsWith(item.href))
           return (
             <Link
               key={item.href}

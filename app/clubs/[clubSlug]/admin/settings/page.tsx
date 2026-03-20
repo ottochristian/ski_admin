@@ -3,7 +3,7 @@
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Calendar, CreditCard, Palette, FileText, Users, Sparkles } from 'lucide-react'
+import { Calendar, CreditCard, Palette, FileText, Users, Sparkles, Tag } from 'lucide-react'
 import { useRequireAdmin } from '@/lib/auth-context'
 import { InlineLoading } from '@/components/ui/loading-states'
 
@@ -45,6 +45,12 @@ export default function SettingsPage() {
       description: 'Connect your Stripe account to accept registrations',
       href: `${basePath}/settings/payments`,
       icon: CreditCard,
+    },
+    {
+      title: 'Discount Codes',
+      description: 'Create and manage promotional codes for registration discounts',
+      href: `${basePath}/settings/discount-codes`,
+      icon: Tag,
     },
     {
       title: 'Age Categories',
