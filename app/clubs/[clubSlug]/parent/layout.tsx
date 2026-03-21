@@ -13,6 +13,7 @@ import { ProfileMenu } from '@/components/profile-menu'
 import { Button } from '@/components/ui/button'
 import { InlineLoading } from '@/components/ui/loading-states'
 import { ImpersonationBanner } from '@/components/impersonation-banner'
+import { useImpersonation } from '@/lib/use-impersonation'
 
 function ParentLayoutContent({
   children,
@@ -24,16 +25,17 @@ function ParentLayoutContent({
   const [supabase] = useState(() => createClient())
   const router = useRouter()
   const { profile, household, loading, error } = useParentClub()
+  const impersonation = useImpersonation()
 
   useEffect(() => {
     if (loading) return
     if (!profile) {
       router.replace('/login')
-    } else if (!household && profile.role !== 'system_admin') {
-      // System admins have no household — don't redirect when impersonating
+    } else if (!household && profile.role !== 'system_admin' && !impersonation) {
+      // System admins and impersonation sessions have no household — skip redirect
       router.replace('/signup')
     }
-  }, [loading, profile, household, router])
+  }, [loading, profile, household, router, impersonation])
 
   if (loading || !profile) {
     return (
@@ -43,7 +45,7 @@ function ParentLayoutContent({
     )
   }
 
-  if (!household) {
+  if (!household && !impersonation) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="max-w-md rounded-lg border border-yellow-200 bg-yellow-50 p-6">
