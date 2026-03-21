@@ -18,7 +18,7 @@ import { useRequireAdmin } from '@/lib/auth-context'
 import { useSeason } from '@/lib/hooks/use-season'
 import { usePrograms } from '@/lib/hooks/use-programs'
 import { useSubProgramsByProgram } from '@/lib/hooks/use-sub-programs'
-import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
+import { ErrorState } from '@/components/ui/loading-states'
 
 type Program = {
   id: string
@@ -96,10 +96,6 @@ export default function SubProgramsPage() {
     setDeletingId(null)
   }
 
-  const isLoading =
-    authLoading || seasonLoading || programsLoading || subProgramsLoading
-
-  // Show loading state
   // Show error state (but don't block entire page)
   if (!authLoading && subProgramsError) {
     return (

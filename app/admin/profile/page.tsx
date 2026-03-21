@@ -17,7 +17,6 @@ import { Label } from '@/components/ui/label'
 import { ImageUpload } from '@/components/image-upload'
 import { AdminPageHeader } from '@/components/admin-page-header'
 import { useToast } from '@/components/ui/use-toast'
-import { ArrowLeft } from 'lucide-react'
 import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 
 interface ProfileData {
@@ -101,7 +100,7 @@ export default function AdminProfilePage() {
     }
 
     loadProfile()
-  }, [authLoading, authProfile])
+  }, [authLoading, authProfile, supabase])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()

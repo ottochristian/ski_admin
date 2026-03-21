@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { ProgramStatus } from '@/lib/programStatus'
@@ -40,7 +39,6 @@ type ProgramWithSubPrograms = Program & {
 }
 
 export default function ProgramsPage() {
-  const router = useRouter()
   const [supabase] = useState(() => createClient())
 
   const { profile, loading: authLoading } = useRequireAdmin()

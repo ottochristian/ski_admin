@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import Link from 'next/link'
 import { ProgramStatus } from '@/lib/programStatus'
 import {
   Card,
@@ -37,30 +36,27 @@ export default function NewSubProgramPage() {
   const { profile, loading: authLoading } = useRequireAdmin()
   const { selectedSeason, loading: seasonLoading } = useSeason()
 
-  // Guard against invalid programId
-  if (!programId || programId === 'undefined') {
-    router.push('/admin/programs')
-    return null
-  }
-
-  // PHASE 2: RLS handles club filtering automatically
-  const { data: allPrograms = [], isLoading: programsLoading } = usePrograms(
-    selectedSeason?.id
-  )
+  // All hooks before any early return
+  const { data: allPrograms = [], isLoading: programsLoading } = usePrograms(selectedSeason?.id)
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  // Find the program
-  const program = allPrograms.find((p: any) => p.id === programId) as
-    | Program
-    | undefined
-
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [registrationFee, setRegistrationFee] = useState<string>('0')
   const [maxCapacity, setMaxCapacity] = useState<string>('')
   const [isActive, setIsActive] = useState(true)
+
+  // Find the program
+  const program = allPrograms.find((p: { id: string }) => p.id === programId) as
+    | Program
+    | undefined
+
+  // Guard against invalid programId — after all hooks
+  if (!programId || programId === 'undefined') {
+    router.push('/admin/programs')
+    return null
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()

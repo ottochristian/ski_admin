@@ -59,16 +59,6 @@ export default function AdminDashboard() {
     program: reg.sub_programs?.programs || { name: reg.sub_programs?.name || 'Unknown' },
   }))
 
-  const _isLoading =
-    authLoading ||
-    seasonLoading ||
-    athletesLoading ||
-    programsLoading ||
-    registrationsLoading ||
-    revenueLoading ||
-    recentRegsLoading
-
-  // Show loading state
   // Auth check ensures profile exists (only after auth is done)
   if (!authLoading && !profile) {
     return null

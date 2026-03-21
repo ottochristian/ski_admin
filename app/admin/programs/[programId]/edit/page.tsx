@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import Link from 'next/link'
 import { ProgramStatus } from '@/lib/programStatus'
 import {
   Card,
@@ -49,17 +48,9 @@ export default function EditProgramPage() {
     | Program
     | undefined
 
-  // Guard against invalid programId — placed after all hooks
-  if (!programId || programId === 'undefined') {
-    router.push('/admin/programs')
-    return null
-  }
-
-  // Initialize form when program is loaded
-  // Use program ID instead of program object to avoid infinite loops
+  // Initialize form when program is loaded — before any early return
   useEffect(() => {
     if (program) {
-      // Only update if values actually changed to prevent unnecessary re-renders
       setName((prev) => (prev !== (program.name ?? '') ? program.name ?? '' : prev))
       setDescription((prev) => (prev !== (program.description ?? '') ? program.description ?? '' : prev))
       const newIsActive = program.status === ProgramStatus.ACTIVE || !program.status
@@ -67,6 +58,12 @@ export default function EditProgramPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [program?.id, program?.name, program?.description, program?.status])
+
+  // Guard against invalid programId — after all hooks
+  if (!programId || programId === 'undefined') {
+    router.push('/admin/programs')
+    return null
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -127,7 +124,7 @@ export default function EditProgramPage() {
           <CardHeader>
             <CardTitle>Program Not Found</CardTitle>
             <CardDescription>
-              The program you're looking for doesn't exist or you don't have
+              The program you&apos;re looking for doesn&apos;t exist or you don&apos;t have
               access to it.
             </CardDescription>
           </CardHeader>

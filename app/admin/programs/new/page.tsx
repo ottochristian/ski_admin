@@ -2,7 +2,6 @@
 
 import { useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import { useRequireAdmin } from '@/lib/auth-context'
 import { useSeason } from '@/lib/hooks/use-season'
 import { useQueryClient } from '@tanstack/react-query'
