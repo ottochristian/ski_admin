@@ -161,10 +161,59 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 5. Create registrations (using admin client to bypass RLS)
+    // 5. Enforce capacity: for each registration with status 'pending',
+    //    check current enrollment and downgrade to 'waitlisted' if at capacity.
+    const subProgramIds = [...new Set(registrations.map((r: RegistrationRow) => r.sub_program_id))]
+
+    // Fetch sub-program capacities
+    const { data: subPrograms } = await adminSupabase
+      .from('sub_programs')
+      .select('id, max_capacity')
+      .in('id', subProgramIds)
+
+    // Count current confirmed/pending (not waitlisted) registrations per sub-program
+    const { data: enrollmentRows } = await adminSupabase
+      .from('registrations')
+      .select('sub_program_id')
+      .in('sub_program_id', subProgramIds)
+      .eq('season_id', registrations[0]?.season_id ?? '')
+      .in('status', ['confirmed', 'pending'])
+
+    const enrollmentCount: Record<string, number> = {}
+    for (const row of enrollmentRows ?? []) {
+      enrollmentCount[row.sub_program_id] = (enrollmentCount[row.sub_program_id] ?? 0) + 1
+    }
+
+    const capacityMap: Record<string, number | null> = {}
+    for (const sp of subPrograms ?? []) {
+      capacityMap[sp.id] = sp.max_capacity ?? null
+    }
+
+    // Resolve final status per registration
+    const registrationsWithStatus = registrations.map((r: RegistrationRow) => {
+      // If caller already set waitlisted, keep it
+      if (r.status === 'waitlisted') return r
+      const capacity = capacityMap[r.sub_program_id]
+      if (capacity == null) return r // no limit
+      const current = enrollmentCount[r.sub_program_id] ?? 0
+      if (current >= capacity) {
+        return { ...r, status: 'waitlisted' }
+      }
+      // Increment count so subsequent registrations in this same batch are also checked
+      enrollmentCount[r.sub_program_id] = current + 1
+      return r
+    })
+
+    log.info('Capacity check complete', {
+      userId: user.id,
+      enrollmentCount,
+      waitlistedCount: registrationsWithStatus.filter((r: RegistrationRow) => r.status === 'waitlisted').length,
+    })
+
+    // 6. Create registrations (using admin client to bypass RLS)
     const { data: createdRegistrations, error: createError } = await adminSupabase
       .from('registrations')
-      .insert(registrations)
+      .insert(registrationsWithStatus)
       .select()
 
     if (createError || !createdRegistrations) {

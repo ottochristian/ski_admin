@@ -14,9 +14,19 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ShoppingCart, Check, Plus, Minus, Users } from 'lucide-react'
+import { ShoppingCart, Check, Plus, Minus, Users, Clock } from 'lucide-react'
 import { ProgramStatus } from '@/lib/programStatus'
 import { InlineLoading } from '@/components/ui/loading-states'
 import { toast } from 'sonner'
@@ -48,8 +58,10 @@ type Program = {
   sub_programs: SubProgram[]
 }
 
-// sub_program_id → Set of athlete_ids that are already confirmed/pending registered
+// sub_program_id → Set of athlete_ids that are confirmed/pending registered
 type ExistingRegistrations = Record<string, Set<string>>
+
+type ChipState = 'default' | 'in-cart' | 'in-cart-waitlist' | 'registered' | 'on-waitlist'
 
 function AthleteChip({
   athlete,
@@ -58,7 +70,7 @@ function AthleteChip({
   disabled,
 }: {
   athlete: Athlete
-  state: 'default' | 'in-cart' | 'registered'
+  state: ChipState
   onClick: () => void
   disabled: boolean
 }) {
@@ -73,6 +85,15 @@ function AthleteChip({
     )
   }
 
+  if (state === 'on-waitlist') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-purple-700 bg-purple-950/30 px-2.5 py-1 text-xs font-medium text-purple-400">
+        <Clock className="h-3 w-3" />
+        {name}
+      </span>
+    )
+  }
+
   if (state === 'in-cart') {
     return (
       <button
@@ -81,6 +102,21 @@ function AthleteChip({
         disabled={disabled}
         className="inline-flex items-center gap-1 rounded-full border border-orange-600 bg-orange-600 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
         title={`Remove ${name} from cart`}
+      >
+        <Minus className="h-3 w-3" />
+        {name}
+      </button>
+    )
+  }
+
+  if (state === 'in-cart-waitlist') {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        className="inline-flex items-center gap-1 rounded-full border border-purple-600 bg-purple-700 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-purple-800 disabled:cursor-not-allowed disabled:opacity-50"
+        title={`Remove ${name} from waitlist`}
       >
         <Minus className="h-3 w-3" />
         {name}
@@ -111,7 +147,7 @@ export default function ParentProgramsPage() {
   const params = useParams()
   const router = useRouter()
   const clubSlug = params.clubSlug as string
-  const { clubId, household, athletes, loading: authLoading } = useParentClub()
+  const { household, athletes, loading: authLoading } = useParentClub()
   const { addItem, removeItem, items: cartItems, itemCount } = useCart()
   const currentSeason = useCurrentSeason()
 
@@ -121,29 +157,44 @@ export default function ParentProgramsPage() {
   } = usePrograms(currentSeason?.id, true)
 
   const [existingRegs, setExistingRegs] = useState<ExistingRegistrations>({})
+  const [waitlistedRegs, setWaitlistedRegs] = useState<ExistingRegistrations>({})
   const [regsLoading, setRegsLoading] = useState(false)
 
-  // Fetch existing registrations for this household + season so we can
-  // show "already registered" state on each athlete chip
+  // Dialog state for waitlist confirmation (Option B)
+  const [waitlistDialog, setWaitlistDialog] = useState<{
+    athlete: Athlete
+    subProgram: SubProgram
+    program: Program
+  } | null>(null)
+
+  // Fetch existing registrations for this household + season
   useEffect(() => {
     if (!currentSeason?.id || !household?.id) return
-    setRegsLoading(true)
     const supabase = createClient()
-    supabase
-      .from('registrations')
-      .select('sub_program_id, athlete_id, status')
-      .eq('season_id', currentSeason.id)
-      .in('status', ['confirmed', 'pending', 'waitlisted'])
-      .then(({ data }) => {
-        const map: ExistingRegistrations = {}
-        for (const row of data ?? []) {
-          if (!row.sub_program_id || !row.athlete_id) continue
-          if (!map[row.sub_program_id]) map[row.sub_program_id] = new Set()
-          map[row.sub_program_id].add(row.athlete_id)
+    const fetchRegs = async () => {
+      setRegsLoading(true)
+      const { data } = await supabase
+        .from('registrations')
+        .select('sub_program_id, athlete_id, status')
+        .eq('season_id', currentSeason.id)
+        .in('status', ['confirmed', 'pending', 'waitlisted'])
+      const confirmed: ExistingRegistrations = {}
+      const waitlisted: ExistingRegistrations = {}
+      for (const row of data ?? []) {
+        if (!row.sub_program_id || !row.athlete_id) continue
+        if (row.status === 'waitlisted') {
+          if (!waitlisted[row.sub_program_id]) waitlisted[row.sub_program_id] = new Set()
+          waitlisted[row.sub_program_id].add(row.athlete_id)
+        } else {
+          if (!confirmed[row.sub_program_id]) confirmed[row.sub_program_id] = new Set()
+          confirmed[row.sub_program_id].add(row.athlete_id)
         }
-        setExistingRegs(map)
-        setRegsLoading(false)
-      })
+      }
+      setExistingRegs(confirmed)
+      setWaitlistedRegs(waitlisted)
+      setRegsLoading(false)
+    }
+    fetchRegs()
   }, [currentSeason?.id, household?.id])
 
   const programs = (allPrograms as Program[]).filter(
@@ -155,19 +206,22 @@ export default function ParentProgramsPage() {
   const isLoading = authLoading || programsLoading || regsLoading
 
   // Helper: get chip state for a given athlete + sub-program
-  function chipState(athleteId: string, subProgramId: string): 'default' | 'in-cart' | 'registered' {
+  function chipState(athleteId: string, subProgramId: string): ChipState {
     if (existingRegs[subProgramId]?.has(athleteId)) return 'registered'
-    if (cartItems.some(i => i.athlete_id === athleteId && i.sub_program_id === subProgramId)) return 'in-cart'
+    if (waitlistedRegs[subProgramId]?.has(athleteId)) return 'on-waitlist'
+    const cartItem = cartItems.find(
+      (i) => i.athlete_id === athleteId && i.sub_program_id === subProgramId
+    )
+    if (cartItem) return cartItem.isWaitlisted ? 'in-cart-waitlist' : 'in-cart'
     return 'default'
   }
 
   function handleChipClick(athlete: Athlete, subProgram: SubProgram, program: Program) {
     const state = chipState(athlete.id, subProgram.id)
-    if (state === 'registered') return
+    if (state === 'registered' || state === 'on-waitlist') return
 
-    if (state === 'in-cart') {
-      const cartItemId = `${subProgram.id}-${athlete.id}`
-      removeItem(cartItemId)
+    if (state === 'in-cart' || state === 'in-cart-waitlist') {
+      removeItem(`${subProgram.id}-${athlete.id}`)
       toast.info(`Removed ${athlete.first_name} from cart`, {
         description: `${program.name} — ${subProgram.name}`,
         duration: 2000,
@@ -175,12 +229,14 @@ export default function ParentProgramsPage() {
       return
     }
 
-    // Add to cart
+    const registrationCount = subProgram.registrations?.[0]?.count ?? 0
     const spotsLeft = subProgram.max_capacity != null
-      ? subProgram.max_capacity - (subProgram.registrations?.[0]?.count ?? 0)
+      ? subProgram.max_capacity - registrationCount
       : Infinity
+
     if (spotsLeft <= 0) {
-      toast.error(`${subProgram.name} is full`)
+      // Option B: prompt before joining waitlist
+      setWaitlistDialog({ athlete, subProgram, program })
       return
     }
 
@@ -196,6 +252,30 @@ export default function ParentProgramsPage() {
     toast.success(`${athlete.first_name} added to cart`, {
       description: `${program.name} — ${subProgram.name}`,
       duration: 4000,
+      action: {
+        label: 'View Cart →',
+        onClick: () => router.push(`/clubs/${clubSlug}/parent/cart`),
+      },
+    })
+  }
+
+  function handleConfirmWaitlist() {
+    if (!waitlistDialog) return
+    const { athlete, subProgram, program } = waitlistDialog
+    setWaitlistDialog(null)
+    addItem({
+      id: `${subProgram.id}-${athlete.id}`,
+      athlete_id: athlete.id,
+      athlete_name: `${athlete.first_name} ${athlete.last_name}`,
+      sub_program_id: subProgram.id,
+      sub_program_name: subProgram.name,
+      program_name: program.name,
+      price: 0, // waitlisted — no payment until promoted
+      isWaitlisted: true,
+    })
+    toast.success(`${athlete.first_name} added to waitlist`, {
+      description: `${program.name} — ${subProgram.name}. You'll be notified if a spot opens.`,
+      duration: 5000,
       action: {
         label: 'View Cart →',
         onClick: () => router.push(`/clubs/${clubSlug}/parent/cart`),
@@ -252,10 +332,36 @@ export default function ParentProgramsPage() {
     )
   }
 
+  const paidCartTotal = cartItems.reduce((s, i) => i.isWaitlisted ? s : s + i.price, 0)
+
   // ── Main render ─────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Waitlist confirmation dialog */}
+      <AlertDialog open={!!waitlistDialog} onOpenChange={(open) => !open && setWaitlistDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>This program is full</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>{waitlistDialog?.subProgram.name}</strong> has no spots available right now.
+              {waitlistDialog && (
+                <>
+                  {' '}Would you like to add <strong>{waitlistDialog.athlete.first_name}</strong> to
+                  the waitlist? You won&apos;t be charged until a spot opens and you confirm.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmWaitlist}>
+              Join Waitlist
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -290,7 +396,7 @@ export default function ParentProgramsPage() {
             </span>
           ))}
           <span className="ml-auto text-muted-foreground hidden sm:inline">
-            Tap a name on a program to register · Filled blue = in cart · Green = registered
+            Tap a name to register · Orange = in cart · Purple = waitlisted · Green = registered
           </span>
         </div>
       )}
@@ -344,7 +450,9 @@ export default function ParentProgramsPage() {
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="font-semibold">{sp.name}</span>
                             {isFull && (
-                              <Badge variant="destructive" className="text-xs">Full</Badge>
+                              <Badge variant="outline" className="text-xs border-purple-700 text-purple-400">
+                                Full — Waitlist Open
+                              </Badge>
                             )}
                             {spotsLeft !== null && spotsLeft > 0 && spotsLeft <= 5 && (
                               <Badge variant="outline" className="text-xs text-orange-400 border-orange-700">
@@ -373,7 +481,7 @@ export default function ParentProgramsPage() {
                                 athlete={athlete}
                                 state={state}
                                 onClick={() => handleChipClick(athlete, sp, program)}
-                                disabled={isSeasonClosed || (isFull && state === 'default')}
+                                disabled={isSeasonClosed}
                               />
                             )
                           })}
@@ -394,7 +502,7 @@ export default function ParentProgramsPage() {
           <Link href={`/clubs/${clubSlug}/parent/cart`}>
             <Button size="lg" className="shadow-lg gap-2 px-8">
               <ShoppingCart className="h-5 w-5" />
-              View Cart ({itemCount}) · ${cartItems.reduce((s, i) => s + i.price, 0).toFixed(2)}
+              View Cart ({itemCount}){paidCartTotal > 0 ? ` · $${paidCartTotal.toFixed(2)}` : ''}
             </Button>
           </Link>
         </div>
