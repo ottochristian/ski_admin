@@ -1,10 +1,13 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useParentClub } from '@/lib/use-parent-club'
 import { useClub } from '@/lib/club-context'
+import { useCurrentSeason } from '@/lib/contexts/season-context'
 import { useHouseholdGuardians } from '@/lib/hooks/use-household-guardians'
+import { createClient } from '@/lib/supabase/client'
 import {
   Card,
   CardContent,
@@ -14,16 +17,95 @@ import {
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Plus, ShoppingCart, User, CreditCard, Calendar, MapPin, Clock, ChevronRight } from 'lucide-react'
+import { Plus, ShoppingCart, User, CreditCard, Calendar, MapPin, Clock, ChevronRight, X } from 'lucide-react'
 import { useUpcomingEvents } from '@/lib/hooks/use-events'
+import { toast } from 'sonner'
+
+type WaitlistEntry = {
+  registration_id: string
+  athlete_name: string
+  program_name: string
+  sub_program_name: string
+  queue_position: number
+}
 
 export default function ParentDashboardPage() {
   const params = useParams()
   const clubSlug = params.clubSlug as string
   const { household, athletes, profile } = useParentClub()
   const { club } = useClub()
+  const currentSeason = useCurrentSeason()
   const { data: guardians = [], isLoading: guardiansLoading } = useHouseholdGuardians(household?.id)
   const { data: upcomingEvents = [] } = useUpcomingEvents(club?.id, 5)
+
+  const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([])
+  const [removingId, setRemovingId] = useState<string | null>(null)
+
+  const seasonId = currentSeason?.id
+  const athleteIdList = athletes?.map((a) => a.id).join(',') ?? ''
+
+  useEffect(() => {
+    if (!seasonId || !athleteIdList) return
+    const supabase = createClient()
+    const athleteIds = athleteIdList.split(',')
+
+    const run = async () => {
+      const [{ data: regData }, { data: posData }] = await Promise.all([
+        supabase
+          .from('registrations')
+          .select(`
+            id,
+            athlete_id,
+            sub_programs!inner(
+              name,
+              programs!inner(name)
+            )
+          `)
+          .eq('season_id', seasonId)
+          .eq('status', 'waitlisted')
+          .in('athlete_id', athleteIds),
+        supabase.rpc('get_waitlist_positions', { p_season_id: seasonId }),
+      ])
+
+      const posMap = new Map<string, number>()
+      for (const row of posData ?? []) {
+        posMap.set(row.registration_id, row.queue_position)
+      }
+
+      const athleteMap = new Map(
+        (athletes ?? []).map((a) => [a.id, `${a.first_name} ${a.last_name}`])
+      )
+
+      const entries: WaitlistEntry[] = ((regData ?? []) as unknown as { id: string; athlete_id: string; sub_programs: { name: string; programs: { name: string } } }[]).map((r) => ({
+        registration_id: r.id,
+        athlete_name: athleteMap.get(r.athlete_id) ?? 'Unknown',
+        program_name: r.sub_programs?.programs?.name ?? '',
+        sub_program_name: r.sub_programs?.name ?? '',
+        queue_position: posMap.get(r.id) ?? 0,
+      }))
+
+      entries.sort((a, b) => a.athlete_name.localeCompare(b.athlete_name))
+      setWaitlist(entries)
+    }
+    run()
+  }, [seasonId, athleteIdList]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleRemoveFromWaitlist(registrationId: string, name: string) {
+    setRemovingId(registrationId)
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('registrations')
+      .update({ status: 'cancelled' })
+      .eq('id', registrationId)
+
+    if (error) {
+      toast.error('Failed to remove from waitlist')
+    } else {
+      toast.success(`${name} removed from waitlist`)
+      setWaitlist((prev) => prev.filter((e) => e.registration_id !== registrationId))
+    }
+    setRemovingId(null)
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -160,6 +242,50 @@ export default function ParentDashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Waitlist */}
+      {waitlist.length > 0 && (
+        <Card className="border-purple-800/40 bg-purple-950/10">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-purple-400" />
+              <CardTitle className="text-base text-purple-300">On the Waitlist</CardTitle>
+            </div>
+            <CardDescription>
+              You&apos;ll be notified if a spot opens up. No payment is collected until you&apos;re promoted.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {waitlist.map((entry) => (
+              <div
+                key={entry.registration_id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-purple-800/30 bg-purple-950/20 px-4 py-3"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">{entry.athlete_name}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {entry.program_name} — {entry.sub_program_name}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <Badge variant="outline" className="border-purple-700 text-purple-400 text-xs">
+                    #{entry.queue_position} in queue
+                  </Badge>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveFromWaitlist(entry.registration_id, entry.athlete_name)}
+                    disabled={removingId === entry.registration_id}
+                    className="text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+                    title="Remove from waitlist"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Upcoming Events */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-900 shadow-sm overflow-hidden">

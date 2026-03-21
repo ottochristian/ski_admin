@@ -61,6 +61,9 @@ type Program = {
 // sub_program_id → Set of athlete_ids that are confirmed/pending registered
 type ExistingRegistrations = Record<string, Set<string>>
 
+// sub_program_id → { enrolled, waitlisted } — sourced from SECURITY DEFINER RPC (bypasses RLS)
+type EnrollmentCounts = Record<string, { enrolled: number; waitlisted: number }>
+
 type ChipState = 'default' | 'in-cart' | 'in-cart-waitlist' | 'registered' | 'on-waitlist'
 
 function AthleteChip({
@@ -158,6 +161,7 @@ export default function ParentProgramsPage() {
 
   const [existingRegs, setExistingRegs] = useState<ExistingRegistrations>({})
   const [waitlistedRegs, setWaitlistedRegs] = useState<ExistingRegistrations>({})
+  const [enrollmentCounts, setEnrollmentCounts] = useState<EnrollmentCounts>({})
   const [regsLoading, setRegsLoading] = useState(false)
 
   // Dialog state for waitlist confirmation (Option B)
@@ -167,20 +171,24 @@ export default function ParentProgramsPage() {
     program: Program
   } | null>(null)
 
-  // Fetch existing registrations for this household + season
+  // Fetch this household's registrations (for chip state) + true enrollment counts (bypasses RLS via RPC)
   useEffect(() => {
     if (!currentSeason?.id || !household?.id) return
     const supabase = createClient()
     const fetchRegs = async () => {
       setRegsLoading(true)
-      const { data } = await supabase
-        .from('registrations')
-        .select('sub_program_id, athlete_id, status')
-        .eq('season_id', currentSeason.id)
-        .in('status', ['confirmed', 'pending', 'waitlisted'])
+      const [{ data: regData }, { data: countData }] = await Promise.all([
+        supabase
+          .from('registrations')
+          .select('sub_program_id, athlete_id, status')
+          .eq('season_id', currentSeason.id)
+          .in('status', ['confirmed', 'pending', 'waitlisted']),
+        supabase.rpc('get_season_enrollment_counts', { p_season_id: currentSeason.id }),
+      ])
+
       const confirmed: ExistingRegistrations = {}
       const waitlisted: ExistingRegistrations = {}
-      for (const row of data ?? []) {
+      for (const row of regData ?? []) {
         if (!row.sub_program_id || !row.athlete_id) continue
         if (row.status === 'waitlisted') {
           if (!waitlisted[row.sub_program_id]) waitlisted[row.sub_program_id] = new Set()
@@ -190,8 +198,15 @@ export default function ParentProgramsPage() {
           confirmed[row.sub_program_id].add(row.athlete_id)
         }
       }
+
+      const counts: EnrollmentCounts = {}
+      for (const row of countData ?? []) {
+        counts[row.sub_program_id] = { enrolled: row.enrolled, waitlisted: row.waitlisted }
+      }
+
       setExistingRegs(confirmed)
       setWaitlistedRegs(waitlisted)
+      setEnrollmentCounts(counts)
       setRegsLoading(false)
     }
     fetchRegs()
@@ -229,9 +244,9 @@ export default function ParentProgramsPage() {
       return
     }
 
-    const registrationCount = subProgram.registrations?.[0]?.count ?? 0
+    const trueEnrolled = enrollmentCounts[subProgram.id]?.enrolled ?? subProgram.registrations?.[0]?.count ?? 0
     const spotsLeft = subProgram.max_capacity != null
-      ? subProgram.max_capacity - registrationCount
+      ? subProgram.max_capacity - trueEnrolled
       : Infinity
 
     if (spotsLeft <= 0) {
@@ -434,9 +449,9 @@ export default function ParentProgramsPage() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {activeSubPrograms.map((sp) => {
-                    const registrationCount = sp.registrations?.[0]?.count ?? 0
+                    const trueEnrolled = enrollmentCounts[sp.id]?.enrolled ?? sp.registrations?.[0]?.count ?? 0
                     const spotsLeft = sp.max_capacity != null
-                      ? sp.max_capacity - registrationCount
+                      ? sp.max_capacity - trueEnrolled
                       : null
                     const isFull = spotsLeft !== null && spotsLeft <= 0
 

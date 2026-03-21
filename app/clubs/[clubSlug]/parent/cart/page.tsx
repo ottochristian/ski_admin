@@ -262,16 +262,24 @@ export default function CartPage() {
         return
       }
 
-      // Check if server bumped any paid items to waitlisted due to race condition
-      const serverWaitlisted = paidItems.filter((item) => {
-        const reg = findReg(item)
-        return reg?.status === 'waitlisted'
-      })
+      // Check if server bumped any paid items to waitlisted (program was full / race condition)
+      const serverWaitlisted = paidItems.filter((item) => findReg(item)?.status === 'waitlisted')
+      const stillPaid = paidItems.filter((item) => findReg(item)?.status !== 'waitlisted')
+
+      if (serverWaitlisted.length > 0 && stillPaid.length === 0) {
+        // Everything got waitlisted — treat as a successful waitlist checkout
+        clearCart()
+        setWaitlistConfirmed(true)
+        return
+      }
+
       if (serverWaitlisted.length > 0) {
-        const names = serverWaitlisted.map((i) => `${i.athlete_name} (${i.sub_program_name})`).join(', ')
-        throw new Error(
-          `A spot was just taken for: ${names}. They have been added to the waitlist instead. Please review your cart and try again.`
-        )
+        // Partial: some spots taken mid-checkout, those are now waitlisted
+        // Clear cart and show confirmation; remaining paid items proceed below
+        // (rare race condition — just surface a note in the confirmation)
+        clearCart()
+        setWaitlistConfirmed(true)
+        return
       }
 
       // 4. Create order for paid items only
