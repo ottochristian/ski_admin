@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-const VALID_ROLES = ['parent', 'coach', 'admin', 'system_admin']
+const patchSchema = z.object({
+  first_name: z.string().min(1).optional(),
+  last_name: z.string().min(1).optional(),
+  email: z.string().email().optional(),
+  club_id: z.string().uuid().optional().nullable(),
+  role: z.enum(['parent', 'coach', 'admin', 'system_admin']).optional(),
+}).refine(
+  (d) => Object.values(d).some((v) => v !== undefined),
+  { message: 'At least one field must be provided' }
+)
 
 async function ensureHousehold(admin: SupabaseClient, userId: string, clubId?: string) {
   const { data: existing } = await admin
@@ -63,12 +73,19 @@ export async function PATCH(
       return NextResponse.json({ error: 'Cannot edit your own account' }, { status: 400 })
     }
 
-    const body = await request.json()
-    const { first_name, last_name, email, club_id, role } = body
-
-    if (role !== undefined && !VALID_ROLES.includes(role)) {
-      return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
+    let raw: unknown
+    try {
+      raw = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
+
+    const parsedBody = patchSchema.safeParse(raw)
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: parsedBody.error.issues[0].message }, { status: 400 })
+    }
+
+    const { first_name, last_name, email, club_id, role } = parsedBody.data
 
     const adminClient = createAdminClient()
 
@@ -101,7 +118,7 @@ export async function PATCH(
 
     // If role is being set to parent, ensure they have a household
     if (role === 'parent') {
-      await ensureHousehold(adminClient, userId, club_id)
+      await ensureHousehold(adminClient, userId, club_id ?? undefined)
     }
 
     return NextResponse.json({ success: true })

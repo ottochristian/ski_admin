@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import Anthropic from '@anthropic-ai/sdk'
 import { requireAuth } from '@/lib/api-auth'
 import { createSupabaseAdminClient } from '@/lib/supabase-server'
+
+const postSchema = z.object({
+  type: z.string().min(1),
+  title: z.string().min(1),
+  detail: z.string().min(1),
+  target_name: z.string().min(1),
+  recipient_count: z.number().int().nonnegative().optional().nullable(),
+})
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -27,8 +36,19 @@ export async function POST(request: NextRequest) {
   const senderName =
     [profile.first_name, profile.last_name].filter(Boolean).join(' ') || 'Your Coach'
 
-  const body = await request.json()
-  const { type, title, detail, target_name, recipient_count } = body
+  let raw: unknown
+  try {
+    raw = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+  }
+
+  const parsedBody = postSchema.safeParse(raw)
+  if (!parsedBody.success) {
+    return NextResponse.json({ error: parsedBody.error.issues[0].message }, { status: 400 })
+  }
+
+  const { type, title, detail, target_name, recipient_count } = parsedBody.data
 
   const systemPrompt = `You are a communication assistant helping a ski coach at ${clubName} write emails to individual athlete families.
 

@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createSupabaseAdminClient } from '@/lib/supabase-server'
 import { requireAdmin } from '@/lib/api-auth'
 import { log } from '@/lib/logger'
 import Stripe from 'stripe'
+
+const postSchema = z.object({
+  clubId: z.string().uuid(),
+})
 
 const getStripe = () => {
   if (!process.env.STRIPE_SECRET_KEY) {
@@ -28,12 +33,19 @@ export async function POST(request: NextRequest) {
 
     const { profile } = authResult
 
-    const body = await request.json()
-    const { clubId } = body
-
-    if (!clubId) {
-      return NextResponse.json({ error: 'clubId is required' }, { status: 400 })
+    let raw: unknown
+    try {
+      raw = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
+
+    const parsedBody = postSchema.safeParse(raw)
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: parsedBody.error.issues[0].message }, { status: 400 })
+    }
+
+    const { clubId } = parsedBody.data
 
     // Verify caller's club matches clubId (system_admin can access any club)
     if (profile.role !== 'system_admin' && profile.club_id !== clubId) {

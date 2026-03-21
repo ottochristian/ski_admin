@@ -28,7 +28,9 @@ import {
 import { AdminPageHeader } from '@/components/admin-page-header'
 
 type RecentReg = {
-  athletes?: unknown
+  id: string
+  status: string
+  athletes?: { first_name?: string; last_name?: string } | null
   sub_programs?: { programs?: { name?: string }; name?: string }
 }
 

@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import Anthropic from '@anthropic-ai/sdk'
 import { requireAdmin } from '@/lib/api-auth'
 import { createSupabaseAdminClient } from '@/lib/supabase-server'
+
+const postSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be in YYYY-MM-DD format'),
+})
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -15,17 +20,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No club associated with your account' }, { status: 403 })
   }
 
-  let body: { date: string }
+  let raw: unknown
   try {
-    body = await request.json()
+    raw = await request.json()
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
-  if (!body.date?.match(/^\d{4}-\d{2}-\d{2}$/)) {
-    return NextResponse.json({ error: 'date (YYYY-MM-DD) is required' }, { status: 400 })
+  const parsed = postSchema.safeParse(raw)
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
 
+  const body = parsed.data
   const admin = createSupabaseAdminClient()
 
   // Verify AI is enabled

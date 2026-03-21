@@ -1,6 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { requireAuth } from '@/lib/api-auth'
 import { createSupabaseAdminClient } from '@/lib/supabase-server'
+
+const postSchema = z.object({
+  target_type: z.enum(['program', 'sub_program', 'group']).optional(),
+  target_id: z.string().uuid().optional(),
+  household_id: z.string().uuid().optional(),
+  subject: z.string().optional(),
+  body: z.string().optional(),
+  club_name: z.string().optional(),
+  program_name: z.string().optional(),
+}).refine(
+  (d) => d.household_id || (d.target_type && d.target_id),
+  { message: 'Provide either household_id or target_type + target_id' }
+)
 
 // Resolves merge fields for the first recipient of a target — used for live preview
 export async function POST(request: NextRequest) {
@@ -18,12 +32,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const body = await request.json()
-  const { target_type, target_id, household_id: directHouseholdId, subject, body: bodyTemplate, club_name, program_name } = body
-
-  if (!directHouseholdId && (!target_type || !target_id)) {
-    return NextResponse.json({ error: 'Provide either household_id or target_type + target_id' }, { status: 400 })
+  let raw: unknown
+  try {
+    raw = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
+
+  const parsedBody = postSchema.safeParse(raw)
+  if (!parsedBody.success) {
+    return NextResponse.json({ error: parsedBody.error.issues[0].message }, { status: 400 })
+  }
+
+  const { target_type, target_id, household_id: directHouseholdId, subject, body: bodyTemplate, club_name, program_name } = parsedBody.data
 
   const admin = createSupabaseAdminClient()
 

@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { checkRateLimit } from '@/lib/rate-limit'
+
+const postSchema = z.object({
+  firstName: z.string().min(1, 'First name is required'),
+  lastName: z.string().min(1, 'Last name is required'),
+  phone: z.string().optional().nullable(),
+  clubId: z.string().uuid('Invalid club ID'),
+})
 
 export async function POST(request: NextRequest) {
   // Rate limit: 10 attempts per IP per hour (account creation)
@@ -16,11 +24,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { firstName, lastName, phone, clubId } = await request.json()
-
-  if (!firstName || !lastName || !clubId) {
-    return NextResponse.json({ error: 'First name, last name, and club are required.' }, { status: 400 })
+  let raw: unknown
+  try {
+    raw = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
+
+  const parsedBody = postSchema.safeParse(raw)
+  if (!parsedBody.success) {
+    return NextResponse.json({ error: parsedBody.error.issues[0].message }, { status: 400 })
+  }
+
+  const { firstName, lastName, phone, clubId } = parsedBody.data
 
   const admin = createAdminClient()
 

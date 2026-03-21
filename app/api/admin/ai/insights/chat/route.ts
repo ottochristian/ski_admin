@@ -5,7 +5,19 @@ import { createSupabaseAdminClient } from '@/lib/supabase-server'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-type MessageParam = { role: 'user' | 'assistant'; content: string }
+import { z } from 'zod'
+
+const messageSchema = z.object({
+  role: z.enum(['user', 'assistant']),
+  content: z.string(),
+})
+
+const postSchema = z.object({
+  messages: z.array(messageSchema).min(1, 'messages array must not be empty'),
+  season_id: z.string().uuid().optional(),
+})
+
+type MessageParam = z.infer<typeof messageSchema>
 
 // ─── Security validator ────────────────────────────────────────────────────────
 // Defence-in-depth before the query reaches Postgres.
@@ -107,16 +119,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No club associated with your account' }, { status: 403 })
   }
 
-  let body: { messages: MessageParam[]; season_id?: string }
+  let raw: unknown
   try {
-    body = await request.json()
+    raw = await request.json()
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
-  if (!Array.isArray(body.messages) || body.messages.length === 0) {
-    return NextResponse.json({ error: 'messages array is required' }, { status: 400 })
+  const parsed = postSchema.safeParse(raw)
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
+
+  const body = parsed.data
 
   const admin = createSupabaseAdminClient()
 

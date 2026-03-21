@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-const VALID_ROLES = ['parent', 'coach', 'admin', 'system_admin']
+const patchSchema = z.object({
+  role: z.enum(['parent', 'coach', 'admin', 'system_admin']),
+})
 
 async function ensureHousehold(admin: SupabaseClient, userId: string) {
   const { data: existing } = await admin
@@ -60,10 +63,19 @@ export async function PATCH(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const { role } = await request.json()
-    if (!VALID_ROLES.includes(role)) {
-      return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
+    let raw: unknown
+    try {
+      raw = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
+
+    const parsedBody = patchSchema.safeParse(raw)
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: parsedBody.error.issues[0].message }, { status: 400 })
+    }
+
+    const { role } = parsedBody.data
 
     // Prevent self-demotion
     if (userId === user.id) {

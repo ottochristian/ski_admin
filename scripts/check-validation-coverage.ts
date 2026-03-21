@@ -26,8 +26,9 @@ function findRouteFiles(dir: string, basePath = ''): RouteInfo[] {
     } else if (entry === 'route.ts') {
       const content = readFileSync(fullPath, 'utf-8')
       const hasJsonInput = content.includes('request.json()')
-      const hasValidation = 
+      const hasValidation =
         content.includes('.parse(') ||
+        content.includes('.safeParse(') ||
         content.includes('validateRequest(') ||
         content.includes('ValidationError')
 

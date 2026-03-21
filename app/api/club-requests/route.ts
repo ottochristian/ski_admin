@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { requireAuth } from '@/lib/api-auth'
 import { createSupabaseAdminClient } from '@/lib/supabase-server'
 import { notificationService } from '@/lib/services/notification-service'
+
+const postSchema = z.object({
+  firstName: z.string().min(1, 'First name is required').trim(),
+  lastName: z.string().min(1, 'Last name is required').trim(),
+  phone: z.string().optional().nullable(),
+  clubName: z.string().min(1, 'Club name is required').trim(),
+  athleteCountEstimate: z.number().int().positive().optional(),
+  notes: z.string().optional(),
+})
 
 export const dynamic = 'force-dynamic'
 
@@ -10,15 +20,19 @@ export async function POST(request: NextRequest) {
   if (authResult instanceof NextResponse) return authResult
   const { user } = authResult
 
-  const body = await request.json()
-  const { firstName, lastName, phone, clubName, athleteCountEstimate, notes } = body
+  let raw: unknown
+  try {
+    raw = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+  }
 
-  if (!firstName?.trim() || !lastName?.trim()) {
-    return NextResponse.json({ error: 'Name is required' }, { status: 400 })
+  const parsedBody = postSchema.safeParse(raw)
+  if (!parsedBody.success) {
+    return NextResponse.json({ error: parsedBody.error.issues[0].message }, { status: 400 })
   }
-  if (!clubName?.trim()) {
-    return NextResponse.json({ error: 'Club name is required' }, { status: 400 })
-  }
+
+  const { firstName, lastName, phone, clubName, athleteCountEstimate, notes } = parsedBody.data
 
   const admin = createSupabaseAdminClient()
 
@@ -63,7 +77,7 @@ export async function POST(request: NextRequest) {
           contactName,
           contactEmail: user.email!,
           clubName: clubName.trim(),
-          athleteCount: athleteCountEstimate,
+          athleteCount: athleteCountEstimate?.toString(),
           notes,
           reviewUrl: `${appUrl}/system-admin/club-requests`,
         })

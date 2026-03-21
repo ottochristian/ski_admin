@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { requireAdmin } from '@/lib/api-auth'
 import { createSupabaseAdminClient as createAdminClient } from '@/lib/supabase-server'
+
+const postSchema = z.object({
+  ai_training_context: z.string(),
+})
 
 // GET — return current ai_training_context for the club
 export async function GET(request: NextRequest) {
@@ -38,21 +43,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No club associated with your account' }, { status: 403 })
   }
 
-  let body: { ai_training_context?: string } = {}
+  let raw: unknown
   try {
-    body = await request.json()
+    raw = await request.json()
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
-  if (typeof body.ai_training_context !== 'string') {
-    return NextResponse.json({ error: '`ai_training_context` (string) is required' }, { status: 400 })
+  const parsed = postSchema.safeParse(raw)
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
 
   const admin = createAdminClient()
   const { error } = await admin
     .from('clubs')
-    .update({ ai_training_context: body.ai_training_context.trim() || null })
+    .update({ ai_training_context: parsed.data.ai_training_context.trim() || null })
     .eq('id', clubId)
 
   if (error) {

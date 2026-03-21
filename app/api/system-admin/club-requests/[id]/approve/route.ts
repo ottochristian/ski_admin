@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/api-auth'
 import { notificationService } from '@/lib/services/notification-service'
+
+const postSchema = z.object({
+  slug: z.string().min(1).trim(),
+  clubName: z.string().min(1).trim(),
+})
 
 export const dynamic = 'force-dynamic'
 
@@ -16,12 +22,19 @@ export async function POST(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const body = await request.json()
-  const { slug, clubName } = body
-
-  if (!slug?.trim() || !clubName?.trim()) {
-    return NextResponse.json({ error: 'slug and clubName are required' }, { status: 400 })
+  let raw: unknown
+  try {
+    raw = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
+
+  const parsedBody = postSchema.safeParse(raw)
+  if (!parsedBody.success) {
+    return NextResponse.json({ error: parsedBody.error.issues[0].message }, { status: 400 })
+  }
+
+  const { slug, clubName } = parsedBody.data
 
   const supabase = createAdminClient()
 

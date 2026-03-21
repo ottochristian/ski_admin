@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { requireAuth } from '@/lib/api-auth'
 import { createSupabaseAdminClient } from '@/lib/supabase-server'
 
 const MAX_HOUSEHOLDS = 100
+
+const postSchema = z.union([
+  z.object({
+    household_ids: z.array(z.string().uuid()).min(1),
+  }),
+  z.object({
+    target_type: z.enum(['program', 'sub_program', 'group']),
+    target_id: z.string().uuid(),
+  }),
+])
 
 // GET /api/messages/households?q=Smith — search households by last name (scoped to user's club)
 export async function GET(request: NextRequest) {
@@ -119,23 +130,27 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  let body: unknown
+  let raw: unknown
   try {
-    body = await request.json()
+    raw = await request.json()
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
+  const parsedBody = postSchema.safeParse(raw)
+  if (!parsedBody.success) {
+    return NextResponse.json(
+      { error: 'Provide either household_ids or target_type + target_id' },
+      { status: 400 }
+    )
+  }
+
+  const body = parsedBody.data
   const admin = createSupabaseAdminClient()
 
   // Branch 1: explicit household_ids — just resolve their names
-  if (
-    typeof body === 'object' &&
-    body !== null &&
-    'household_ids' in body &&
-    Array.isArray((body as any).household_ids)
-  ) {
-    const rawIds: string[] = (body as any).household_ids.slice(0, MAX_HOUSEHOLDS)
+  if ('household_ids' in body) {
+    const rawIds: string[] = body.household_ids.slice(0, MAX_HOUSEHOLDS)
     if (rawIds.length === 0) {
       return NextResponse.json({ households: [] })
     }
@@ -175,18 +190,8 @@ export async function POST(request: NextRequest) {
   }
 
   // Branch 2: target_type + target_id — resolve households in that target
-  if (
-    typeof body === 'object' &&
-    body !== null &&
-    'target_type' in body &&
-    'target_id' in body
-  ) {
-    const targetType = (body as any).target_type as 'program' | 'sub_program' | 'group'
-    const targetId = (body as any).target_id as string
-
-    if (!targetType || !targetId || !['program', 'sub_program', 'group'].includes(targetType)) {
-      return NextResponse.json({ error: 'Invalid target_type or target_id' }, { status: 400 })
-    }
+  if ('target_type' in body) {
+    const { target_type: targetType, target_id: targetId } = body
 
     let householdIds: string[] = []
 

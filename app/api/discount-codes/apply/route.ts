@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAuth } from '@/lib/api-auth'
 
 export const dynamic = 'force-dynamic'
+
+const postSchema = z.object({
+  codeId: z.string().uuid(),
+  orderId: z.string().uuid(),
+  householdId: z.string().uuid(),
+  athleteId: z.string().uuid().optional().nullable(),
+  discountCents: z.number().int().positive(),
+  codeText: z.string().min(1),
+})
 
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request)
@@ -10,24 +20,19 @@ export async function POST(request: NextRequest) {
 
   const { user } = authResult
 
-  let body: {
-    codeId: string
-    orderId: string
-    householdId: string
-    athleteId?: string | null
-    discountCents: number
-    codeText: string
-  }
+  let raw: unknown
   try {
-    body = await request.json()
+    raw = await request.json()
   } catch {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
   }
 
-  const { codeId, orderId, householdId, athleteId, discountCents, codeText } = body
-  if (!codeId || !orderId || !householdId || !discountCents || !codeText) {
-    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+  const parsedBody = postSchema.safeParse(raw)
+  if (!parsedBody.success) {
+    return NextResponse.json({ error: parsedBody.error.issues[0].message }, { status: 400 })
   }
+
+  const { codeId, orderId, householdId, athleteId, discountCents, codeText } = parsedBody.data
 
   const supabase = createAdminClient()
 

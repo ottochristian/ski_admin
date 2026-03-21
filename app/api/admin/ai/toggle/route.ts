@@ -1,6 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { requireAdmin } from '@/lib/api-auth'
 import { createSupabaseAdminClient as createAdminClient } from '@/lib/supabase-server'
+
+const postSchema = z.object({
+  enabled: z.boolean(),
+  club_id: z.string().uuid().optional(),
+})
+
+const patchSchema = z.object({
+  ai_auto_briefing: z.boolean().optional(),
+  ai_insights_enabled: z.boolean().optional(),
+}).refine(
+  (d) => d.ai_auto_briefing !== undefined || d.ai_insights_enabled !== undefined,
+  { message: 'At least one of `ai_auto_briefing` or `ai_insights_enabled` (boolean) is required' }
+)
 
 // GET — return current ai_enabled status for the club
 export async function GET(request: NextRequest) {
@@ -56,26 +70,27 @@ export async function POST(request: NextRequest) {
   if (authResult instanceof NextResponse) return authResult
   const { profile } = authResult
 
-  // Parse body once
-  let body: { enabled?: boolean; club_id?: string } = {}
+  let raw: unknown
   try {
-    body = await request.json()
+    raw = await request.json()
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
-  if (typeof body.enabled !== 'boolean') {
-    return NextResponse.json({ error: '`enabled` (boolean) is required' }, { status: 400 })
+  const parsed = postSchema.safeParse(raw)
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
-  const enabled = body.enabled
+
+  const { enabled, club_id: bodyClubId } = parsed.data
 
   // System admins must supply club_id; regular admins use their own
   let clubId = profile.club_id
   if (profile.role === 'system_admin') {
-    if (!body.club_id) {
+    if (!bodyClubId) {
       return NextResponse.json({ error: 'club_id required for system admin' }, { status: 400 })
     }
-    clubId = body.club_id
+    clubId = bodyClubId
   }
 
   if (!clubId) {
@@ -103,27 +118,22 @@ export async function PATCH(request: NextRequest) {
   if (authResult instanceof NextResponse) return authResult
   const { profile } = authResult
 
-  let body: { ai_auto_briefing?: boolean; ai_insights_enabled?: boolean } = {}
-  try { body = await request.json() } catch {
+  let raw: unknown
+  try { raw = await request.json() } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
-  const hasAutoBriefing = typeof body.ai_auto_briefing === 'boolean'
-  const hasInsights = typeof body.ai_insights_enabled === 'boolean'
-
-  if (!hasAutoBriefing && !hasInsights) {
-    return NextResponse.json(
-      { error: 'At least one of `ai_auto_briefing` or `ai_insights_enabled` (boolean) is required' },
-      { status: 400 }
-    )
+  const parsed = patchSchema.safeParse(raw)
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
   }
 
   const clubId = profile.club_id
   if (!clubId) return NextResponse.json({ error: 'No club' }, { status: 403 })
 
   const updateObj: { ai_auto_briefing?: boolean; ai_insights_enabled?: boolean } = {}
-  if (hasAutoBriefing) updateObj.ai_auto_briefing = body.ai_auto_briefing
-  if (hasInsights) updateObj.ai_insights_enabled = body.ai_insights_enabled
+  if (parsed.data.ai_auto_briefing !== undefined) updateObj.ai_auto_briefing = parsed.data.ai_auto_briefing
+  if (parsed.data.ai_insights_enabled !== undefined) updateObj.ai_insights_enabled = parsed.data.ai_insights_enabled
 
   const admin = createAdminClient()
   const { data, error } = await admin

@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import Anthropic from '@anthropic-ai/sdk'
 import { requireAdmin } from '@/lib/api-auth'
 import { createSupabaseAdminClient } from '@/lib/supabase-server'
+
+const postSchema = z.object({
+  type: z.string().min(1),
+  title: z.string().min(1),
+  detail: z.string().min(1),
+  target_name: z.string().min(1),
+  recipient_count: z.number().int().nonnegative(),
+  preview_names: z.array(z.string()).optional(),
+})
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -13,8 +23,19 @@ export async function POST(request: NextRequest) {
   const clubId = profile.club_id
   if (!clubId) return NextResponse.json({ error: 'No club' }, { status: 403 })
 
-  const body = await request.json()
-  const { type, title, detail, target_name, recipient_count, preview_names } = body
+  let raw: unknown
+  try {
+    raw = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+  }
+
+  const parsed = postSchema.safeParse(raw)
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 })
+  }
+
+  const { type, title, detail, target_name, recipient_count, preview_names } = parsed.data
 
   const admin = createSupabaseAdminClient()
   const [{ data: club }, { data: fullProfile }] = await Promise.all([
