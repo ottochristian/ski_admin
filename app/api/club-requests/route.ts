@@ -50,25 +50,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to submit request' }, { status: 500 })
   }
 
-  // Email to requester (fire-and-forget)
-  notificationService.sendClubRequestReceived(user.email!, {
-    firstName: firstName.trim(),
-    clubName: clubName.trim(),
-  }).catch(err => console.error('[club-requests] requester email error:', err))
-
-  // Email to system admin
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.w110.io'
   const adminEmail = process.env.SYSTEM_ADMIN_EMAIL
-  if (adminEmail) {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.w110.io'
-    notificationService.sendClubRequestNotification(adminEmail, {
-      contactName,
-      contactEmail: user.email!,
+
+  await Promise.allSettled([
+    notificationService.sendClubRequestReceived(user.email!, {
+      firstName: firstName.trim(),
       clubName: clubName.trim(),
-      athleteCount: athleteCountEstimate,
-      notes,
-      reviewUrl: `${appUrl}/system-admin/club-requests`,
-    }).catch(err => console.error('[club-requests] admin email error:', err))
-  }
+    }),
+    adminEmail
+      ? notificationService.sendClubRequestNotification(adminEmail, {
+          contactName,
+          contactEmail: user.email!,
+          clubName: clubName.trim(),
+          athleteCount: athleteCountEstimate,
+          notes,
+          reviewUrl: `${appUrl}/system-admin/club-requests`,
+        })
+      : Promise.resolve(),
+  ])
 
   return NextResponse.json({ success: true, requestId: clubRequest.id })
 }
