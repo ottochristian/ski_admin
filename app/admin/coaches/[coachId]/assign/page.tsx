@@ -25,7 +25,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 
@@ -89,7 +88,7 @@ export default function AssignCoachPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [existingAssignments, setExistingAssignments] = useState<
+  const [_existingAssignments, setExistingAssignments] = useState<
     CoachAssignment[]
   >([])
   const [selectedAssignments, setSelectedAssignments] = useState<Set<string>>(
@@ -101,7 +100,7 @@ export default function AssignCoachPage() {
   >(new Map())
 
   // Find the coach
-  const coach = coaches.find((c: any) => c.id === coachId)
+  const coach = coaches.find((c) => c.id === coachId)
 
   // Load existing assignments
   useEffect(() => {
@@ -200,20 +199,6 @@ export default function AssignCoachPage() {
     setAssignmentRoles(newRoles)
   }
 
-  const getRoleLabel = (role: CoachRole): string => {
-    return COACH_ROLES.find((r) => r.value === role)?.label || role
-  }
-
-  const getAssignmentDisplayName = (
-    program: Program,
-    subProgram?: SubProgram,
-    group?: Group
-  ): string => {
-    if (group) return group.name
-    if (subProgram) return subProgram.name
-    return program.name
-  }
-
   async function handleSave() {
     if (!profile?.club_id || !selectedSeason) {
       setError('Missing club or season information')
@@ -235,7 +220,7 @@ export default function AssignCoachPage() {
       selectedAssignments.forEach((key) => {
         const [type, id] = key.split('_')
         const role = assignmentRoles.get(key) || 'assistant_coach'
-        const assignment: any = {
+        const assignment: { role: string; program_id?: string; sub_program_id?: string; group_id?: string } = {
           role,
         }
 
@@ -305,7 +290,7 @@ export default function AssignCoachPage() {
           <CardHeader>
             <CardTitle>Coach Not Found</CardTitle>
             <CardDescription>
-              The coach you're looking for doesn't exist or you don't have
+              The coach you&apos;re looking for doesn&apos;t exist or you don&apos;t have
               access to them.
             </CardDescription>
           </CardHeader>

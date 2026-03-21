@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRequireAdmin } from '@/lib/auth-context'
 import { useHouseholds } from '@/lib/hooks/use-households'
-import { athletesService } from '@/lib/services/athletes-service'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   Card,
@@ -24,7 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import Link from 'next/link'
 import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 
 export default function NewAthletePage() {
@@ -144,7 +142,7 @@ export default function NewAthletePage() {
       <Card>
         <CardHeader>
           <CardTitle>Athlete Information</CardTitle>
-          <CardDescription>Enter the athlete's details</CardDescription>
+          <CardDescription>Enter the athlete&apos;s details</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -222,7 +220,7 @@ export default function NewAthletePage() {
                 required
               >
                 <option value="">Select a household</option>
-                {households.map((h: any) => (
+                {households.map((h: { id: string; primary_email?: string }) => (
                   <option key={h.id} value={h.id}>
                     {h.primary_email || `Household ${h.id.slice(0, 8)}`}
                   </option>

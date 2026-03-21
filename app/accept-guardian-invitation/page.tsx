@@ -74,6 +74,7 @@ function AcceptGuardianInvitationContent() {
   const layout = (children: React.ReactNode) => (
     <div className="min-h-screen flex bg-background relative">
       <div className="pointer-events-none fixed inset-0 z-0">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/topo-bg.svg" alt="" className="w-full h-full object-cover opacity-[0.055]" />
       </div>
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 border-r border-zinc-800 relative overflow-hidden">
@@ -81,6 +82,7 @@ function AcceptGuardianInvitationContent() {
           <div className="h-[400px] w-[400px] rounded-full bg-orange-600/10 blur-[100px] -translate-x-1/4 translate-y-1/4" />
         </div>
         <div className="relative">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <Link href="/"><img src="/w110-logo-dark.svg" alt="W110" className="h-8 w-auto" /></Link>
         </div>
         <div className="relative">
@@ -97,7 +99,8 @@ function AcceptGuardianInvitationContent() {
       <div className="flex-1 flex items-center justify-center px-6 py-12 relative">
         <div className="w-full max-w-sm">
           <div className="mb-10 lg:hidden">
-            <Link href="/"><img src="/w110-logo-dark.svg" alt="W110" className="h-8 w-auto" /></Link>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+          <Link href="/"><img src="/w110-logo-dark.svg" alt="W110" className="h-8 w-auto" /></Link>
           </div>
           {children}
         </div>
@@ -142,7 +145,7 @@ function AcceptGuardianInvitationContent() {
         </div>
         <h1 className="page-title text-foreground">Sign in required</h1>
         <p className="mt-1.5 text-sm text-zinc-500">
-          You need to be logged in to accept this guardian invitation. After signing in, you'll be redirected back here.
+          You need to be logged in to accept this guardian invitation. After signing in, you&apos;ll be redirected back here.
         </p>
         <div className="mt-8 space-y-3">
           <Link href={loginUrl} className="block w-full rounded-lg bg-orange-600 hover:bg-orange-500 px-4 py-2.5 text-sm font-semibold text-foreground text-center transition-colors">

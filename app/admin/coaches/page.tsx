@@ -58,7 +58,7 @@ export default function CoachesPage() {
   } = useCoaches(true) // Include assignments
 
   // Transform data to match expected format
-  const coachesWithAssignments = coaches.map((coach: any) => ({
+  const coachesWithAssignments = coaches.map((coach) => ({
     ...coach,
     assignments: coach.coach_assignments || [],
   }))

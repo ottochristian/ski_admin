@@ -126,7 +126,7 @@ export default function NewCoachPage() {
         <CardHeader>
           <CardTitle>Coach Information</CardTitle>
           <CardDescription>
-            Enter the coach's details. They will receive an email invitation to
+            Enter the coach&apos;s details. They will receive an email invitation to
             create their account.
           </CardDescription>
         </CardHeader>

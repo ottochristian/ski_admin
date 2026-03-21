@@ -15,14 +15,6 @@ import { useAthletes } from '@/lib/hooks/use-athletes'
 import { AdminPageHeader } from '@/components/admin-page-header'
 import { InlineLoading, ErrorState } from '@/components/ui/loading-states'
 
-interface Athlete {
-  id: string
-  first_name?: string
-  last_name?: string
-  date_of_birth?: string
-  parent_id?: string
-}
-
 export default function AthletesPage() {
   const { profile, loading: authLoading } = useRequireAdmin()
 

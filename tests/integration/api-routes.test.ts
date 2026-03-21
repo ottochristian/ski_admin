@@ -28,22 +28,22 @@ describe('API Route Security', () => {
 
   describe('Validation Implementation', () => {
     const routesRequiringValidation = [
-      { route: 'checkout', schema: 'checkoutSchema' },
-      { route: 'athletes/create', schema: 'createAthleteSchema' },
-      { route: 'registrations/create', schema: 'createRegistrationSchema' },
-      { route: 'household-guardians/invite', schema: 'inviteGuardianSchema' },
-      { route: 'coaches/invite', schema: 'inviteCoachSchema' },
-      { route: 'otp/send', schema: 'otpSchema' },
-      { route: 'otp/verify', schema: 'otpSchema' },
+      { route: 'checkout', schema: 'checkoutSchema', parseStr: 'validateRequest' },
+      { route: 'athletes/create', schema: 'createAthleteSchema', parseStr: '.parse(' },
+      { route: 'registrations/create', schema: 'createRegistrationSchema', parseStr: '.parse(' },
+      { route: 'household-guardians/invite', schema: 'inviteGuardianSchema', parseStr: '.parse(' },
+      { route: 'coaches/invite', schema: 'inviteCoachSchema', parseStr: '.parse(' },
+      { route: 'otp/send', schema: 'otpSchema', parseStr: '.parse(' },
+      { route: 'otp/verify', schema: 'otpSchema', parseStr: '.parse(' },
     ]
 
-    routesRequiringValidation.forEach(({ route, schema }) => {
+    routesRequiringValidation.forEach(({ route, schema, parseStr }) => {
       it(`${route} should use ${schema}`, async () => {
         const fs = await import('fs')
         const routePath = `app/api/${route}/route.ts`
         const content = fs.readFileSync(routePath, 'utf-8')
-        
-        expect(content).toContain('.parse(')
+
+        expect(content).toContain(parseStr)
         expect(content).toContain('ValidationError')
       })
     })
@@ -53,7 +53,7 @@ describe('API Route Security', () => {
     const rateLimitedRoutes = [
       { route: 'checkout', limit: 'checkRateLimit' },
       { route: 'webhooks/stripe', limit: 'checkRateLimit' },
-      { route: 'otp/send', limit: 'checkRateLimit' },
+      { route: 'otp/send', limit: 'dbRateLimiter' },
     ]
 
     rateLimitedRoutes.forEach(({ route, limit }) => {

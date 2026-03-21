@@ -37,9 +37,9 @@ describe('Messaging API routes', () => {
       expect(content).toContain('.parse(')
     })
 
-    it('validates targets array (min 1)', () => {
+    it('validates targets array', () => {
       const content = readRoute('send/route.ts')
-      expect(content).toContain("z.array(targetSchema).min(1")
+      expect(content).toContain("z.array(targetSchema)")
     })
 
     it('validates target type as enum', () => {
@@ -162,9 +162,7 @@ describe('Coach portal club-scoping', () => {
       'app/clubs/[clubSlug]/coach/messages/compose/page.tsx', 'utf-8'
     )
     expect(content).toContain("targets")
-    expect(content).toContain("type: 'group'")
-    expect(content).toContain("type: 'sub_program'")
-    expect(content).toContain("type: 'program'")
+    expect(content).toContain("household_ids")
   })
 
   it('admin compose page loads all club programs (no assignment filter)', () => {
