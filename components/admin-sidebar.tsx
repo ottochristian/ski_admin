@@ -1,12 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Profile } from '@/lib/types'
-import { LayoutDashboard, BookOpen, FileText, Users, Settings, BarChart3, MessageSquare } from 'lucide-react'
+import { LayoutDashboard, BookOpen, FileText, Users, Settings, BarChart3, MessageSquare, Clock } from 'lucide-react'
 import { useClub } from '@/lib/club-context'
+import { useCurrentSeason } from '@/lib/contexts/season-context'
 import { colors } from '@/lib/colors'
+import { createClient } from '@/lib/supabase/client'
 
 interface AdminSidebarProps {
   profile: Profile
@@ -16,11 +18,26 @@ interface AdminSidebarProps {
 export function AdminSidebar({ profile, clubSlug }: AdminSidebarProps) {
   const pathname = usePathname()
   const { club, loading: clubLoading } = useClub()
+  const currentSeason = useCurrentSeason()
   const [logoError, setLogoError] = useState(false)
+  const [waitlistCount, setWaitlistCount] = useState(0)
 
   const basePath = clubSlug ? `/clubs/${clubSlug}/admin` : '/admin'
 
-  const menuItems = [
+  // Check if there are any active waitlisted registrations for this club/season
+  useEffect(() => {
+    if (!club?.id || !currentSeason?.id) return
+    const supabase = createClient()
+    supabase
+      .from('registrations')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'waitlisted')
+      .eq('season_id', currentSeason.id)
+      .then(({ count }) => setWaitlistCount(count ?? 0))
+  }, [club?.id, currentSeason?.id])
+
+  type MenuItem = { label: string; href: string; icon: React.ElementType; count?: number }
+  const menuItems: MenuItem[] = [
     { label: 'Dashboard', href: `${basePath}`, icon: LayoutDashboard },
     { label: 'Insights', href: `${basePath}/insights`, icon: BarChart3 },
     { label: 'Programs', href: `${basePath}/programs`, icon: BookOpen },
@@ -28,6 +45,9 @@ export function AdminSidebar({ profile, clubSlug }: AdminSidebarProps) {
     { label: 'Athletes', href: `${basePath}/athletes`, icon: Users },
     { label: 'Coaches', href: `${basePath}/coaches`, icon: Users },
     { label: 'Messages', href: `${basePath}/messages/compose`, icon: MessageSquare },
+    ...(waitlistCount > 0
+      ? [{ label: 'Waitlist', href: `${basePath}/waitlist`, icon: Clock, count: waitlistCount }]
+      : []),
     { label: 'Settings', href: `${basePath}/settings`, icon: Settings },
   ]
 
@@ -87,7 +107,12 @@ export function AdminSidebar({ profile, clubSlug }: AdminSidebarProps) {
               }`}
             >
               <Icon className="h-4 w-4 shrink-0" />
-              {item.label}
+              <span className="flex-1">{item.label}</span>
+              {item.count != null && item.count > 0 && (
+                <span className="ml-auto text-xs bg-purple-900/60 text-purple-300 rounded-full px-2 py-0.5 font-medium">
+                  {item.count}
+                </span>
+              )}
             </Link>
           )
         })}

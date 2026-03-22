@@ -1,182 +1,117 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
+import { useEffect, useState } from 'react'
+import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Card, CardContent } from '@/components/ui/card'
+import { CheckCircle, Loader2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { CheckCircle, XCircle, Loader2 } from 'lucide-react'
-
-type PaymentState = 'loading' | 'paid' | 'processing' | 'failed'
+import Link from 'next/link'
 
 export default function CheckoutCompletePage() {
   const params = useParams()
-  const router = useRouter()
   const searchParams = useSearchParams()
+  const router = useRouter()
   const clubSlug = params.clubSlug as string
   const orderId = searchParams.get('order')
 
-  const [state, setState] = useState<PaymentState>('loading')
-  const [attemptCount, setAttemptCount] = useState(0)
-  const [supabase] = useState(() => createClient())
-  const pollingRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const MAX_ATTEMPTS = 10
-  const POLL_INTERVAL_MS = 2000
-
-  async function verifyPayment(): Promise<boolean> {
-    if (!orderId) return false
-
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      if (!session?.access_token) return false
-
-      const response = await fetch(`/api/orders/${orderId}/verify-payment`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      })
-
-      if (!response.ok) return false
-
-      const data = await response.json()
-      return data.success === true && data.status === 'paid'
-    } catch {
-      return false
-    }
-  }
+  const [status, setStatus] = useState<'loading' | 'paid' | 'pending' | 'error'>('loading')
 
   useEffect(() => {
     if (!orderId) {
-      setState('failed')
+      setStatus('error')
       return
     }
 
-    // Clear cart on arrival at this page (payment initiated)
-    // We use localStorage directly to avoid needing CartContext here
-    try {
-      localStorage.removeItem('cart_items')
-    } catch {
-      // Best-effort
-    }
+    const supabase = createClient()
 
-    let cancelled = false
+    // Poll order status — webhook may take a second or two
     let attempts = 0
+    const maxAttempts = 10
 
-    async function poll() {
-      if (cancelled) return
+    const check = async () => {
+      const { data: order } = await supabase
+        .from('orders')
+        .select('status')
+        .eq('id', orderId)
+        .single()
+
+      if (order?.status === 'paid') {
+        setStatus('paid')
+        setTimeout(() => router.push(`/clubs/${clubSlug}/parent/dashboard`), 3000)
+        return
+      }
 
       attempts++
-      setAttemptCount(attempts)
-
-      const paid = await verifyPayment()
-
-      if (paid) {
-        if (!cancelled) setState('paid')
+      if (attempts >= maxAttempts) {
+        setStatus('pending')
+        setTimeout(() => router.push(`/clubs/${clubSlug}/parent/dashboard`), 4000)
         return
       }
 
-      if (attempts >= MAX_ATTEMPTS) {
-        if (!cancelled) setState('failed')
-        return
-      }
-
-      // Still processing — set state and schedule next poll
-      if (!cancelled) setState('processing')
-      pollingRef.current = setTimeout(poll, POLL_INTERVAL_MS)
+      setTimeout(check, 1500)
     }
 
-    // Start polling
-    poll()
+    check()
+  }, [orderId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    return () => {
-      cancelled = true
-      if (pollingRef.current) {
-        clearTimeout(pollingRef.current)
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderId])
-
-  if (state === 'loading' || (state === 'processing' && attemptCount <= 1)) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <h2 className="text-xl font-semibold">Confirming your payment...</h2>
-        <p className="text-muted-foreground text-sm">This will only take a moment.</p>
-      </div>
-    )
-  }
-
-  if (state === 'processing') {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <h2 className="text-xl font-semibold">Confirming your payment...</h2>
-        <p className="text-muted-foreground text-sm">
-          Attempt {attemptCount} of {MAX_ATTEMPTS}. Please wait.
-        </p>
-      </div>
-    )
-  }
-
-  if (state === 'paid') {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-6">
-        <div className="flex flex-col items-center gap-3">
-          <CheckCircle className="h-16 w-16 text-green-500" />
-          <h1 className="text-3xl font-bold text-green-400">Payment Successful!</h1>
-          <p className="text-muted-foreground text-center max-w-md">
-            Your registration is confirmed. You will receive a confirmation email shortly.
-          </p>
-        </div>
-
-        <Card className="w-full max-w-sm border-green-800/40 bg-green-950/20">
-          <CardContent className="pt-6 pb-4 text-center">
-            <p className="text-sm text-green-400">
-              Order <span className="font-mono font-semibold">#{orderId?.slice(0, 8)}</span> has been processed.
-            </p>
-          </CardContent>
-        </Card>
-
-        <div className="flex flex-col sm:flex-row gap-3">
-          <Link href={`/clubs/${clubSlug}/parent/dashboard`}>
-            <Button>Go to Dashboard</Button>
-          </Link>
-          <Link href={`/clubs/${clubSlug}/parent/programs`}>
-            <Button variant="outline">Browse Programs</Button>
-          </Link>
-        </div>
-      </div>
-    )
-  }
-
-  // Failed state
   return (
-    <div className="flex flex-col items-center justify-center min-h-[50vh] gap-6">
-      <div className="flex flex-col items-center gap-3">
-        <XCircle className="h-16 w-16 text-red-500" />
-        <h1 className="text-3xl font-bold text-red-400">Payment Not Confirmed</h1>
-        <p className="text-muted-foreground text-center max-w-md">
-          We could not confirm your payment. If you were charged, please contact support. Otherwise,
-          you can return to your cart and try again.
-        </p>
-      </div>
+    <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 text-center px-4">
+      {status === 'loading' && (
+        <>
+          <Loader2 className="h-12 w-12 text-muted-foreground animate-spin" />
+          <div>
+            <h1 className="text-xl font-semibold">Confirming your payment…</h1>
+            <p className="text-sm text-muted-foreground mt-1">Just a moment</p>
+          </div>
+        </>
+      )}
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <Link href={`/clubs/${clubSlug}/parent/cart`}>
-          <Button variant="outline">Return to Cart</Button>
-        </Link>
-        <Link href={`/clubs/${clubSlug}/parent`}>
-          <Button variant="ghost">Back to Dashboard</Button>
-        </Link>
-      </div>
+      {status === 'paid' && (
+        <>
+          <CheckCircle className="h-14 w-14 text-green-500" />
+          <div>
+            <h1 className="text-xl font-semibold">Registration confirmed!</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Payment received. Redirecting you to your dashboard…
+            </p>
+          </div>
+          <Link href={`/clubs/${clubSlug}/parent/dashboard`}>
+            <Button variant="outline">Go to Dashboard</Button>
+          </Link>
+        </>
+      )}
+
+      {status === 'pending' && (
+        <>
+          <CheckCircle className="h-14 w-14 text-green-500" />
+          <div>
+            <h1 className="text-xl font-semibold">Payment received!</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Your registration is being confirmed — this usually takes a few seconds.
+              Check your dashboard for the updated status.
+            </p>
+          </div>
+          <Link href={`/clubs/${clubSlug}/parent/dashboard`}>
+            <Button variant="outline">Go to Dashboard</Button>
+          </Link>
+        </>
+      )}
+
+      {status === 'error' && (
+        <>
+          <XCircle className="h-12 w-12 text-destructive" />
+          <div>
+            <h1 className="text-xl font-semibold">Something went wrong</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              We could not verify your order. If payment was completed, your registration
+              will be confirmed shortly.
+            </p>
+          </div>
+          <Link href={`/clubs/${clubSlug}/parent/dashboard`}>
+            <Button variant="outline">Back to Dashboard</Button>
+          </Link>
+        </>
+      )}
     </div>
   )
 }

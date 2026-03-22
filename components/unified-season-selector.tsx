@@ -48,14 +48,14 @@ export function UnifiedSeasonSelector() {
   // If can't change season (parent portal), show read-only display
   if (!canChangeSeason) {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <Calendar className="h-4 w-4 text-zinc-400" />
-        <div className="text-sm font-medium text-zinc-200">
+        <span className="text-sm font-medium text-zinc-200">
           {displaySeason.name}
-          {displaySeason.is_current && (
-            <span className="ml-2 text-xs text-zinc-400">(Current)</span>
-          )}
-        </div>
+        </span>
+        {displaySeason.is_current && (
+          <span className="text-xs text-zinc-400">(Current)</span>
+        )}
       </div>
     )
   }

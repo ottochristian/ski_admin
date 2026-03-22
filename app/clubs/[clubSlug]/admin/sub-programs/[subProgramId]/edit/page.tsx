@@ -4,6 +4,7 @@ import { useEffect, useState, FormEvent } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
+import { useCurrentSeason } from '@/lib/contexts/season-context'
 import {
   Card,
   CardHeader,
@@ -42,6 +43,7 @@ export default function EditSubProgramPage() {
   const subProgramId = params.subProgramId as string | undefined
 
   const { profile, loading: authLoading } = useRequireAdmin()
+  const currentSeason = useCurrentSeason()
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -128,6 +130,8 @@ export default function EditSubProgramPage() {
     const capacity =
       maxCapacity.trim() === '' ? null : Number(maxCapacity.trim())
 
+    const previousCapacity = subProgram?.max_capacity ?? null
+
     // PHASE 2: RLS ensures user can only update sub-programs in their club
     const { error: updateError } = await supabase
       .from('sub_programs')
@@ -140,12 +144,36 @@ export default function EditSubProgramPage() {
       })
       .eq('id', subProgramId)
 
-    setSaving(false)
-
     if (updateError) {
+      setSaving(false)
       setError(updateError.message)
       return
     }
+
+    // Always call promote after saving — handles both capacity increases and cold-start
+    // cases where waitlisted entries existed before the promotion system was deployed.
+    // The DB function is a no-op if there are no open spots.
+    if (capacity !== null && currentSeason?.id) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        await fetch('/api/admin/waitlist/promote', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({
+            subProgramId,
+            seasonId: currentSeason.id,
+          }),
+        })
+        // Fire-and-forget — don't block the save on email delivery
+      } catch {
+        // Non-critical — save succeeded, email failure shouldn't block navigation
+      }
+    }
+
+    setSaving(false)
 
     // Invalidate cache to show updated sub-program
     if (subProgram) {

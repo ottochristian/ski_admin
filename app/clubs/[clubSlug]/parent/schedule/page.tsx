@@ -249,9 +249,9 @@ export default function ParentSchedulePage() {
         </p>
       </div>
 
-      <div className="flex gap-6 items-start">
+      <div className="flex flex-col md:flex-row gap-6 items-start">
         {/* ── Mini calendar sidebar ── */}
-        <div className="w-56 flex-shrink-0 flex flex-col gap-3">
+        <div className="w-full md:w-56 md:flex-shrink-0 flex flex-col gap-3">
           <MiniCalendar
             month={calMonth.month}
             year={calMonth.year}
@@ -285,7 +285,7 @@ export default function ParentSchedulePage() {
             <button type="button" onClick={prevWeek} className="p-1.5 rounded-md border border-border bg-card hover:bg-secondary/50 transition-colors shadow-sm">
               <ChevronLeft className="h-4 w-4 text-muted-foreground" />
             </button>
-            <span className="text-sm font-semibold min-w-[200px] text-center">{weekLabel}</span>
+            <span className="text-sm font-semibold flex-1 text-center">{weekLabel}</span>
             <button type="button" onClick={nextWeek} className="p-1.5 rounded-md border border-border bg-card hover:bg-secondary/50 transition-colors shadow-sm">
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </button>
@@ -296,8 +296,8 @@ export default function ParentSchedulePage() {
 
           {isLoading ? <InlineLoading /> : (
             <>
-              {/* 7-col day grid */}
-              <div className="grid grid-cols-7 gap-1.5">
+              {/* 7-col day grid — hidden on mobile, too narrow to be readable */}
+              <div className="hidden md:grid grid-cols-7 gap-1.5">
                 {weekDays.map((day) => {
                   const dayEvents = events.filter((e) => isSameDay(new Date(e.start_at), day))
                   const isToday = isSameDay(day, today)

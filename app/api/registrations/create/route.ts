@@ -161,10 +161,91 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 5. Create registrations (using admin client to bypass RLS)
+    // 5. Deduplicate: skip any registrations where an active/waitlisted entry already exists
+    const regSeasonId = registrations[0]?.season_id ?? ''
+    const athleteSubProgramPairs = registrations.map((r: RegistrationRow) => ({
+      athlete_id: r.athlete_id,
+      sub_program_id: r.sub_program_id,
+    }))
+
+    const { data: existingRows } = await adminSupabase
+      .from('registrations')
+      .select('athlete_id, sub_program_id, status')
+      .eq('season_id', regSeasonId)
+      .in('status', ['confirmed', 'pending', 'waitlisted'])
+      .in('athlete_id', athleteSubProgramPairs.map((p: { athlete_id: string }) => p.athlete_id))
+      .in('sub_program_id', athleteSubProgramPairs.map((p: { sub_program_id: string }) => p.sub_program_id))
+
+    const existingKeys = new Set(
+      (existingRows ?? []).map((r: { athlete_id: string; sub_program_id: string }) =>
+        `${r.athlete_id}::${r.sub_program_id}`
+      )
+    )
+
+    const deduped = registrations.filter((r: RegistrationRow) =>
+      !existingKeys.has(`${r.athlete_id}::${r.sub_program_id}`)
+    )
+
+    if (deduped.length === 0) {
+      log.info('All registrations already exist, returning empty', { userId: user.id })
+      return NextResponse.json({ registrations: [] }, { status: 201 })
+    }
+
+    const registrations_to_insert = deduped
+
+    // 6. Enforce capacity: for each registration with status 'pending',
+    //    check current enrollment and downgrade to 'waitlisted' if at capacity.
+    const subProgramIds = [...new Set(registrations_to_insert.map((r: RegistrationRow) => r.sub_program_id))]
+
+    // Fetch sub-program capacities
+    const { data: subPrograms } = await adminSupabase
+      .from('sub_programs')
+      .select('id, max_capacity')
+      .in('id', subProgramIds)
+
+    // Count current confirmed/pending (not waitlisted) registrations per sub-program
+    const { data: enrollmentRows } = await adminSupabase
+      .from('registrations')
+      .select('sub_program_id')
+      .in('sub_program_id', subProgramIds)
+      .eq('season_id', regSeasonId)
+      .in('status', ['confirmed', 'pending'])
+
+    const enrollmentCount: Record<string, number> = {}
+    for (const row of enrollmentRows ?? []) {
+      enrollmentCount[row.sub_program_id] = (enrollmentCount[row.sub_program_id] ?? 0) + 1
+    }
+
+    const capacityMap: Record<string, number | null> = {}
+    for (const sp of subPrograms ?? []) {
+      capacityMap[sp.id] = sp.max_capacity ?? null
+    }
+
+    // Resolve final status per registration
+    const registrationsWithStatus = registrations_to_insert.map((r: RegistrationRow) => {
+      // If caller already set waitlisted, keep it
+      if (r.status === 'waitlisted') return r
+      const capacity = capacityMap[r.sub_program_id]
+      if (capacity == null) return r // no limit
+      const current = enrollmentCount[r.sub_program_id] ?? 0
+      if (current >= capacity) {
+        return { ...r, status: 'waitlisted' }
+      }
+      // Increment count so subsequent registrations in this same batch are also checked
+      enrollmentCount[r.sub_program_id] = current + 1
+      return r
+    })
+
+    log.info('Capacity check complete', {
+      userId: user.id,
+      enrollmentCount,
+      waitlistedCount: registrationsWithStatus.filter((r: RegistrationRow) => r.status === 'waitlisted').length,
+    })
+
+    // 6. Create registrations (using admin client to bypass RLS)
     const { data: createdRegistrations, error: createError } = await adminSupabase
       .from('registrations')
-      .insert(registrations)
+      .insert(registrationsWithStatus)
       .select()
 
     if (createError || !createdRegistrations) {

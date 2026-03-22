@@ -370,6 +370,12 @@
    A soft radial bloom from the top-center fades to the dark bg.
    Opacity is intentionally low so it's felt, not seen.
    ============================================================ */
+html,
+body {
+  overflow-x: clip;
+  max-width: 100%;
+}
+
 html {
   background-color: hsl(var(--background));
   background-image: radial-gradient(ellipse 100% 45% at 50% -5%, rgba(234, 88, 12, 0.12) 0%, transparent 70%);

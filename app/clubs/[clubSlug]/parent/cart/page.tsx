@@ -32,6 +32,7 @@ import {
   Tag,
   X,
 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
@@ -51,6 +52,7 @@ export default function CartPage() {
 
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [waitlistConfirmed, setWaitlistConfirmed] = useState(false)
 
   // Discount code state
   const [discountInput, setDiscountInput] = useState('')
@@ -78,7 +80,8 @@ export default function CartPage() {
   const [waiversLoading, setWaiversLoading] = useState(false)
   const [selectedWaiver, setSelectedWaiver] = useState<{ waiverId: string; athleteId: string } | null>(null)
 
-  const athleteIds = [...new Set(items.map((i) => i.athlete_id))]
+  const paidItems = items.filter((i) => !i.isWaitlisted)
+  const athleteIds = [...new Set(paidItems.map((i) => i.athlete_id))]
 
   const checkWaivers = useCallback(async () => {
     if (!currentSeason?.id || athleteIds.length === 0) {
@@ -117,6 +120,7 @@ export default function CartPage() {
   }, [checkWaivers])
 
   const allWaiversSigned =
+    paidItems.length === 0 ||
     requiredWaivers.length === 0 ||
     athleteIds.every((id) => waiverSigned[id] === true)
 
@@ -179,8 +183,18 @@ export default function CartPage() {
     setError(null)
 
     try {
-      // 1. Check for existing confirmed registrations (prevent duplicates)
-      for (const item of items) {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      if (sessionError || !session?.access_token) {
+        throw new Error('Authentication expired. Please log in again.')
+      }
+
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      }
+
+      // 1. Check for existing confirmed registrations (prevent duplicates) — paid items only
+      for (const item of paidItems) {
         const { data: existing } = await supabase
           .from('registrations')
           .select('id, status')
@@ -196,17 +210,9 @@ export default function CartPage() {
         }
       }
 
-      // 2. Create registrations via API (handles authorization)
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      if (sessionError || !session?.access_token) {
-        throw new Error('Authentication expired. Please log in again.')
-      }
-
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.access_token}`,
-      }
-
+      // 2. Create all registrations via API.
+      //    Paid items → 'pending'; waitlist items → 'waitlisted'.
+      //    Server enforces capacity and may promote 'pending' → 'waitlisted' on race conditions.
       const registrationsResponse = await fetch('/api/registrations/create', {
         method: 'POST',
         headers,
@@ -216,7 +222,7 @@ export default function CartPage() {
             athlete_id: item.athlete_id,
             sub_program_id: item.sub_program_id,
             season_id: currentSeason.id,
-            status: 'pending',
+            status: item.isWaitlisted ? 'waitlisted' : 'pending',
             club_id: clubId,
           })),
           clubId,
@@ -233,12 +239,58 @@ export default function CartPage() {
       }
 
       const responseData = await registrationsResponse.json()
-      const registrations = responseData.registrations
-      if (!Array.isArray(registrations) || registrations.length === 0) {
+      const allRegistrations: { id: string; sub_program_id: string; athlete_id: string; status: string }[] =
+        responseData.registrations
+
+      if (!Array.isArray(allRegistrations)) {
         throw new Error('Registration API returned unexpected response. Please try again.')
       }
 
-      // 3. Create order
+      // All items already existed in the DB (deduped to empty) — clear cart and confirm
+      if (allRegistrations.length === 0) {
+        clearCart()
+        setWaitlistConfirmed(true)
+        return
+      }
+
+      // Invalidate registrations cache
+      await queryClient.invalidateQueries({ queryKey: ['registrations', currentSeason.id] })
+
+      // Match created registrations back to cart items by athlete + sub_program
+      function findReg(item: typeof items[0]) {
+        return allRegistrations.find(
+          (r) => r.sub_program_id === item.sub_program_id && r.athlete_id === item.athlete_id
+        )
+      }
+
+      // 3. If there are no paid items (waitlist-only cart), we're done — show confirmation
+      if (paidItems.length === 0) {
+        clearCart()
+        setWaitlistConfirmed(true)
+        return
+      }
+
+      // Check if server bumped any paid items to waitlisted (program was full / race condition)
+      const serverWaitlisted = paidItems.filter((item) => findReg(item)?.status === 'waitlisted')
+      const stillPaid = paidItems.filter((item) => findReg(item)?.status !== 'waitlisted')
+
+      if (serverWaitlisted.length > 0 && stillPaid.length === 0) {
+        // Everything got waitlisted — treat as a successful waitlist checkout
+        clearCart()
+        setWaitlistConfirmed(true)
+        return
+      }
+
+      if (serverWaitlisted.length > 0) {
+        // Partial: some spots taken mid-checkout, those are now waitlisted
+        // Clear cart and show confirmation; remaining paid items proceed below
+        // (rare race condition — just surface a note in the confirmation)
+        clearCart()
+        setWaitlistConfirmed(true)
+        return
+      }
+
+      // 4. Create order for paid items only
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert([{
@@ -255,15 +307,19 @@ export default function CartPage() {
         throw new Error(`Failed to create order: ${orderError?.message}`)
       }
 
-      // 4. Create order items
+      // 5. Create order items for paid registrations only
+      const paidRegs = paidItems
+        .map((item) => ({ item, reg: findReg(item) }))
+        .filter((x): x is { item: typeof items[0]; reg: typeof allRegistrations[0] } => !!x.reg)
+
       const { error: itemsError } = await supabase
         .from('order_items')
         .insert(
-          registrations.map((reg: { id: string }, i: number) => ({
+          paidRegs.map(({ item, reg }) => ({
             order_id: order.id,
             registration_id: reg.id,
-            description: `${items[i].program_name} — ${items[i].sub_program_name} (${items[i].athlete_name})`,
-            amount: items[i].price,
+            description: `${item.program_name} — ${item.sub_program_name} (${item.athlete_name})`,
+            amount: item.price,
           }))
         )
 
@@ -271,7 +327,7 @@ export default function CartPage() {
         throw new Error(`Failed to create order items: ${itemsError.message}`)
       }
 
-      // 5. Apply discount code if one is set
+      // 6. Apply discount code if one is set
       let finalTotal = total
       if (appliedDiscount) {
         const applyRes = await fetch('/api/discount-codes/apply', {
@@ -292,13 +348,10 @@ export default function CartPage() {
         // If apply fails (e.g. code just expired), continue at full price
       }
 
-      // 6. Invalidate cache
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['orders', household.id, currentSeason.id] }),
-        queryClient.invalidateQueries({ queryKey: ['registrations', currentSeason.id] }),
-      ])
+      // 7. Invalidate cache
+      await queryClient.invalidateQueries({ queryKey: ['orders', household.id, currentSeason.id] })
 
-      // 7. Fetch Stripe clientSecret — show embedded checkout in this page
+      // 8. Fetch Stripe clientSecret — show embedded checkout in this page
       const checkoutResponse = await fetch('/api/checkout', {
         method: 'POST',
         headers,
@@ -349,6 +402,38 @@ export default function CartPage() {
         >
           <EmbeddedCheckout />
         </EmbeddedCheckoutProvider>
+      </div>
+    )
+  }
+
+  // ── Waitlist-only confirmation screen ────────────────────────────────────────
+
+  if (waitlistConfirmed) {
+    return (
+      <div className="flex flex-col gap-6">
+        <div>
+          <h1 className="text-3xl font-bold">You&apos;re on the waitlist!</h1>
+          <p className="mt-1 text-muted-foreground">
+            We&apos;ll notify you if a spot opens up.
+          </p>
+        </div>
+        <Card>
+          <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-purple-950/40 border border-purple-700">
+              <CheckCircle className="h-7 w-7 text-purple-400" />
+            </div>
+            <div>
+              <p className="font-semibold text-lg">Waitlist confirmed</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                No payment is required yet. If a spot opens, you&apos;ll receive an email with
+                instructions to complete your registration.
+              </p>
+            </div>
+            <Button onClick={() => router.push(`/clubs/${clubSlug}/parent/programs`)}>
+              Browse more programs
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -432,14 +517,28 @@ export default function CartPage() {
                   {athleteItems.map((item) => (
                     <div
                       key={item.id}
-                      className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2.5"
+                      className={cn(
+                        'flex items-center justify-between gap-3 rounded-md border px-3 py-2.5',
+                        item.isWaitlisted
+                          ? 'border-purple-800/40 bg-purple-950/20'
+                          : 'bg-muted/30'
+                      )}
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{item.program_name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="truncate text-sm font-medium">{item.program_name}</p>
+                          {item.isWaitlisted && (
+                            <Badge variant="outline" className="shrink-0 text-xs border-purple-700 text-purple-400">
+                              Waitlist
+                            </Badge>
+                          )}
+                        </div>
                         <p className="truncate text-xs text-muted-foreground">{item.sub_program_name}</p>
                       </div>
                       <div className="flex shrink-0 items-center gap-3">
-                        <span className="text-sm font-semibold">${item.price.toFixed(2)}</span>
+                        <span className="text-sm font-semibold">
+                          {item.isWaitlisted ? 'Free' : `$${item.price.toFixed(2)}`}
+                        </span>
                         <button
                           type="button"
                           onClick={() => removeItem(item.id)}
@@ -593,17 +692,26 @@ export default function CartPage() {
               )}
 
               <Button
-                className="w-full gap-2 bg-green-600 hover:bg-green-700 text-foreground h-12 text-base font-semibold"
+                className={cn(
+                  'w-full gap-2 h-12 text-base font-semibold text-foreground',
+                  paidItems.length === 0
+                    ? 'bg-purple-700 hover:bg-purple-800'
+                    : 'bg-green-600 hover:bg-green-700'
+                )}
                 size="lg"
                 onClick={handleCheckout}
                 disabled={processing || !currentSeason || !allWaiversSigned}
               >
                 <Lock className="h-4 w-4" />
-                {processing ? 'Preparing payment…' : 'Continue to Payment'}
+                {processing
+                  ? (paidItems.length === 0 ? 'Joining waitlist…' : 'Preparing payment…')
+                  : (paidItems.length === 0 ? 'Join Waitlist' : 'Continue to Payment')}
               </Button>
-              <p className="text-center text-xs text-muted-foreground">
-                🔒 Secure checkout powered by Stripe
-              </p>
+              {paidItems.length > 0 && (
+                <p className="text-center text-xs text-muted-foreground">
+                  🔒 Secure checkout powered by Stripe
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>

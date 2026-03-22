@@ -4,7 +4,7 @@ import { useMemo, useState, Suspense } from 'react'
 import { useParams } from 'next/navigation'
 import RevenuePage from '../analytics/revenue/page'
 import WaiversPage from '../analytics/waivers/page'
-import { Award, DollarSign, Settings2, Target, TrendingUp, Users, UserPlus, Home } from 'lucide-react'
+import { Award, Clock, DollarSign, Settings2, Target, TrendingUp, Users, UserPlus, Home } from 'lucide-react'
 import { AdminPageHeader } from '@/components/admin-page-header'
 import { ClubIntelligenceWidget } from '@/components/club-intelligence-widget'
 import { useRequireAdmin } from '@/lib/auth-context'
@@ -189,6 +189,7 @@ function ProgramsTab({ clubId, seasonId }: { clubId: string; seasonId: string | 
   const enrollmentChartData = useMemo(() => sortedPrograms.map(p => ({
     name: p.name.length > 20 ? p.name.substring(0, 20) + '...' : p.name,
     enrolled: p.currentEnrollment,
+    waitlisted: p.waitlistedCount,
     remaining: p.maxCapacity ? Math.max(0, p.maxCapacity - p.currentEnrollment) : 0,
   })), [sortedPrograms])
 
@@ -228,10 +229,11 @@ function ProgramsTab({ clubId, seasonId }: { clubId: string; seasonId: string | 
       </div>
 
       {/* Metric cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
         {[
           { label: 'Total Programs', value: summary?.totalPrograms, sub: 'Active this season', icon: Target, color: 'text-blue-500' },
           { label: 'Avg Enrollment', value: summary?.avgEnrollmentRate !== null ? `${summary?.avgEnrollmentRate}%` : 'N/A', sub: summary?.avgEnrollmentRate !== null ? 'Capacity utilization' : 'No capacity limits set', icon: TrendingUp, color: 'text-purple-500' },
+          { label: 'Waitlisted', value: summary?.totalWaitlisted ?? 0, sub: (summary?.totalWaitlisted ?? 0) > 0 ? 'Across all programs' : 'No waitlists', icon: Clock, color: 'text-amber-500' },
           { label: 'Most Popular', value: summary?.mostPopularProgram?.enrollment ?? 0, sub: summary?.mostPopularProgram?.name || 'N/A', icon: Award, color: 'text-yellow-500' },
           { label: 'Total Revenue', value: `$${(summary?.totalRevenue || 0).toLocaleString('en-US', { minimumFractionDigits: 0 })}`, sub: 'All programs', icon: DollarSign, color: 'text-green-500' },
           { label: 'Avg Rev/Program', value: `$${(summary?.avgRevenuePerProgram || 0).toLocaleString('en-US', { minimumFractionDigits: 0 })}`, sub: 'Per program average', icon: Users, color: 'text-indigo-500' },
@@ -276,6 +278,7 @@ function ProgramsTab({ clubId, seasonId }: { clubId: string; seasonId: string | 
                   <Tooltip {...TOOLTIP_STYLE} />
                   <Legend {...LEGEND_STYLE} />
                   <Bar dataKey="enrolled" stackId="a" fill={CHART_COLORS.primary} name="Enrolled" />
+                  <Bar dataKey="waitlisted" stackId="b" fill="#a855f7" name="Waitlisted" />
                   <Bar dataKey="remaining" stackId="a" fill={CHART_COLORS.grid} name="Remaining" />
                 </BarChart>
               </ResponsiveContainer>
@@ -350,7 +353,16 @@ function ProgramsTab({ clubId, seasonId }: { clubId: string; seasonId: string | 
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <h3 className="text-sm font-semibold text-foreground">{program.name}</h3>
-                          {isFull && <Badge variant="destructive">Full</Badge>}
+                          {isFull && (
+                            <Badge variant="destructive">
+                              Full{program.waitlistedCount > 0 ? ` · ${program.waitlistedCount} waitlisted` : ''}
+                            </Badge>
+                          )}
+                          {!isFull && program.waitlistedCount > 0 && (
+                            <Badge variant="outline" className="text-amber-400 border-amber-700">
+                              {program.waitlistedCount} waitlisted
+                            </Badge>
+                          )}
                           {isLow && <Badge variant="outline" className="text-yellow-500 border-yellow-600">Low Enrollment</Badge>}
                         </div>
                         <p className="text-xs text-zinc-500 mt-0.5">${program.pricePerPerson.toFixed(2)} per athlete</p>
@@ -372,10 +384,11 @@ function ProgramsTab({ clubId, seasonId }: { clubId: string; seasonId: string | 
                           style={{ width: `${Math.min(rate || 0, 100)}%` }} />
                       </div>
                     </div>
-                    <div className="grid grid-cols-4 gap-4 pt-2 border-t border-zinc-800 text-xs">
+                    <div className="grid grid-cols-5 gap-4 pt-2 border-t border-zinc-800 text-xs">
                       <div><p className="text-zinc-500">Paid</p><p className="font-semibold text-green-400">{program.paidCount}</p></div>
                       <div><p className="text-zinc-500">Unpaid</p><p className="font-semibold text-red-400">{program.unpaidCount}</p></div>
-                      <div><p className="text-zinc-500">Total</p><p className="font-semibold text-foreground">{program.currentEnrollment}</p></div>
+                      <div><p className="text-zinc-500">Waitlisted</p><p className="font-semibold text-amber-400">{program.waitlistedCount}</p></div>
+                      <div><p className="text-zinc-500">Total Enrolled</p><p className="font-semibold text-foreground">{program.currentEnrollment}</p></div>
                       <div><p className="text-zinc-500">Avg Rev/Athlete</p><p className="font-semibold text-foreground">${program.avgRevenuePerAthlete.toFixed(0)}</p></div>
                     </div>
                   </div>

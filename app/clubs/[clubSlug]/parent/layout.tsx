@@ -9,6 +9,7 @@ import { CartProvider } from '@/lib/cart-context'
 import { SeasonProvider } from '@/lib/contexts/season-context'
 import { UnifiedSeasonSelector } from '@/components/unified-season-selector'
 import { ParentSidebar } from '@/components/parent-sidebar'
+import { ParentBottomNav } from '@/components/parent-bottom-nav'
 import { ProfileMenu } from '@/components/profile-menu'
 import { Button } from '@/components/ui/button'
 import { InlineLoading } from '@/components/ui/loading-states'
@@ -79,22 +80,27 @@ function ParentLayoutContent({
   }
 
   return (
-    <div className="flex min-h-screen">
-      <ParentSidebar profile={profile} clubSlug={clubSlug} />
-      <main className="flex-1 ml-64 flex flex-col">
-        <div className="fixed top-0 right-0 left-64 border-b border-orange-800/40 bg-background/80 backdrop-blur-sm px-8 py-3 z-10">
-          <div className="flex items-center justify-end gap-4">
-            <UnifiedSeasonSelector />
-            <ProfileMenu profile={profile} />
+    <>
+      <div className="flex min-h-screen">
+        <ParentSidebar profile={profile} clubSlug={clubSlug} />
+        <main className="flex-1 md:ml-64 flex flex-col min-w-0">
+          {/* Header — full width on mobile, offset on desktop */}
+          <div className="fixed top-0 right-0 left-0 md:left-64 border-b border-orange-800/40 bg-background/80 backdrop-blur-sm px-4 md:px-8 py-3 z-10">
+            <div className="flex items-center justify-end gap-3">
+              <UnifiedSeasonSelector />
+              <ProfileMenu profile={profile} />
+            </div>
           </div>
-        </div>
-        <div className="flex-1 overflow-auto pt-16">
-          <div className="p-8">
-            {children}
+          {/* Content — extra bottom padding on mobile for bottom nav */}
+          <div className="flex-1 overflow-y-auto pt-16 w-full min-w-0 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+            <div className="px-5 py-4 md:p-8 pb-24 md:pb-8 w-full min-w-0 overflow-hidden">
+              {children}
+            </div>
           </div>
-        </div>
-      </main>
-    </div>
+        </main>
+      </div>
+      <ParentBottomNav clubSlug={clubSlug} />
+    </>
   )
 }
 

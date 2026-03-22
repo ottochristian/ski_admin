@@ -150,18 +150,24 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  // Get household info separately
+  // Get household names from primary guardian's profile (households have no name column)
   const householdIds = (orders || []).map((o: any) => o.household_id).filter(Boolean)
-  let householdMap = new Map<string, string>()
-  
-  if (householdIds.length > 0) {
-    const { data: households } = await admin
-      .from('households')
-      .select('id, name')
-      .in('id', householdIds)
+  const householdMap = new Map<string, string>()
 
-    ;(households || []).forEach((h: any) => {
-      householdMap.set(h.id, h.name)
+  if (householdIds.length > 0) {
+    const { data: guardians } = await admin
+      .from('household_guardians')
+      .select('household_id, profiles!inner(first_name, last_name)')
+      .in('household_id', householdIds)
+
+    // Use the first guardian found per household as the display name
+    ;(guardians || []).forEach((g: any) => {
+      if (!householdMap.has(g.household_id)) {
+        const first = g.profiles?.first_name || ''
+        const last = g.profiles?.last_name || ''
+        const name = [first, last].filter(Boolean).join(' ')
+        if (name) householdMap.set(g.household_id, `${last} Family`)
+      }
     })
   }
 

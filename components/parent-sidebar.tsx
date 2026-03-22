@@ -33,7 +33,7 @@ export function ParentSidebar({ profile, clubSlug }: ParentSidebarProps) {
   const initial = club?.name?.charAt(0).toUpperCase() || 'S'
 
   return (
-    <aside className="w-64 bg-zinc-950 flex flex-col h-screen fixed left-0 top-0">
+    <aside className="hidden md:flex w-64 bg-zinc-950 flex-col h-screen fixed left-0 top-0">
       {/* Header — club identity */}
       <div className="px-5 py-5 flex-shrink-0 border-b border-zinc-800">
         {/* Club logo + name */}

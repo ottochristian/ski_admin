@@ -47,19 +47,17 @@ function RegRow({ reg }: { reg: Reg }) {
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3">
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium truncate">{program}</p>
-        <p className="text-xs text-muted-foreground truncate">
-          {subProgram}{season ? ` · ${season}` : ''}
-        </p>
-      </div>
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${statusColor[reg.status] ?? 'bg-secondary text-foreground'}`}>
+    <div className="rounded-lg border bg-card px-4 py-3">
+      <p className="text-sm font-medium truncate">{program}</p>
+      <p className="text-xs text-muted-foreground truncate">
+        {subProgram}{season ? ` · ${season}` : ''}
+      </p>
+      <div className="flex items-center gap-2 mt-1.5">
+        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize ${statusColor[reg.status] ?? 'bg-secondary text-foreground'}`}>
           {reg.status}
         </span>
         {reg.status !== 'cancelled' && (
-          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${isPaid ? 'bg-green-950/30 text-green-400' : 'bg-orange-950/30 text-orange-400'}`}>
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${isPaid ? 'bg-green-950/30 text-green-400' : 'bg-orange-950/30 text-orange-400'}`}>
             {isPaid ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
             {isPaid ? 'Paid' : 'Unpaid'}
           </span>
@@ -140,12 +138,21 @@ export default function AthleteDetailPage() {
       </button>
 
       {/* Hero */}
-      <div className="flex items-center gap-5">
+      <div className="flex items-start gap-5">
         <div className="w-16 h-16 rounded-full bg-orange-600 flex items-center justify-center flex-shrink-0">
           <span className="text-foreground text-xl font-semibold">{initials}</span>
         </div>
-        <div className="flex-1">
-          <h1 className="page-title">{athlete.first_name} {athlete.last_name}</h1>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-3">
+            <h1 className="page-title">{athlete.first_name} {athlete.last_name}</h1>
+            <Link href={`/clubs/${clubSlug}/parent/programs`} className="flex-shrink-0">
+              <Button size="sm">
+                <BookOpen className="h-4 w-4 mr-2" />
+                <span className="hidden sm:inline">Browse Programs</span>
+                <span className="sm:hidden">Programs</span>
+              </Button>
+            </Link>
+          </div>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             {age !== null && (
               <>
@@ -164,22 +171,16 @@ export default function AthleteDetailPage() {
             {age === null && <span className="text-muted-foreground text-sm">Age unknown{athlete.gender && ` · ${athlete.gender}`}</span>}
           </div>
         </div>
-        <Link href={`/clubs/${clubSlug}/parent/programs`}>
-          <Button>
-            <BookOpen className="h-4 w-4 mr-2" />
-            Browse Programs
-          </Button>
-        </Link>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-3 min-w-0">
 
         {/* Left col */}
         <div className="flex flex-col gap-4">
 
           {/* Waivers */}
           {requiredWaivers.length > 0 && (
-            <div className="rounded-xl border bg-card p-5 shadow-sm">
+            <div className="rounded-xl border bg-card p-5 shadow-sm overflow-hidden">
               <div className="flex items-center gap-2 mb-3">
                 {allWaiversSigned
                   ? <CheckCircle2 className="h-4 w-4 text-green-400" />
@@ -191,7 +192,7 @@ export default function AthleteDetailPage() {
                   const signed = signedWaiverIds.has(w.id)
                   return (
                     <div key={w.id} className="flex items-center justify-between gap-2">
-                      <span className="text-sm text-foreground truncate">{w.title}</span>
+                      <span className="text-sm text-foreground truncate min-w-0">{w.title}</span>
                       {signed ? (
                         <span className="flex items-center gap-1 text-xs text-green-400 flex-shrink-0">
                           <CheckCircle2 className="h-3 w-3" /> Signed
@@ -278,7 +279,7 @@ export default function AthleteDetailPage() {
 
         {/* Right col: Registrations by season */}
         <div className="lg:col-span-2 flex flex-col gap-4">
-          <div className="rounded-xl border bg-card p-5 shadow-sm">
+          <div className="rounded-xl border bg-card p-5 shadow-sm overflow-hidden">
             <h2 className="font-semibold mb-4">
               Program Registrations
               {registrations.length > 0 && (

@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 export interface ProgramAnalytics {
   id: string
   name: string
-  currentEnrollment: number
+  currentEnrollment: number  // confirmed + pending only (excludes waitlisted)
+  waitlistedCount: number
   maxCapacity: number | null
   enrollmentRate: number | null
   revenue: number
@@ -15,6 +16,7 @@ export interface ProgramAnalytics {
 
 export interface ProgramsSummary {
   totalPrograms: number
+  totalWaitlisted: number
   avgEnrollmentRate: number | null
   mostPopularProgram: { id: string; name: string; enrollment: number } | null
   totalRevenue: number
