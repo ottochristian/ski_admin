@@ -138,11 +138,14 @@ export async function GET(req: NextRequest) {
       id: string
       name: string
       subProgramPrices: number[]
-      subProgramCapacities: number[]
       seenSubProgramIds: Set<string>
+      // Per-sub-program enrollment + capacity — used to compute an accurate fill rate
+      // that excludes sub-programs with no capacity limit from the denominator.
+      subProgramEnrolled: Map<string, number>
+      subProgramCapacity: Map<string, number>
       status: string
-      registrations: any[]        // confirmed + pending only
-      waitlistedRegs: any[]       // waitlisted only
+      registrations: any[]
+      waitlistedRegs: any[]
       enrolledAthleteIds: Set<string>
       waitlistedAthleteIds: Set<string>
     }>()
@@ -160,8 +163,9 @@ export async function GET(req: NextRequest) {
               id: program.id,
               name: program.name,
               subProgramPrices: [],
-              subProgramCapacities: [],
               seenSubProgramIds: new Set(),
+              subProgramEnrolled: new Map(),
+              subProgramCapacity: new Map(),
               status: program.status,
               registrations: [],
               waitlistedRegs: [],
@@ -177,15 +181,19 @@ export async function GET(req: NextRequest) {
           } else {
             programData.registrations.push(reg)
             programData.enrolledAthleteIds.add(reg.athlete_id)
+            // Increment per-sub-program enrollment count
+            const prev = programData.subProgramEnrolled.get(subProgram.id) ?? 0
+            programData.subProgramEnrolled.set(subProgram.id, prev + 1)
           }
 
-          // Track sub-program prices and capacities — count each sub-program once
+          // Record sub-program price and capacity once per unique sub-program
           if (!programData.seenSubProgramIds.has(subProgram.id)) {
             programData.seenSubProgramIds.add(subProgram.id)
             const price = Number(subProgram.registration_fee || 0)
-            const capacity = subProgram.max_capacity
             if (price > 0) programData.subProgramPrices.push(price)
-            if (capacity) programData.subProgramCapacities.push(capacity)
+            if (subProgram.max_capacity) {
+              programData.subProgramCapacity.set(subProgram.id, subProgram.max_capacity)
+            }
           }
         }
       } else {
@@ -202,14 +210,24 @@ export async function GET(req: NextRequest) {
       const currentEnrollment = programData.enrolledAthleteIds.size
       const waitlistedCount = programData.waitlistedAthleteIds.size
 
-      // Sum all sub-program capacities for total capacity
-      const maxCapacity = programData.subProgramCapacities.length > 0
-        ? programData.subProgramCapacities.reduce((sum, cap) => sum + cap, 0)
+      // Total capacity = sum of all sub-programs that have a limit set
+      const maxCapacity = programData.subProgramCapacity.size > 0
+        ? Array.from(programData.subProgramCapacity.values()).reduce((sum, cap) => sum + cap, 0)
         : null
 
-      const enrollmentRate = maxCapacity
-        ? Math.round((currentEnrollment / maxCapacity) * 100)
-        : null
+      // Enrollment rate = average fill rate across sub-programs that have a capacity set.
+      // Sub-programs with no capacity limit are excluded from both numerator and denominator
+      // so they don't inflate or deflate the rate.
+      let enrollmentRate: number | null = null
+      if (programData.subProgramCapacity.size > 0) {
+        const rates = Array.from(programData.subProgramCapacity.entries()).map(([spId, cap]) => {
+          const enrolled = programData.subProgramEnrolled.get(spId) ?? 0
+          return enrolled / cap
+        })
+        enrollmentRate = Math.round(
+          (rates.reduce((sum, r) => sum + r, 0) / rates.length) * 100
+        )
+      }
 
       const revenue = programData.registrations.reduce(
         (sum: number, reg: any) => sum + (revenueByReg[reg.id] || 0),
