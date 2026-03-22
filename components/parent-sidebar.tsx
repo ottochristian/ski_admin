@@ -1,24 +1,31 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useClub } from '@/lib/club-context'
 import { colors } from '@/lib/colors'
 import { useCart } from '@/lib/cart-context'
-import { LayoutDashboard, BookOpen, User, CreditCard, ShoppingCart, Calendar } from 'lucide-react'
+import { LayoutDashboard, BookOpen, User, CreditCard, ShoppingCart, Calendar, X } from 'lucide-react'
 import type { Profile } from '@/lib/types'
 
 interface ParentSidebarProps {
   profile: Profile
   clubSlug: string
+  mobileOpen?: boolean
+  onMobileClose?: () => void
 }
 
-export function ParentSidebar({ profile, clubSlug }: ParentSidebarProps) {
+export function ParentSidebar({ profile, clubSlug, mobileOpen = false, onMobileClose }: ParentSidebarProps) {
   const pathname = usePathname()
   const { club, loading: clubLoading } = useClub()
   const { itemCount } = useCart()
   const [logoError, setLogoError] = useState(false)
+
+  // Close drawer on route change
+  useEffect(() => {
+    onMobileClose?.()
+  }, [pathname]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const basePath = `/clubs/${clubSlug}/parent`
 
@@ -32,11 +39,10 @@ export function ParentSidebar({ profile, clubSlug }: ParentSidebarProps) {
 
   const initial = club?.name?.charAt(0).toUpperCase() || 'S'
 
-  return (
-    <aside className="hidden md:flex w-64 bg-zinc-950 flex-col h-screen fixed left-0 top-0">
+  const navContent = (
+    <>
       {/* Header — club identity */}
       <div className="px-5 py-5 flex-shrink-0 border-b border-zinc-800">
-        {/* Club logo + name */}
         {club && !clubLoading ? (
           <div className="flex items-center gap-3">
             {club.logo_url && !logoError ? (
@@ -75,7 +81,7 @@ export function ParentSidebar({ profile, clubSlug }: ParentSidebarProps) {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors ${
                 isActive
                   ? 'bg-zinc-800 text-foreground font-medium'
                   : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-100'
@@ -87,10 +93,10 @@ export function ParentSidebar({ profile, clubSlug }: ParentSidebarProps) {
           )
         })}
 
-        {/* Cart — shown when items present */}
+        {/* Cart */}
         <Link
           href={`${basePath}/cart`}
-          className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+          className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors ${
             pathname.startsWith(`${basePath}/cart`)
               ? 'bg-zinc-800 text-foreground font-medium'
               : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-100'
@@ -111,6 +117,41 @@ export function ParentSidebar({ profile, clubSlug }: ParentSidebarProps) {
         <img src="/w110-logo-dark.svg" alt="W110" className="h-5 w-auto self-start" />
         <p className="text-zinc-600 text-xs">Parent Portal</p>
       </div>
-    </aside>
+    </>
+  )
+
+  return (
+    <>
+      {/* Desktop sidebar — always visible */}
+      <aside className="hidden md:flex w-64 bg-zinc-950 flex-col h-screen fixed left-0 top-0">
+        {navContent}
+      </aside>
+
+      {/* Mobile drawer overlay */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 md:hidden"
+          onClick={onMobileClose}
+        >
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          {/* Drawer */}
+          <aside
+            className="absolute left-0 top-0 h-full w-72 bg-zinc-950 flex flex-col shadow-2xl border-r border-zinc-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <button
+              type="button"
+              onClick={onMobileClose}
+              className="absolute top-4 right-4 p-1.5 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            {navContent}
+          </aside>
+        </div>
+      )}
+    </>
   )
 }
